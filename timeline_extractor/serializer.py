@@ -25,7 +25,10 @@ def validate_timeline(entries: Sequence[TimelineEntry]) -> None:
 
 def to_dict(entries: Sequence[TimelineEntry]) -> dict:
     """Convert entries to the interchange dict (not yet written to disk)."""
-    raise NotImplementedError("serializer not implemented yet — write the test first (TDD red)")
+    validate_timeline(entries)
+    return {
+        "timeline": [{"start": e.start, "end": e.end} for e in entries]
+    }
 
 
 def write_timeline(entries: Sequence[TimelineEntry], path: Path) -> None:

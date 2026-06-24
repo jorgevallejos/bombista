@@ -20,6 +20,9 @@ htmlcov/
 .vscode/
 .idea/
 
+# Local venv (not committed; use python3 -m venv .venv)
+.venv/
+
 # Claude Code
 .claude/settings.local.json
 .claude/sessions/

@@ -13,9 +13,16 @@ from .models import TimelineEntry
 
 
 def validate_timeline(entries: Sequence[TimelineEntry]) -> None:
-    """Raises ValueError if the sequence violates the translator's invariants."""
+    """Raises ValueError if the sequence violates the translator's invariants.
+
+    Section-marker placeholders (start == end == 0, never matched by the cue
+    lookup) are exempt from the monotonic chain: the contract requires one
+    entry per song item *including* markers, wherever they sit in the song.
+    """
     previous_end = float("-inf")
     for i, entry in enumerate(entries):
+        if entry.start == 0 and entry.end == 0:
+            continue  # section-marker placeholder
         if entry.start < previous_end:
             raise ValueError(
                 f"timeline[{i}]: times must be monotonic (start={entry.start} < previous end={previous_end})"

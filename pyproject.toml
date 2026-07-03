@@ -9,6 +9,7 @@ description = "Derive a lyric/subtitle timeline from a lyrics-only video"
 requires-python = ">=3.11"
 dependencies = [
     "click>=8.1",
+    "faster-whisper>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -22,3 +23,6 @@ timeline-extractor = "timeline_extractor.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: exercises real external dependencies (e.g. the faster-whisper model); slower but runs by default",
+]

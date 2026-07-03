@@ -26,3 +26,6 @@ htmlcov/
 # Claude Code
 .claude/settings.local.json
 .claude/sessions/
+
+# Acceptance-run staging (audio, ASR words, working timelines)
+runs/

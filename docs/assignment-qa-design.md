@@ -1,5 +1,17 @@
 # Assignment & Human-QA Design — Timeline Extractor v1
 
+> **⚠️ SUPERSEDED (2026-07-03) — video-OCR track parked.** The core mechanism pivoted to
+> **audio forced alignment** (faster-whisper `medium` + fuzzy line-anchoring) after the
+> translator's ASR spike proved it near-verbatim at 46 s/song; see
+> `docs/alignment-pivot-kickoff-2026-07-03.md` and the shipped v1
+> (`timeline_extractor/aligner.py`, `anchoring.py`, `pipeline.py`).
+> §4 (named-signal confidence bands, `extract`→`promote`, markdown QA report) and the
+> §5 contract posture **carried over** into the alignment pipeline, adapted from OCR to
+> ASR signals. The change-detection/DP/OCR machinery (§2–§3, §5 video cases) and the
+> §6 video-based DoD did **not** ship — kept here as the record of that track
+> (branches `feat/lift-spike`, `feat/dp-alignment`, parked on origin).
+> Acceptance record for the shipped v1: `docs/acceptance-tragedia-2026-07-03.md`.
+
 _Opus design pass, 2026-06-25 (kickoff agenda #4 + #5). This is an architecture spec, not code — pseudocode for the algorithm only. It builds on the verified change-detection spike; it does not relitigate it. Ground truth for accuracy is `docs/spike-candidate-timeline.json` (signed off 2026-06-25). The frozen output shape is `docs/output-contract.md`. Hand this to Sonnet in Claude Code via the build plan at the end._
 
 ---

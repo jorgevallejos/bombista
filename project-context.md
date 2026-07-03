@@ -6,11 +6,17 @@ _Project-specific Cowork context. Read this **after** `~/Chango Pepper/personal-
 
 ---
 
-## Build state — where to resume (updated 2026-07-03)
+## Build state — v1 SHIPPED (2026-07-03, forced-alignment pivot complete)
 
-**PIVOT (2026-07-03): core mechanism is now audio forced alignment, not video change-detection + OCR.** The translator's ASR spike (branch `spike/asr-following` there, report `docs/asr-spike-report-2026-07.md`) proved faster-whisper `medium` batch-aligns a full song near-verbatim in 46 s — strictly better than the video pipeline for deriving timings, and it works for songs with no video at all (this week's new recordings). Scope sharpened with Jorge: **the tool only defines the timeline** — it never edits lyric text; wording/defect QA on videos is out of scope. The video-OCR work (branches `feat/lift-spike`, `feat/dp-alignment`, both pushed) is **parked unmerged** — preserved on origin, not deleted. The design doc's QA concepts (confidence bands, `extract`→`promote`, markdown report) carry over to the alignment pipeline. The spike also exposed that the translator's shipped Tragedia timeline is misaligned scaffolding (~17 s late vs its linked video) — regenerating it is this project's **acceptance test**, regardless of when new recordings land.
+**v1 is built, accepted, and live.** The alignment-pivot run (`docs/alignment-pivot-kickoff-2026-07-03.md`, Block A) went end-to-end in one session: PRs #5–#9, #11 merged to `main`, 60 tests green. Pipeline: audio + song JSON → faster-whisper `medium` (word timestamps, ~50 s/song, model cached) → forward-only fuzzy anchoring of each line's opening tokens → `{"timeline": [...]}` per the frozen contract, with a per-line HIGH/REVIEW/FAIL markdown QA report and a `--anchor <line>=<seconds>` hand-fix loop (`--words` reuses the transcription, re-runs in <0.1 s). `extract` stages, `promote` applies (backup + diff, touches only `timeline`). **The audio-clock rule** is documented in the CLI help and repo CLAUDE.md: feed the linked video's audio for Video-mode songs, the master recording for Auto-mode songs.
 
-**Resume:** paste `docs/alignment-pivot-kickoff-2026-07-03.md` into Claude Code at the extractor repo (Fable/Opus coordinator + Sonnet slices). Part B of the same doc is translator-repo housekeeping.
+**Acceptance (Tragedia, `docs/acceptance-tragedia-2026-07-03.md`):** exact convergence with the spike's derived ground truth (Δ = 0.000 on all 29 lines after two documented hand anchors: line 0 = 0.96 — whisper clamps the first word to 0.0; line 13 = 58.5 — the known misheard line, FAIL→override). vs the card reference: median −0.36 s / stdev 0.70 (cards lag sung onsets) → a **`--lead` knob is proposed, not built** — Jorge decides if cards-style timing is wanted. The regenerated timeline is **promoted into `songs/tragedia-de-cerdo-asado.json`** (backup: `tragedia-de-cerdo-asado.json.backup-20260703-112259`); only real change vs the spike-derived values: line 28's end now 160.48 (last word + 1.0 s pad). Jorge's in-app test (Auto + Video modes) closes v1.
+
+**Re-run on new recordings:** `timeline-extractor extract <audio.wav> <song.json> -o <staging>` then `promote` — no code changes needed; see repo CLAUDE.md.
+
+**Known contract wrinkle (translator-side, not blocking):** the translator's `validateTimeline` (`songState.ts`) has no exemption for zero-length `{0,0}` entries in its monotonic check, so any song with **mid-song section markers** would fail import. The extractor's validator exempts them (PR #9). Resolve translator-side before a marker-carrying song needs a timeline.
+
+**Incident log (2026-07-03):** S4's PR #10 merged into `chore/scaffold-cli-and-output-contract` because that stale branch was still GitHub's **default branch** and the `gh pr create` omitted `--base`. Fixed: re-merged as PR #11 to `main`, default branch switched to `main`, scaffold branch force-reset to its pre-merge commit. Repo CLAUDE.md now mandates explicit `--base main`.
 
 ## Superseded build state (2026-06-25 — video-OCR track, parked)
 
@@ -86,11 +92,7 @@ Recommendation to revisit at kickoff: start as a **Python CLI** for the pipeline
 
 ## Open questions / next steps (kickoff agenda)
 
-1. ✅ **Done** — `TimelineEntry` shape confirmed (`docs/output-contract.md`) and import format locked to **JSON** (coordinated with Prompt 16; see Build state).
-2. ✅ **Done** — stack picked (**Python CLI**), repo + `CLAUDE.md` stood up, scaffold + serializer shipped.
-3. ▶️ **NEXT** — prototype change-detection on the Tragedia lyrics-only video (29 lines) and measure timestamp accuracy vs a hand-checked reference. (After merging the `feat/green-serializer` PR.)
-4. ✅ **Done** — human-QA loop designed (`docs/assignment-qa-design.md` §4): named-signal confidence → HIGH/REVIEW/FAIL, markdown report + thumbnails, `extract`→`promote` with splits/adds auto-applied and only removals/FAILs gating.
-5. ✅ **Done** — v1 DoD defined (`docs/assignment-qa-design.md` §6): Tragedia end-to-end, start ±0.20 s / end ±0.30 s vs `spike-candidate-timeline.json`, plays in Auto mode. Build sequenced in `docs/build-plan-prompt.md`.
+All five kickoff items closed (contract, stack, prototype, QA loop, DoD) — v1 shipped 2026-07-03 via the forced-alignment pivot; see Build state. What remains is Jorge's in-app test and, per new-recording batch, a plain re-run of `extract`/`promote`. Open decisions parked for later: the proposed `--lead` knob (card-style visual lead vs sung onsets), and the translator-side marker-monotonicity wrinkle.
 
 ## Model picks
 

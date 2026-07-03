@@ -21,6 +21,9 @@ dev = [
 [project.scripts]
 timeline-extractor = "timeline_extractor.cli:main"
 
+[tool.setuptools]
+packages = ["timeline_extractor"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [

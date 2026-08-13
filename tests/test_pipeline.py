@@ -18,6 +18,7 @@ from timeline_extractor.pipeline import (
     build_timeline,
     is_lyric_item,
     lyric_lines,
+    normalize_to_lead_in,
 )
 from timeline_extractor.serializer import validate_timeline
 
@@ -172,3 +173,57 @@ def test_anchor_count_mismatch_raises():
 
     with pytest.raises(ValueError):
         build_timeline(anchors, _words_ending_at(12.0), items, lang="es")
+
+
+# ---------------------------------------------------------------------------
+# normalize_to_lead_in (timeline v2, B12)
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_to_lead_in_rebases_entry_zero_to_zero():
+    raw = [TimelineEntry(7.26, 13.1), TimelineEntry(13.1, 16.9)]
+
+    lead_in, normalized = normalize_to_lead_in(raw)
+
+    assert lead_in == 7.26
+    assert normalized[0].start == 0.0
+    assert normalized[0].end == pytest.approx(5.84)
+    assert normalized[1].start == pytest.approx(5.84)
+    assert normalized[1].end == pytest.approx(9.64)
+
+
+def test_normalize_to_lead_in_rounds_to_two_decimals():
+    raw = [TimelineEntry(10.333333, 20.666666)]
+
+    lead_in, normalized = normalize_to_lead_in(raw)
+
+    assert lead_in == 10.33
+    assert normalized[0] == TimelineEntry(0.0, round(20.666666 - 10.33, 2))
+
+
+def test_normalize_to_lead_in_is_lossless_within_tolerance():
+    """Re-adding lead_in to a normalised entry reproduces the raw value —
+    within the contract's documented tolerance, not exact equality, since
+    e.g. 13.1 - 7.26 == 5.840000000000001 in IEEE floats."""
+    raw = [TimelineEntry(7.26, 13.1), TimelineEntry(13.1, 16.9)]
+
+    lead_in, normalized = normalize_to_lead_in(raw)
+
+    for raw_entry, norm_entry in zip(raw, normalized):
+        assert abs((norm_entry.start + lead_in) - raw_entry.start) < 0.005
+        assert abs((norm_entry.end + lead_in) - raw_entry.end) < 0.005
+
+
+def test_normalize_to_lead_in_does_not_mutate_input():
+    raw = [TimelineEntry(7.26, 13.1)]
+
+    normalize_to_lead_in(raw)
+
+    assert raw == [TimelineEntry(7.26, 13.1)]
+
+
+def test_normalize_to_lead_in_empty_returns_zero_and_empty():
+    lead_in, normalized = normalize_to_lead_in([])
+
+    assert lead_in == 0.0
+    assert normalized == []

@@ -63,6 +63,7 @@ def render_qa_report(
     anchors: Sequence[LineAnchor],
     lines: Sequence[str],
     line_entries: Sequence[TimelineEntry],
+    lead_in: float,
     song_title: str,
     song_path: Path,
     audio_path: Path,
@@ -72,7 +73,11 @@ def render_qa_report(
     generated_at: datetime | None = None,
 ) -> str:
     """Render the QA markdown. `anchors`, `lines` and `line_entries` are
-    parallel, one per lyric line."""
+    parallel, one per lyric line. `line_entries` and every time in this
+    report are in **raw audio-clock seconds** — the same clock `--anchor
+    LINE=SECONDS` overrides are given in — even though the emitted timeline
+    (timeline v2) is normalised relative to `lead_in`. That divergence is
+    intentional; see `lead_in`."""
     generated_at = generated_at or datetime.now()
     counts = band_counts(anchors)
     words_path = staging_dir / "asr-words.jsonl"
@@ -90,8 +95,11 @@ def render_qa_report(
         f"- Generated: {generated_at.isoformat(timespec='seconds')}",
         f"- Re-run (skips transcription): `{rerun}`",
         f"- Bands: HIGH {counts['HIGH']} / REVIEW {counts['REVIEW']} / FAIL {counts['FAIL']}",
+        f"- Measured lead-in: {lead_in:.2f} s (subtracted from the emitted timeline)",
         "",
-        f"> {AUDIO_CLOCK_RULE}",
+        f"> {AUDIO_CLOCK_RULE} All times in this report are raw audio-clock "
+        f"seconds (before the {lead_in:.2f} s lead-in is subtracted) — "
+        f"`--anchor` overrides are given in this same clock.",
         "",
     ]
 

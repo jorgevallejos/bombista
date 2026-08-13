@@ -52,6 +52,23 @@ EXPECTED_TIMELINE = [
     {"start": 30.0, "end": 32.8},    # last word end 31.8 + 1.0 pad
 ]
 
+# Timeline v2 envelope: normalised relative to lead_in = raw entry 0's
+# start (10.0). media is absent from SONG -> leadIn.apply is false.
+EXPECTED_ENVELOPE = {
+    "timelineVersion": 2,
+    "leadIn": {
+        "durationSec": 10.0,
+        "source": "measured",
+        "confidence": "low",
+        "apply": False,
+    },
+    "timeline": [
+        {"start": 0.0, "end": 10.0},
+        {"start": 10.0, "end": 20.0},
+        {"start": 20.0, "end": 22.8},
+    ],
+}
+
 
 @pytest.fixture
 def workspace(tmp_path):
@@ -102,9 +119,7 @@ def test_extract_creates_staging_files_and_expected_timeline(workspace):
     assert words_out.read_text(encoding="utf-8") == workspace["words"].read_text(
         encoding="utf-8"
     )
-    assert json.loads(timeline_out.read_text(encoding="utf-8")) == {
-        "timeline": EXPECTED_TIMELINE
-    }
+    assert json.loads(timeline_out.read_text(encoding="utf-8")) == EXPECTED_ENVELOPE
     assert report_out.exists()
 
 
@@ -143,11 +158,16 @@ def test_extract_qa_report_contents(workspace):
         workspace["staging"] / "cancion-de-prueba-qa-report.md"
     ).read_text(encoding="utf-8")
 
-    # header: band counts, model, audio-clock rule
+    # header: band counts, model, audio-clock rule, measured lead-in
     assert "HIGH 3" in report
     assert "FAIL 1" in report
     assert "medium" in report
     assert "master recording" in report
+    assert "Measured lead-in" in report
+    # the header times are raw audio-clock (10.00 s, first word's onset),
+    # not normalised — normalising the report would break --anchor's
+    # audio-clock hand-fix loop
+    assert "10.00" in report
 
     # flagged line listed first with a hand-anchoring instruction
     assert "Needs attention" in report
@@ -160,16 +180,20 @@ def test_extract_qa_report_contents(workspace):
 
 
 def test_extract_anchor_override_flows_through(workspace):
+    """--anchor is given in raw audio-clock seconds; the emitted timeline is
+    normalised relative to lead_in (line 0's raw start, unaffected here)."""
     result = run_extract(workspace, "--anchor", "1=15.0")
 
     assert result.exit_code == 0, result.output
-    timeline = json.loads(
+    envelope = json.loads(
         (workspace["staging"] / "cancion-de-prueba-timeline.json").read_text(
             encoding="utf-8"
         )
-    )["timeline"]
-    assert timeline[1]["start"] == 15.0   # lyric line 1 = item index 1
-    assert timeline[0]["end"] == 15.0     # previous line's end follows
+    )
+    assert envelope["leadIn"]["durationSec"] == 10.0  # line 0 still raw 10.0
+    timeline = envelope["timeline"]
+    assert timeline[1]["start"] == 5.0    # raw 15.0 - lead_in 10.0
+    assert timeline[0]["end"] == 5.0      # previous line's end follows
 
 
 @pytest.mark.parametrize("bad", ["1", "abc=5.0", "1=abc", "1:5.0", "-1=5.0"])
@@ -232,14 +256,28 @@ def test_extract_help_carries_the_audio_clock_rule():
 # promote
 # ---------------------------------------------------------------------------
 
+LEAD_IN = {"durationSec": 1.0, "source": "measured", "confidence": "low", "apply": False}
+
+# The song on disk is still v1-shaped pre-migration: a bare `timeline` list,
+# no `timelineVersion`/`leadIn` keys (B13, the data migration, is gated).
 PROMOTE_SONG = {
     "title": "T",
     "lyrics": [{"es": "uno"}, {"es": "dos"}],
     "timeline": [
-        {"start": 1.0, "end": 2.0},
+        {"start": 0.0, "end": 1.0},
         {"start": 2.0, "end": 3.0},
     ],
     "media": {"type": "audio", "src": "x.wav", "offset": 0.5},
+}
+
+# The promote candidate is always a v2 envelope.
+PROMOTE_ENVELOPE = {
+    "timelineVersion": 2,
+    "leadIn": LEAD_IN,
+    "timeline": [
+        {"start": 0.0, "end": 1.0},
+        {"start": 1.5, "end": 2.5},
+    ],
 }
 
 
@@ -251,17 +289,7 @@ def promote_ws(tmp_path):
         encoding="utf-8",
     )
     timeline = tmp_path / "song-timeline.json"
-    timeline.write_text(
-        json.dumps(
-            {
-                "timeline": [
-                    {"start": 1.0, "end": 2.0},
-                    {"start": 2.5, "end": 3.5},
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
+    timeline.write_text(json.dumps(PROMOTE_ENVELOPE), encoding="utf-8")
     return {"song": song, "timeline": timeline, "dir": tmp_path}
 
 
@@ -270,19 +298,25 @@ def run_promote(ws):
     return runner.invoke(main, ["promote", str(ws["timeline"]), str(ws["song"])])
 
 
-def test_promote_replaces_only_timeline_preserving_key_order(promote_ws):
+def test_promote_writes_envelope_preserving_other_key_order(promote_ws):
     result = run_promote(promote_ws)
 
     assert result.exit_code == 0, result.output
     updated = json.loads(promote_ws["song"].read_text(encoding="utf-8"))
-    assert list(updated.keys()) == ["title", "lyrics", "timeline", "media"]
+    assert list(updated.keys()) == [
+        "title",
+        "lyrics",
+        "timelineVersion",
+        "leadIn",
+        "timeline",
+        "media",
+    ]
     assert updated["title"] == PROMOTE_SONG["title"]
     assert updated["lyrics"] == PROMOTE_SONG["lyrics"]
     assert updated["media"] == PROMOTE_SONG["media"]
-    assert updated["timeline"] == [
-        {"start": 1.0, "end": 2.0},
-        {"start": 2.5, "end": 3.5},
-    ]
+    assert updated["timelineVersion"] == 2
+    assert updated["leadIn"] == LEAD_IN
+    assert updated["timeline"] == PROMOTE_ENVELOPE["timeline"]
     # file ends with a trailing newline
     assert promote_ws["song"].read_text(encoding="utf-8").endswith("\n")
 
@@ -320,15 +354,21 @@ def test_promote_reports_timeline_added_when_none_existed(promote_ws):
     assert result.exit_code == 0, result.output
     assert "timeline added" in result.output
     updated = json.loads(promote_ws["song"].read_text(encoding="utf-8"))
-    assert updated["timeline"] == [
-        {"start": 1.0, "end": 2.0},
-        {"start": 2.5, "end": 3.5},
-    ]
+    assert updated["timeline"] == PROMOTE_ENVELOPE["timeline"]
+    assert updated["timelineVersion"] == 2
+    assert updated["leadIn"] == LEAD_IN
 
 
 def test_promote_refuses_length_mismatch(promote_ws):
     promote_ws["timeline"].write_text(
-        json.dumps({"timeline": [{"start": 1.0, "end": 2.0}]}), encoding="utf-8"
+        json.dumps(
+            {
+                "timelineVersion": 2,
+                "leadIn": LEAD_IN,
+                "timeline": [{"start": 0.0, "end": 2.0}],
+            }
+        ),
+        encoding="utf-8",
     )
     before = promote_ws["song"].read_bytes()
 
@@ -344,10 +384,12 @@ def test_promote_refuses_invalid_timeline(promote_ws):
     promote_ws["timeline"].write_text(
         json.dumps(
             {
+                "timelineVersion": 2,
+                "leadIn": LEAD_IN,
                 "timeline": [
-                    {"start": 5.0, "end": 8.0},
+                    {"start": 0.0, "end": 8.0},
                     {"start": 4.0, "end": 9.0},  # non-monotonic
-                ]
+                ],
             }
         ),
         encoding="utf-8",
@@ -364,15 +406,59 @@ def test_promote_refuses_non_numeric_entries(promote_ws):
     promote_ws["timeline"].write_text(
         json.dumps(
             {
+                "timelineVersion": 2,
+                "leadIn": LEAD_IN,
                 "timeline": [
-                    {"start": "1.0", "end": 2.0},
-                    {"start": 2.5, "end": 3.5},
+                    {"start": "0.0", "end": 1.0},
+                    {"start": 1.5, "end": 2.5},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    before = promote_ws["song"].read_bytes()
+
+    result = run_promote(promote_ws)
+
+    assert result.exit_code != 0
+    assert promote_ws["song"].read_bytes() == before
+
+
+def test_promote_rejects_v1_candidate_missing_timeline_version(promote_ws):
+    """A v1-shaped candidate (`{"timeline": [...]}`, no `timelineVersion`)
+    must be rejected loudly — never coerced to v2 — leaving the song file
+    untouched and no backup created."""
+    promote_ws["timeline"].write_text(
+        json.dumps(
+            {
+                "timeline": [
+                    {"start": 0.0, "end": 1.0},
+                    {"start": 1.5, "end": 2.5},
                 ]
             }
         ),
         encoding="utf-8",
     )
+    before = promote_ws["song"].read_bytes()
 
     result = run_promote(promote_ws)
 
     assert result.exit_code != 0
+    assert "timelineVersion" in result.output
+    assert promote_ws["song"].read_bytes() == before
+    assert list(promote_ws["dir"].glob("song.json.backup-*")) == []
+
+
+def test_promote_rejects_non_2_timeline_version(promote_ws):
+    promote_ws["timeline"].write_text(
+        json.dumps({**PROMOTE_ENVELOPE, "timelineVersion": 1}),
+        encoding="utf-8",
+    )
+    before = promote_ws["song"].read_bytes()
+
+    result = run_promote(promote_ws)
+
+    assert result.exit_code != 0
+    assert "timelineVersion" in result.output
+    assert promote_ws["song"].read_bytes() == before
+    assert list(promote_ws["dir"].glob("song.json.backup-*")) == []

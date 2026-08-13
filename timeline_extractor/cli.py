@@ -20,10 +20,9 @@ import click
 
 from .aligner import load_words, save_words, transcribe_words
 from .anchoring import anchor_lines
-from .models import TimelineEntry
-from .pipeline import build_timeline, lyric_lines
+from .pipeline import build_timeline, lyric_lines, normalize_to_lead_in
 from .report import band_counts, render_qa_report
-from .serializer import validate_timeline, write_timeline
+from .serializer import validate_v2_envelope, write_timeline
 
 _EXTRACT_EPILOG = """\
 \b
@@ -142,15 +141,18 @@ def extract(
     except ValueError as exc:
         raise click.ClickException(str(exc))
 
+    lead_in, normalized_entries = normalize_to_lead_in(entries)
+
     stem = song_json.stem
     timeline_out = staging_dir / f"{stem}-timeline.json"
     report_out = staging_dir / f"{stem}-qa-report.md"
-    write_timeline(entries, timeline_out)
+    write_timeline(lead_in, normalized_entries, song, timeline_out)
 
     report = render_qa_report(
         anchors=anchors,
         lines=lines,
-        line_entries=entries,
+        line_entries=entries,  # raw audio-clock times — see report.py docstring
+        lead_in=lead_in,
         song_title=song.get("title", stem),
         song_path=song_json,
         audio_path=audio,
@@ -167,37 +169,42 @@ def extract(
     )
 
 
-def _load_promotable_timeline(timeline_json: Path) -> list[dict]:
-    """Load and contract-validate a `{"timeline": [...]}` file. Returns the
-    raw entry dicts; raises ClickException on any shape/type violation."""
+def _load_promotable_envelope(timeline_json: Path) -> dict:
+    """Load and contract-validate a timeline v2 envelope file (see
+    docs/timeline-v2-contract.md). Raises ClickException — naming the
+    problem, never coercing — on any shape/type/version violation,
+    including a v1 candidate (missing or non-2 `timelineVersion`)."""
     try:
         data = json.loads(timeline_json.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise click.ClickException(f"{timeline_json}: not valid JSON ({exc})")
-    if not isinstance(data, dict) or not isinstance(data.get("timeline"), list):
-        raise click.ClickException(
-            f'{timeline_json}: expected an object with a "timeline" array'
-        )
-    raw_entries = data["timeline"]
-    entries: list[TimelineEntry] = []
-    for i, item in enumerate(raw_entries):
-        if not isinstance(item, dict):
-            raise click.ClickException(f"timeline[{i}]: must be an object")
-        start, end = item.get("start"), item.get("end")
-        for name, value in (("start", start), ("end", end)):
-            if isinstance(value, bool) or not isinstance(value, (int, float)):
-                raise click.ClickException(
-                    f"timeline[{i}]: {name} must be a number, got {value!r}"
-                )
-        try:
-            entries.append(TimelineEntry(start=float(start), end=float(end)))
-        except ValueError as exc:
-            raise click.ClickException(f"timeline[{i}]: {exc}")
     try:
-        validate_timeline(entries)
+        validate_v2_envelope(data)
     except ValueError as exc:
-        raise click.ClickException(str(exc))
-    return [{"start": e.start, "end": e.end} for e in entries]
+        raise click.ClickException(f"{timeline_json}: {exc}")
+    return data
+
+
+def _apply_envelope(song: dict, envelope: dict) -> dict:
+    """Return a copy of *song* with `timelineVersion`, `leadIn` and
+    `timeline` set from *envelope*, in that order, replacing any existing
+    occurrence of those keys in place (or appending them at the end if none
+    existed) — every other key is preserved untouched and in order."""
+    new_keys = ("timelineVersion", "leadIn", "timeline")
+    new_song: dict = {}
+    inserted = False
+    for key, value in song.items():
+        if key in new_keys:
+            if not inserted:
+                for k in new_keys:
+                    new_song[k] = envelope[k]
+                inserted = True
+            continue
+        new_song[key] = value
+    if not inserted:
+        for k in new_keys:
+            new_song[k] = envelope[k]
+    return new_song
 
 
 def _timeline_diff(old: list | None, new: list[dict]) -> list[str]:
@@ -220,13 +227,15 @@ def _timeline_diff(old: list | None, new: list[dict]) -> list[str]:
 @click.argument("timeline_json", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.argument("song_json", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 def promote(timeline_json: Path, song_json: Path) -> None:
-    """Write the timeline from TIMELINE_JSON into SONG_JSON's `timeline` field.
+    """Write the timeline v2 envelope from TIMELINE_JSON into SONG_JSON.
 
-    Validates the timeline against the output contract and the song's item
-    count, backs the song file up next to itself, and replaces only the
-    `timeline` key — every other key is preserved untouched, in order.
+    Validates the envelope against the timeline v2 contract (rejecting a
+    v1 candidate loudly) and the song's item count, backs the song file up
+    next to itself, and writes `timelineVersion`, `leadIn` and `timeline`
+    — every other key is preserved untouched, in order.
     """
-    new_timeline = _load_promotable_timeline(timeline_json)
+    envelope = _load_promotable_envelope(timeline_json)
+    new_timeline = envelope["timeline"]
 
     song = json.loads(song_json.read_text(encoding="utf-8"))
     items = song.get("lyrics")
@@ -243,7 +252,7 @@ def promote(timeline_json: Path, song_json: Path) -> None:
     shutil.copyfile(song_json, backup)
 
     old_timeline = song.get("timeline")
-    song["timeline"] = new_timeline
+    song = _apply_envelope(song, envelope)
     song_json.write_text(
         json.dumps(song, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )

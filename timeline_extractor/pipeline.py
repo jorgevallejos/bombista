@@ -116,3 +116,29 @@ def build_timeline(
 
     validate_timeline(entries)
     return entries
+
+
+def normalize_to_lead_in(
+    entries: Sequence[TimelineEntry],
+) -> tuple[float, list[TimelineEntry]]:
+    """Rebase a raw (audio-clock) timeline onto a start cue (timeline v2,
+    docs/timeline-v2-contract.md).
+
+    `lead_in` is `entries[0].start` (the measured onset of line 0), rounded
+    to 2 decimals. Every returned entry is `round(raw_value - lead_in, 2)`,
+    so entry 0 always starts at exactly `0.0`. Pure, stdlib only — does not
+    touch the song dict or decide whether the lead-in should be applied at
+    playback (that's `leadIn.apply`, decided in the serializer from
+    `media.type`).
+
+    An empty *entries* returns `(0.0, [])`.
+    """
+    if not entries:
+        return 0.0, []
+
+    lead_in = round(entries[0].start, 2)
+    normalized = [
+        TimelineEntry(round(e.start - lead_in, 2), round(e.end - lead_in, 2))
+        for e in entries
+    ]
+    return lead_in, normalized

@@ -29,3 +29,6 @@ htmlcov/
 
 # Acceptance-run staging (audio, ASR words, working timelines)
 runs/
+
+# Working staging dirs for extract runs
+staging/

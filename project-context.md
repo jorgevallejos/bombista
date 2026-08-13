@@ -6,6 +6,43 @@ _Project-specific Cowork context. Read this **after** `~/Chango Pepper/personal-
 
 ---
 
+## Build state — v2 "Bombista" BUILT on `feat/bombista-v2` (2026-08-13), not yet merged
+
+**Six of seven backlog items done, one gated.** Branch `feat/bombista-v2`, **196 tests green**
+(verified baseline at the branch point was 60 green / 0 failing, checked in an isolated
+worktree — the "60 tests" figure recorded below was accurate). Built in order, one commit per
+item, per `docs/bombista-v2-kickoff.md`:
+
+- **B3** — section-marker support deleted. Lyrics arrays carry sung lines only; a non-lyric
+  entry fails loudly naming its index. This closes the "known contract wrinkle" flagged in the
+  v1 build state below.
+- **B12** — timelines are now **relative to a start cue**: entry 0 at `0.00`, `raw[0].start`
+  banked in `leadIn {durationSec, source, confidence, apply}`, stamped `timelineVersion: 2`.
+  Bombista never decides whether to apply it — that is a playback decision.
+- **B1** — provenance: audio path + streamed sha256 + duration, model, device, lang,
+  extractedAt, toolVersion, on every run. This is the item that would have caught the ~17 s
+  Tragedia error.
+- **B5** — `readers.py`: plain text or CP song JSON in, canonical CP song dict out, normalised
+  at the boundary. The core pipeline is untouched. Structural only — no network, no LLM.
+- **B2** — `--emit timeline|songjson|report-json|srt|lrc`, all reading the canonical CP form;
+  one shared merge path with `promote`.
+- **B4** — `linesHash` guard: `promote` warns loudly (never blocks) when the target's lyrics
+  moved since extraction.
+- **B13 (migration of the two live song files) — GATED**, deliberately not run. See below.
+
+**The shared contract is `docs/timeline-v2-contract.md`**, co-owned with Pregonero
+(live-lyric-translator) and amended by either side mid-flight. Bombista reproduces its golden
+Libertad fixture exactly.
+
+**Two things not to forget:**
+1. **B13 waits on Pregonero P3.** Migrating the data before the app can reject a version it
+   doesn't understand means a v1-aware app reads v2 files and fires every line ~7 s early with
+   no error.
+2. **Migrating Tragedia will not fix Tragedia.** Its stored timeline is the known ~17 s-late
+   one, produced from the wrong audio source; migration faithfully migrates a wrong timeline.
+   The fix is a **re-extraction** from audio pulled out of the animation video
+   (`ffmpeg -i video.mp4 -vn -ac 1 -ar 16000 audio.wav`) — a post-merge data job.
+
 ## Build state — v1 SHIPPED (2026-07-03, forced-alignment pivot complete)
 
 **v1 is built, accepted, and live.** The alignment-pivot run (`docs/alignment-pivot-kickoff-2026-07-03.md`, Block A) went end-to-end in one session: PRs #5–#9, #11 merged to `main`, 60 tests green. Pipeline: audio + song JSON → faster-whisper `medium` (word timestamps, ~50 s/song, model cached) → forward-only fuzzy anchoring of each line's opening tokens → `{"timeline": [...]}` per the frozen contract, with a per-line HIGH/REVIEW/FAIL markdown QA report and a `--anchor <line>=<seconds>` hand-fix loop (`--words` reuses the transcription, re-runs in <0.1 s). `extract` stages, `promote` applies (backup + diff, touches only `timeline`). **The audio-clock rule** is documented in the CLI help and repo CLAUDE.md: feed the linked video's audio for Video-mode songs, the master recording for Auto-mode songs.
@@ -14,7 +51,7 @@ _Project-specific Cowork context. Read this **after** `~/Chango Pepper/personal-
 
 **Re-run on new recordings:** `timeline-extractor extract <audio.wav> <song.json> -o <staging>` then `promote` — no code changes needed; see repo CLAUDE.md.
 
-**Known contract wrinkle (translator-side, not blocking):** the translator's `validateTimeline` (`songState.ts`) has no exemption for zero-length `{0,0}` entries in its monotonic check, so any song with **mid-song section markers** would fail import. The extractor's validator exempts them (PR #9). Resolve translator-side before a marker-carrying song needs a timeline.
+**Known contract wrinkle (translator-side) — RESOLVED 2026-08-13 by B3; markers no longer exist on either side.** Original note: the translator's `validateTimeline` (`songState.ts`) has no exemption for zero-length `{0,0}` entries in its monotonic check, so any song with **mid-song section markers** would fail import. The extractor's validator exempts them (PR #9). Resolve translator-side before a marker-carrying song needs a timeline.
 
 **Incident log (2026-07-03):** S4's PR #10 merged into `chore/scaffold-cli-and-output-contract` because that stale branch was still GitHub's **default branch** and the `gh pr create` omitted `--base`. Fixed: re-merged as PR #11 to `main`, default branch switched to `main`, scaffold branch force-reset to its pre-merge commit. Repo CLAUDE.md now mandates explicit `--base main`.
 

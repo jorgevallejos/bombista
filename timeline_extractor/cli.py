@@ -22,6 +22,7 @@ from .aligner import load_words, save_words, transcribe_words
 from .anchoring import anchor_lines
 from .pipeline import build_timeline, lyric_lines, normalize_to_lead_in
 from .provenance import build_provenance
+from .readers import read_lyrics_input
 from .report import band_counts, render_qa_report
 from .serializer import validate_v2_envelope, write_timeline
 
@@ -68,7 +69,11 @@ def _parse_anchor_overrides(values: tuple[str, ...], line_count: int) -> dict[in
 
 @main.command(epilog=_EXTRACT_EPILOG)
 @click.argument("audio", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.argument("song_json", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.argument(
+    "song_json",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    metavar="SONG_JSON_OR_LYRICS_TXT",
+)
 @click.option(
     "-o",
     "--output",
@@ -101,7 +106,14 @@ def extract(
     anchor_opts: tuple[str, ...],
     words_path: Path | None,
 ) -> None:
-    """Extract a candidate timeline from AUDIO for the song in SONG_JSON.
+    """Extract a candidate timeline from AUDIO for the song in
+    SONG_JSON_OR_LYRICS_TXT.
+
+    The lyrics input may be a CP song JSON (passed through unchanged) or
+    a plain text file, one lyric line per line (blank lines and
+    [Bracketed] lines are stripped and reported, never converted to
+    markers) — either way it is normalised to a CP-shaped song dict
+    before this pipeline runs (see readers.py).
 
     Writes asr-words.jsonl, <song>-timeline.json, and <song>-qa-report.md
     into the staging directory. Never writes to the song JSON — review the
@@ -112,7 +124,12 @@ def extract(
     (ffmpeg -i video.mp4 -vn -ac 1 -ar 16000 audio.wav); for Auto-mode
     songs use the master recording.
     """
-    song = json.loads(song_json.read_text(encoding="utf-8"))
+    try:
+        normalised = read_lyrics_input(song_json, lang=lang)
+    except ValueError as exc:
+        raise click.ClickException(str(exc))
+    song = normalised.song
+    stripped_lines = normalised.bombista.get("strippedLines")
     items = song.get("lyrics")
     if not isinstance(items, list):
         raise click.ClickException(f'{song_json}: song JSON has no "lyrics" list')
@@ -165,6 +182,7 @@ def extract(
         lang=lang,
         staging_dir=staging_dir,
         provenance=provenance,
+        stripped_lines=stripped_lines,
     )
     report_out.write_text(report, encoding="utf-8")
 

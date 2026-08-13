@@ -81,6 +81,7 @@ def render_qa_report(
     staging_dir: Path,
     provenance: dict,
     generated_at: datetime | None = None,
+    stripped_lines: Sequence[dict] | None = None,
 ) -> str:
     """Render the QA markdown. `anchors`, `lines` and `line_entries` are
     parallel, one per lyric line. `line_entries` and every time in this
@@ -93,7 +94,14 @@ def render_qa_report(
     this run — this is the surface a human actually reads, so its audio
     identity (path + sha256), duration, model, device, lang, extractedAt
     and toolVersion are all shown in the header. It is never written into
-    the native timeline v2 envelope (serializer.py)."""
+    the native timeline v2 envelope (serializer.py).
+
+    `stripped_lines` (B5) is the plain-text reader's `_bombista.
+    strippedLines` — blank/`[Bracketed]` lines removed from a plain-text
+    input before it became lyric lines. When present it's rendered as a
+    short "Stripped lines" section so the removal is visible rather than
+    silent; the section is omitted entirely when nothing was stripped
+    (including the CP-JSON path, which never strips anything)."""
     generated_at = generated_at or datetime.now()
     counts = band_counts(anchors)
     words_path = staging_dir / "asr-words.jsonl"
@@ -153,5 +161,16 @@ def render_qa_report(
     for anchor in anchors:
         parts.append(_row(anchor, lines[anchor.line_index], line_entries[anchor.line_index]))
     parts.append("")
+
+    if stripped_lines:
+        parts.append("## Stripped lines")
+        parts.append("")
+        parts.append("| line | text | reason |")
+        parts.append("|------|------|--------|")
+        for item in stripped_lines:
+            parts.append(
+                f"| {item['line']} | {_cell(item['text'])} | {item['reason']} |"
+            )
+        parts.append("")
 
     return "\n".join(parts)

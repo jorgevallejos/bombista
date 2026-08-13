@@ -102,3 +102,35 @@ def test_report_header_shows_null_duration_gracefully():
     report = _render(provenance_overrides={"durationSec": None})
     header = report.split("## Needs attention")[0]
     assert "None" not in header
+
+
+# ---------------------------------------------------------------------------
+# Stripped lines (B5) — visible removal, not silent
+# ---------------------------------------------------------------------------
+
+STRIPPED_LINES = [
+    {"line": 1, "text": "[Intro]", "reason": "bracketed"},
+    {"line": 2, "text": "", "reason": "blank"},
+]
+
+
+def test_report_omits_stripped_lines_section_when_nothing_was_stripped():
+    report = _render()
+    assert "Stripped lines" not in report
+
+
+def test_report_lists_stripped_lines_when_present():
+    report = _render(stripped_lines=STRIPPED_LINES)
+
+    assert "Stripped lines" in report
+    assert "[Intro]" in report
+    assert "bracketed" in report
+    assert "blank" in report
+
+
+def test_report_stripped_lines_shows_source_line_numbers():
+    report = _render(stripped_lines=STRIPPED_LINES)
+    section = report.split("## Stripped lines")[1]
+
+    assert "| 1 " in section or "|1|" in section.replace(" ", "")
+    assert "| 2 " in section or "|2|" in section.replace(" ", "")

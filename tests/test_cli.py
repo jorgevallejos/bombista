@@ -317,6 +317,72 @@ def test_extract_help_carries_the_audio_clock_rule():
 
 
 # ---------------------------------------------------------------------------
+# extract — plain-text lyrics input (B5)
+# ---------------------------------------------------------------------------
+
+PLAIN_TEXT_LYRICS = "[Intro]\n\nhola mundo bonito\n\nvamos a bailar ahora\n"
+
+# Same WORDS fixture as the JSON-song tests above -> line 0 anchors at
+# 10.0 (raw), line 1 at 20.0; last word ends 31.8 -> line 1's fallback end
+# is 31.8 + 1.0 pad = 32.8 (raw). Normalised relative to lead_in = 10.0.
+EXPECTED_PLAIN_TEXT_ENVELOPE = {
+    "timelineVersion": 2,
+    "leadIn": {
+        "durationSec": 10.0,
+        "source": "measured",
+        "confidence": "low",
+        "apply": False,
+    },
+    "timeline": [
+        {"start": 0.0, "end": 10.0},
+        {"start": 10.0, "end": 22.8},
+    ],
+}
+
+
+def test_extract_accepts_plain_text_lyrics_input_and_produces_valid_v2_envelope(tmp_path):
+    """Acceptance #5: extract driven through the CLI on a plain .txt lyrics
+    file (not a CP song JSON) produces a valid, contract-passing v2
+    envelope, and the QA report surfaces what the reader stripped."""
+    from timeline_extractor.serializer import validate_v2_envelope
+
+    audio = tmp_path / "cancion.wav"
+    audio.write_bytes(b"")  # never read: --words skips transcription
+    lyrics_txt = tmp_path / "cancion-de-prueba.txt"
+    lyrics_txt.write_text(PLAIN_TEXT_LYRICS, encoding="utf-8")
+    words = tmp_path / "words.jsonl"
+    save_words(WORDS, words)
+    staging = tmp_path / "staging"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "extract",
+            str(audio),
+            str(lyrics_txt),
+            "-o",
+            str(staging),
+            "--words",
+            str(words),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    envelope = json.loads(
+        (staging / "cancion-de-prueba-timeline.json").read_text(encoding="utf-8")
+    )
+    validate_v2_envelope(envelope)  # raises on any contract violation
+    assert envelope == EXPECTED_PLAIN_TEXT_ENVELOPE
+
+    report = (staging / "cancion-de-prueba-qa-report.md").read_text(encoding="utf-8")
+    assert "Stripped lines" in report
+    assert "[Intro]" in report
+    assert "bracketed" in report
+    assert "blank" in report
+
+
+# ---------------------------------------------------------------------------
 # promote
 # ---------------------------------------------------------------------------
 

@@ -21,8 +21,7 @@ class Word:
 class TimelineEntry:
     """
     One cue window. Matches TimelineEntry in songState.ts.
-    Window is half-open [start, end). Zero-length entries (start == end)
-    are never matched by the cue lookup — used as section-marker placeholders.
+    Window is half-open [start, end).
     """
     start: float
     end: float

@@ -24,10 +24,8 @@ from timeline_extractor.models import Word
 SONG = {
     "title": "Canción de prueba",
     "lyrics": [
-        {"type": "section", "label": "Verse 1"},
         {"es": "hola mundo bonito", "en": "hello beautiful world"},
         {"es": "vamos a bailar ahora"},
-        "Chorus",
         {"es": "gracias por venir\ny quedarse"},
     ],
     "notes": "keep me intact",
@@ -49,10 +47,8 @@ WORDS = [
 ]
 
 EXPECTED_TIMELINE = [
-    {"start": 0.0, "end": 0.0},      # section marker
     {"start": 10.0, "end": 20.0},
     {"start": 20.0, "end": 30.0},
-    {"start": 0.0, "end": 0.0},      # bare-string marker
     {"start": 30.0, "end": 32.8},    # last word end 31.8 + 1.0 pad
 ]
 
@@ -135,7 +131,7 @@ def test_extract_never_writes_the_song_json(workspace):
 def test_extract_qa_report_contents(workspace):
     # make lyric line 2 unanchorable -> FAIL -> "needs attention" instruction
     song = json.loads(workspace["song"].read_text(encoding="utf-8"))
-    song["lyrics"].insert(4, {"es": "palabras inexistentes rarezas"})
+    song["lyrics"].insert(2, {"es": "palabras inexistentes rarezas"})
     workspace["song"].write_text(
         json.dumps(song, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
@@ -172,8 +168,8 @@ def test_extract_anchor_override_flows_through(workspace):
             encoding="utf-8"
         )
     )["timeline"]
-    assert timeline[2]["start"] == 15.0   # lyric line 1 = item index 2
-    assert timeline[1]["end"] == 15.0     # previous line's end follows
+    assert timeline[1]["start"] == 15.0   # lyric line 1 = item index 1
+    assert timeline[0]["end"] == 15.0     # previous line's end follows
 
 
 @pytest.mark.parametrize("bad", ["1", "abc=5.0", "1=abc", "1:5.0", "-1=5.0"])
@@ -189,6 +185,37 @@ def test_extract_rejects_out_of_range_anchor_line(workspace):
 
     assert result.exit_code != 0
     assert "99" in result.output
+
+
+def test_extract_fails_loudly_on_section_marker_naming_its_index(workspace):
+    """Section markers are no longer supported — a non-lyric entry in the
+    song's `lyrics` array must fail loudly through the CLI, naming the
+    offending index, rather than being silently skipped."""
+    song = json.loads(workspace["song"].read_text(encoding="utf-8"))
+    song["lyrics"].insert(1, {"type": "section", "label": "Bridge"})
+    workspace["song"].write_text(
+        json.dumps(song, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+
+    result = run_extract(workspace)
+
+    assert result.exit_code != 0
+    assert "lyrics[1]" in result.output
+    assert "not a lyric line" in result.output
+
+
+def test_extract_fails_loudly_on_bare_string_entry_naming_its_index(workspace):
+    song = json.loads(workspace["song"].read_text(encoding="utf-8"))
+    song["lyrics"].append("Outro")
+    workspace["song"].write_text(
+        json.dumps(song, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+
+    result = run_extract(workspace)
+
+    assert result.exit_code != 0
+    assert "lyrics[3]" in result.output
+    assert "not a lyric line" in result.output
 
 
 def test_extract_help_carries_the_audio_clock_rule():

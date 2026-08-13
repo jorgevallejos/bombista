@@ -21,7 +21,7 @@ import click
 from .aligner import load_words, save_words, transcribe_words
 from .anchoring import anchor_lines
 from .models import TimelineEntry
-from .pipeline import build_timeline, is_lyric_item, lyric_lines
+from .pipeline import build_timeline, lyric_lines
 from .report import band_counts, render_qa_report
 from .serializer import validate_timeline, write_timeline
 
@@ -116,7 +116,10 @@ def extract(
     items = song.get("lyrics")
     if not isinstance(items, list):
         raise click.ClickException(f'{song_json}: song JSON has no "lyrics" list')
-    lines = lyric_lines(items, lang)
+    try:
+        lines = lyric_lines(items, lang)
+    except ValueError as exc:
+        raise click.ClickException(str(exc))
     if not lines:
         raise click.ClickException(
             f"{song_json}: no lyric lines carry the {lang!r} language key"
@@ -134,18 +137,20 @@ def extract(
         save_words(words, words_out)
 
     anchors = anchor_lines(words, lines, overrides=overrides or None)
-    entries = build_timeline(anchors, words, items, lang=lang)
+    try:
+        entries = build_timeline(anchors, words, items, lang=lang)
+    except ValueError as exc:
+        raise click.ClickException(str(exc))
 
     stem = song_json.stem
     timeline_out = staging_dir / f"{stem}-timeline.json"
     report_out = staging_dir / f"{stem}-qa-report.md"
     write_timeline(entries, timeline_out)
 
-    lyric_entries = [e for item, e in zip(items, entries) if is_lyric_item(item, lang)]
     report = render_qa_report(
         anchors=anchors,
         lines=lines,
-        line_entries=lyric_entries,
+        line_entries=entries,
         song_title=song.get("title", stem),
         song_path=song_json,
         audio_path=audio,

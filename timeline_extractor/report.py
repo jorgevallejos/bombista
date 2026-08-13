@@ -72,7 +72,7 @@ def render_qa_report(
     generated_at: datetime | None = None,
 ) -> str:
     """Render the QA markdown. `anchors`, `lines` and `line_entries` are
-    parallel, lyric lines only (markers carry no QA content)."""
+    parallel, one per lyric line."""
     generated_at = generated_at or datetime.now()
     counts = band_counts(anchors)
     words_path = staging_dir / "asr-words.jsonl"

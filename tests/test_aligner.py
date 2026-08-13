@@ -14,7 +14,14 @@ from pathlib import Path
 
 import pytest
 
-from timeline_extractor.aligner import load_words, save_words, transcribe_words
+from timeline_extractor.aligner import (
+    COMPUTE_TYPE,
+    DEVICE,
+    DEVICE_STRING,
+    load_words,
+    save_words,
+    transcribe_words,
+)
 from timeline_extractor.models import Word
 
 
@@ -36,6 +43,17 @@ def _strip_accents(text: str) -> str:
 def _normalize(word: str) -> str:
     word = _strip_accents(word.lower())
     return re.sub(r"[^a-z]", "", word)
+
+
+def test_device_string_is_built_from_the_module_constants():
+    """DEVICE/COMPUTE_TYPE are the single source of truth for the device
+    faster-whisper runs on (transcribe_words) — DEVICE_STRING (consumed by
+    provenance.py) must never be able to drift from what transcribe_words
+    actually passes to WhisperModel."""
+    assert DEVICE == "cpu"
+    assert COMPUTE_TYPE == "int8"
+    assert DEVICE_STRING == f"{DEVICE}/{COMPUTE_TYPE}"
+    assert DEVICE_STRING == "cpu/int8"
 
 
 def test_round_trip_preserves_words(tmp_path):

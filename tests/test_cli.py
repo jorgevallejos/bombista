@@ -242,6 +242,70 @@ def test_extract_fails_loudly_on_bare_string_entry_naming_its_index(workspace):
     assert "not a lyric line" in result.output
 
 
+def test_extract_report_shows_which_audio_was_used_and_sha256_differs_by_audio(workspace):
+    """B1 acceptance #1: two runs against different audio files for the
+    same song produce different sha256 values, and the report header shows
+    which audio was used. --words (the committed fixture words) means
+    neither run actually transcribes — this is exactly the case where the
+    sha256 has to earn its keep, since nothing else distinguishes the
+    audio files from Bombista's point of view."""
+    audio_a = workspace["audio"]
+    audio_a.write_bytes(b"audio file A content")
+    audio_b = workspace["staging"].parent / "other-audio.wav"
+    audio_b.write_bytes(b"a completely different audio file B")
+
+    result_a = run_extract(workspace)
+    assert result_a.exit_code == 0, result_a.output
+    report_a = (
+        workspace["staging"] / "cancion-de-prueba-qa-report.md"
+    ).read_text(encoding="utf-8")
+
+    workspace["audio"] = audio_b
+    workspace["staging"] = workspace["staging"].parent / "staging-b"
+    result_b = run_extract(workspace)
+    assert result_b.exit_code == 0, result_b.output
+    report_b = (
+        workspace["staging"] / "cancion-de-prueba-qa-report.md"
+    ).read_text(encoding="utf-8")
+
+    sha_line_a = next(line for line in report_a.splitlines() if "sha256" in line.lower())
+    sha_line_b = next(line for line in report_b.splitlines() if "sha256" in line.lower())
+    assert sha_line_a != sha_line_b
+
+    assert str(audio_a) in report_a
+    assert str(audio_b) in report_b
+
+
+def test_extract_native_envelope_has_exactly_three_top_level_keys(workspace):
+    """B1 must not leak provenance into the native timeline envelope — the
+    translator parses it strictly (docs/timeline-v2-contract.md)."""
+    result = run_extract(workspace)
+    assert result.exit_code == 0, result.output
+
+    envelope = json.loads(
+        (workspace["staging"] / "cancion-de-prueba-timeline.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert set(envelope.keys()) == {"timelineVersion", "leadIn", "timeline"}
+
+
+def test_extract_succeeds_with_null_duration_for_unreadable_audio_container(workspace):
+    """B1 acceptance #3: durationSec must be null-but-present (never crash
+    the run) when the "audio" file's container can't be read by PyAV —
+    --words means transcription never touches it either, so this is purely
+    exercising the provenance duration probe."""
+    workspace["audio"].write_bytes(b"this is not a real media container")
+
+    result = run_extract(workspace)
+
+    assert result.exit_code == 0, result.output
+    report = (
+        workspace["staging"] / "cancion-de-prueba-qa-report.md"
+    ).read_text(encoding="utf-8")
+    assert "None" not in report.split("## Needs attention")[0]
+
+
 def test_extract_help_carries_the_audio_clock_rule():
     runner = CliRunner()
     result = runner.invoke(main, ["extract", "--help"])

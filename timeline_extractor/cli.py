@@ -21,6 +21,7 @@ import click
 from .aligner import load_words, save_words, transcribe_words
 from .anchoring import anchor_lines
 from .pipeline import build_timeline, lyric_lines, normalize_to_lead_in
+from .provenance import build_provenance
 from .report import band_counts, render_qa_report
 from .serializer import validate_v2_envelope, write_timeline
 
@@ -143,6 +144,10 @@ def extract(
 
     lead_in, normalized_entries = normalize_to_lead_in(entries)
 
+    # Built once per run, even when --words skips transcription — that's
+    # exactly when the audio's sha256 earns its keep (B1).
+    provenance = build_provenance(audio, model_size=model_size, lang=lang)
+
     stem = song_json.stem
     timeline_out = staging_dir / f"{stem}-timeline.json"
     report_out = staging_dir / f"{stem}-qa-report.md"
@@ -159,6 +164,7 @@ def extract(
         model_size=model_size,
         lang=lang,
         staging_dir=staging_dir,
+        provenance=provenance,
     )
     report_out.write_text(report, encoding="utf-8")
 

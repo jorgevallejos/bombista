@@ -16,6 +16,16 @@ Bombista and Pregonero are being built **in parallel, in separate sessions**. Ne
 
 Exactly these three top-level keys. Nothing else goes in this envelope — provenance, confidence bands and the `_bombista` block live in the *rich* JSON and the report, never here.
 
+### Producer vs consumer strictness (amended 2026-08-13, after Pregonero P3)
+
+The producer rule and the consumer rule are deliberately different.
+
+- **Bombista (producer) writes exactly these three keys.** Nothing more.
+- **Pregonero (consumer) must IGNORE unknown top-level keys, not reject them.** This is a guarantee, not an accident: it means a future Bombista can add a field to the envelope without every older build of the app refusing the file. Be liberal in what you accept.
+- **But a file that declares `timelineVersion: 2` and has no usable `timeline` array MUST be rejected**, not treated as a no-op. A file claiming to be a timeline while carrying no timeline is malformed — most likely truncated or half-written. Silently loading it makes the song look like it simply has no timings, which is precisely the silent-failure class this whole format exists to eliminate. Message: *"This timeline file is incomplete — it declares version 2 but contains no timeline."*
+
+**Not the same case:** a song file with no `timeline` key **and** no `timelineVersion` is a perfectly normal un-timed song. It must keep loading untouched. That is the 11-song regression case.
+
 | field | type | meaning |
 |---|---|---|
 | `timelineVersion` | `2` | Absent or any other value → **reject loudly.** Never coerce. |
@@ -79,6 +89,17 @@ Derived from the real accepted run of 2026-08-11 (`leadIn` 7.26 subtracted from 
 Raw values before normalisation, for the round-trip test: `7.26, 13.1, 16.9, 20.58, 24.26, 27.98, 31.92, 35.48, 40.14, 44.76, 46.84, 51.26, 55.88, 59.52, 63.38, 67.08, 70.88, 74.52, 79.92, 83.9, 106.1` (21 boundaries, 20 spans).
 
 Line 19 spanning 22 s is real, not a bug — `end` falls back to the last transcribed word. Backlog item B7.
+
+## Proving the round-trip — corrected 2026-08-13
+
+An earlier acceptance criterion said *"after migration, Tragedia must behave on screen exactly as it does today."* **That was wrong and is withdrawn.** Tragedia's stored timeline is the known ~17 s-late one, produced from the wrong audio source. "Nothing moved" would only prove it is still wrong.
+
+Two separate things were being conflated:
+
+1. **Is the representation change lossless?** A maths property. Prove it against the golden fixture below, in unit tests, on both sides — no song playback involved. Bombista: `round(raw − leadIn, 2)` reproduces `raw` within 0.005 when the lead-in is added back. Pregonero: with `leadIn.apply == true`, the cue time for every line equals `normalised + leadIn.durationSec` within the same tolerance.
+2. **Is Tragedia's data correct?** A separate, pre-existing defect. It is fixed by Bombista **re-extracting** Tragedia from audio pulled out of the animation video (`ffmpeg -i video.mp4 -vn -ac 1 -ar 16000 audio.wav`), not by anything Pregonero does. That is a later gate, after the parallel streams merge.
+
+Do not block P2 on Tragedia. Prove (1) now; (2) is a data job for the Bombista stream.
 
 ## Rules while both streams are in flight
 

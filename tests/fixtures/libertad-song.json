@@ -1,0 +1,226 @@
+{
+  "title": "Libertad",
+  "artist": "Chango Pepper",
+  "notes": "Capo 5, Acordes de Lam",
+  "tempo": {
+    "bpm": 66.67,
+    "numerator": 6,
+    "denominator": 8,
+    "countInBars": 1
+  },
+  "title_translations": {
+    "en": "Freedom",
+    "fr": "Liberté",
+    "nl": "Vrijheid"
+  },
+  "intro": {
+    "es": "Ese pequeño grano de locura de seguir lo que no para de llamarte.",
+    "en": "That small touch of madness in following what keeps calling you.",
+    "fr": "Ce grain de folie de suivre ce qui ne cesse de t’appeler.",
+    "nl": "Dat kleine beetje waanzin om te volgen wat je blijft roepen."
+  },
+  "lyrics": [
+    {
+      "es": "Fui brasa viva en la oscuridad,",
+      "en": "I was a glowing ember in the dark,",
+      "fr": "J'étais une braise vive dans l'ombre,",
+      "nl": "Ik was een gloeiende sintel in het donker,"
+    },
+    {
+      "es": "Chispa que quiso brotar.",
+      "en": "a spark longing to break free.",
+      "fr": "une étincelle prête à jaillir.",
+      "nl": "een vonk die naar buiten wilde breken."
+    },
+    {
+      "es": "Tantas noches que pasé",
+      "en": "So many nights I spent",
+      "fr": "Tant de nuits passées",
+      "nl": "Zoveel nachten bracht ik door"
+    },
+    {
+      "es": "soñando un nuevo lugar.",
+      "en": "dreaming of another place.",
+      "fr": "à rêver d'un autre lieu.",
+      "nl": "dromend van een andere plek."
+    },
+    {
+      "es": "Cruzo este incierto umbral",
+      "en": "I cross this uncertain threshold",
+      "fr": "Je franchis ce seuil incertain",
+      "nl": "Ik ga over deze onzekere drempel"
+    },
+    {
+      "es": "sin saber a dónde irá.",
+      "en": "with no clue where it will lead.",
+      "fr": "sans savoir où il me mènera.",
+      "nl": "zonder te weten waar hij heen zal leiden."
+    },
+    {
+      "es": "Ahora un incendio soy,",
+      "en": "Now I am a wildfire,",
+      "fr": "À présent je suis incendie,",
+      "nl": "Nu ben ik een laaiend vuur,"
+    },
+    {
+      "es": "dejando mi sombra",
+      "en": "leaving my shadow",
+      "fr": "laissant mon ombre",
+      "nl": "mijn schaduw achterlatend"
+    },
+    {
+      "es": "en llamas.",
+      "en": "up in flames.",
+      "fr": "en flammes.",
+      "nl": "in vlammen."
+    },
+    {
+      "es": "Canto en libertad.",
+      "en": "I sing in freedom.",
+      "fr": "Je chante libre.",
+      "nl": "Ik zing in vrijheid."
+    },
+    {
+      "es": "Convivo con las cenizas",
+      "en": "I live among the ashes",
+      "fr": "Je vis parmi les cendres",
+      "nl": "Ik leef tussen de as"
+    },
+    {
+      "es": "y el humo que me cubrió.",
+      "en": "and the smoke that covered me.",
+      "fr": "et la fumée qui m'a couvert.",
+      "nl": "en de rook die mij bedekte."
+    },
+    {
+      "es": "Fui más impulso que voz,",
+      "en": "I was more impulse than voice,",
+      "fr": "J'étais plus élan que voix,",
+      "nl": "Ik was meer aandrift dan stem,"
+    },
+    {
+      "es": "fui fuego que no quemó.",
+      "en": "I was a fire that could not burn,",
+      "fr": "j’étais un feu qui ne brûlait pas,",
+      "nl": "ik was vuur dat niet kon branden,"
+    },
+    {
+      "es": "Falto de respiración.",
+      "en": "short of breath.",
+      "fr": "à bout de souffle.",
+      "nl": "zonder adem."
+    },
+    {
+      "es": "Hoy me entrego al viento,",
+      "en": "Today I yield myself to the wind,",
+      "fr": "Aujourd'hui je me livre au vent,",
+      "nl": "Vandaag geef ik mij over aan de wind,"
+    },
+    {
+      "es": "aunque me haga vacilar.",
+      "en": "though it makes me sway.",
+      "fr": "même s'il me fait vaciller.",
+      "nl": "ook al brengt hij mij aan het wankelen."
+    },
+    {
+      "es": "Si mi llama tiembla,",
+      "en": "If my flame begins to tremble,",
+      "fr": "Si ma flamme se met à trembler,",
+      "nl": "Als mijn vlam begint te beven,"
+    },
+    {
+      "es": "me sostengo.",
+      "en": "I hold my ground.",
+      "fr": "je tiens bon.",
+      "nl": "houd ik stand."
+    },
+    {
+      "es": "Elijo arder más.",
+      "en": "I choose to burn brighter.",
+      "fr": "je choisis de brûler plus fort.",
+      "nl": "ik kies ervoor feller te branden."
+    }
+  ],
+  "timeline": [
+    {
+      "start": 7.26,
+      "end": 13.1
+    },
+    {
+      "start": 13.1,
+      "end": 16.9
+    },
+    {
+      "start": 16.9,
+      "end": 20.58
+    },
+    {
+      "start": 20.58,
+      "end": 24.26
+    },
+    {
+      "start": 24.26,
+      "end": 27.98
+    },
+    {
+      "start": 27.98,
+      "end": 31.92
+    },
+    {
+      "start": 31.92,
+      "end": 35.48
+    },
+    {
+      "start": 35.48,
+      "end": 40.14
+    },
+    {
+      "start": 40.14,
+      "end": 44.76
+    },
+    {
+      "start": 44.76,
+      "end": 46.84
+    },
+    {
+      "start": 46.84,
+      "end": 51.26
+    },
+    {
+      "start": 51.26,
+      "end": 55.88
+    },
+    {
+      "start": 55.88,
+      "end": 59.52
+    },
+    {
+      "start": 59.52,
+      "end": 63.38
+    },
+    {
+      "start": 63.38,
+      "end": 67.08
+    },
+    {
+      "start": 67.08,
+      "end": 70.88
+    },
+    {
+      "start": 70.88,
+      "end": 74.52
+    },
+    {
+      "start": 74.52,
+      "end": 79.92
+    },
+    {
+      "start": 79.92,
+      "end": 83.9
+    },
+    {
+      "start": 83.9,
+      "end": 106.1
+    }
+  ]
+}

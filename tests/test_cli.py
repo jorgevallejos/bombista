@@ -592,3 +592,286 @@ def test_promote_rejects_non_2_timeline_version(promote_ws):
     assert "timelineVersion" in result.output
     assert promote_ws["song"].read_bytes() == before
     assert list(promote_ws["dir"].glob("song.json.backup-*")) == []
+
+
+# ---------------------------------------------------------------------------
+# --emit (B2)
+# ---------------------------------------------------------------------------
+
+FIXTURES = Path(__file__).parent / "fixtures"
+LIBERTAD_SONG_FIXTURE = FIXTURES / "libertad-song.json"
+
+
+def test_extract_default_emit_only_writes_timeline_not_other_outputs(workspace):
+    """Default behaviour with no --emit must be exactly what happens
+    today: only timeline.json (plus the always-on words/report)."""
+    result = run_extract(workspace)
+
+    assert result.exit_code == 0, result.output
+    staging = workspace["staging"]
+    assert (staging / "cancion-de-prueba-timeline.json").exists()
+    assert not (staging / "cancion-de-prueba-song.json").exists()
+    assert not (staging / "cancion-de-prueba-report.json").exists()
+    assert not list(staging.glob("*.srt"))
+    assert not list(staging.glob("*.lrc"))
+
+
+def test_extract_emit_replaces_default_set_not_adds_to_it(workspace):
+    """Passing --emit explicitly REPLACES the default set."""
+    result = run_extract(workspace, "--emit", "songjson")
+
+    assert result.exit_code == 0, result.output
+    staging = workspace["staging"]
+    assert (staging / "cancion-de-prueba-song.json").exists()
+    assert not (staging / "cancion-de-prueba-timeline.json").exists()
+
+
+def test_extract_emit_repeatable_writes_each_requested_target(workspace):
+    result = run_extract(workspace, "--emit", "timeline", "--emit", "songjson")
+
+    assert result.exit_code == 0, result.output
+    staging = workspace["staging"]
+    assert (staging / "cancion-de-prueba-timeline.json").exists()
+    assert (staging / "cancion-de-prueba-song.json").exists()
+
+
+def test_extract_words_and_report_always_written_regardless_of_emit(workspace):
+    result = run_extract(workspace, "--emit", "songjson")
+
+    assert result.exit_code == 0, result.output
+    staging = workspace["staging"]
+    assert (staging / "asr-words.jsonl").exists()
+    assert (staging / "cancion-de-prueba-qa-report.md").exists()
+
+
+def test_extract_help_documents_emit_replaces_default():
+    runner = CliRunner()
+    result = runner.invoke(main, ["extract", "--help"])
+
+    assert result.exit_code == 0
+    assert "--emit" in result.output
+    assert "replaces" in result.output.lower()
+
+
+def test_extract_emit_songjson_round_trips_libertad_fixture_non_timeline_fields(tmp_path):
+    """Acceptance #1: --emit songjson on Libertad round-trips every
+    non-timeline field byte-identically (values AND order)."""
+    audio = tmp_path / "audio.wav"
+    audio.write_bytes(b"")  # never read: --words skips transcription
+    song_path = tmp_path / "libertad.json"
+    song_path.write_text(LIBERTAD_SONG_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
+    words = tmp_path / "words.jsonl"
+    words.write_text("", encoding="utf-8")  # no words needed: only non-timeline fields checked
+    staging = tmp_path / "staging"
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "extract",
+            str(audio),
+            str(song_path),
+            "-o",
+            str(staging),
+            "--words",
+            str(words),
+            "--emit",
+            "songjson",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    original = json.loads(LIBERTAD_SONG_FIXTURE.read_text(encoding="utf-8"))
+    emitted = json.loads((staging / "libertad-song.json").read_text(encoding="utf-8"))
+
+    reserved = {"timelineVersion", "leadIn", "timeline", "_bombista"}
+    original_keys = [k for k in original if k not in reserved]
+    emitted_keys = [k for k in emitted if k not in reserved]
+    assert emitted_keys == original_keys
+    for key in original_keys:
+        assert emitted[key] == original[key]
+        assert json.dumps(emitted[key], ensure_ascii=False) == json.dumps(
+            original[key], ensure_ascii=False
+        )
+
+    assert emitted["_bombista"]["completeness"] == "complete"
+    assert emitted["_bombista"]["source"]["audio"] == str(audio)
+
+
+def test_extract_emit_srt_one_file_per_language_key(workspace):
+    result = run_extract(workspace, "--emit", "srt")
+
+    assert result.exit_code == 0, result.output
+    staging = workspace["staging"]
+    assert (staging / "cancion-de-prueba-es.srt").exists()
+    assert (staging / "cancion-de-prueba-en.srt").exists()
+    assert "hola mundo bonito" in (staging / "cancion-de-prueba-es.srt").read_text(encoding="utf-8")
+    assert "hello beautiful world" in (staging / "cancion-de-prueba-en.srt").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_extract_emit_srt_excludes_lead_in_when_apply_false(workspace):
+    """SONG has no `media` -> leadIn.apply defaults to False -> subtitle
+    times are cue-relative, unshifted."""
+    result = run_extract(workspace, "--emit", "srt")
+
+    assert result.exit_code == 0, result.output
+    content = (workspace["staging"] / "cancion-de-prueba-es.srt").read_text(encoding="utf-8")
+    assert "00:00:00,000 --> 00:00:10,000" in content
+
+
+def test_extract_emit_srt_includes_lead_in_when_apply_true(workspace):
+    """`media.type == "video"` -> leadIn.apply True -> the lead-in (10.0 s,
+    line 0's raw onset) is added back into the subtitle times."""
+    song = json.loads(workspace["song"].read_text(encoding="utf-8"))
+    song["media"] = {"type": "video", "src": "x.mp4"}
+    workspace["song"].write_text(
+        json.dumps(song, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+
+    result = run_extract(workspace, "--emit", "srt")
+
+    assert result.exit_code == 0, result.output
+    content = (workspace["staging"] / "cancion-de-prueba-es.srt").read_text(encoding="utf-8")
+    assert "00:00:10,000 --> 00:00:20,000" in content
+
+
+def test_extract_emit_lrc_writes_files_with_tags(workspace):
+    result = run_extract(workspace, "--emit", "lrc")
+
+    assert result.exit_code == 0, result.output
+    staging = workspace["staging"]
+    assert (staging / "cancion-de-prueba-es.lrc").exists()
+    assert (staging / "cancion-de-prueba-en.lrc").exists()
+    content = (staging / "cancion-de-prueba-es.lrc").read_text(encoding="utf-8")
+    assert "[ti:Canción de prueba]" in content
+
+
+def test_extract_emit_report_json_produces_expected_shape(workspace):
+    result = run_extract(workspace, "--emit", "report-json")
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(
+        (workspace["staging"] / "cancion-de-prueba-report.json").read_text(encoding="utf-8")
+    )
+    assert set(data.keys()) == {"source", "leadIn", "summary", "lines"}
+    assert data["summary"] == {"high": 3, "review": 0, "fail": 0}
+    assert len(data["lines"]) == 3
+    assert "linesHash" not in data  # B4, not this item
+
+
+# ---------------------------------------------------------------------------
+# promote — refuses a partial candidate over a complete target (B2)
+# ---------------------------------------------------------------------------
+
+_REFUSAL_TARGET = {
+    "title": "T",
+    "lyrics": [{"es": "uno"}, {"es": "dos"}],
+    "timeline": [{"start": 0.0, "end": 1.0}, {"start": 2.0, "end": 3.0}],
+    "media": {"type": "audio", "src": "x.wav"},  # a MISSING_CP_FIELDS field -> "complete"
+}
+
+_PARTIAL_CANDIDATE = {
+    "title": "T",
+    "lyrics": [{"es": "uno"}, {"es": "dos"}],
+    "timelineVersion": 2,
+    "leadIn": {"durationSec": 1.0, "source": "measured", "confidence": "low", "apply": False},
+    "timeline": [{"start": 0.0, "end": 1.0}, {"start": 1.0, "end": 2.0}],
+    "_bombista": {
+        "completeness": "partial",
+        "filledLang": "es",
+        "missing": ["artist", "tempo", "media"],
+        "strippedLines": [],
+    },
+}
+
+_COMPLETE_CANDIDATE = {
+    **{k: v for k, v in _PARTIAL_CANDIDATE.items() if k != "_bombista"},
+    "_bombista": {"completeness": "complete"},
+}
+
+
+def test_promote_refuses_partial_candidate_over_complete_target(tmp_path):
+    song_path = tmp_path / "song.json"
+    song_path.write_text(
+        json.dumps(_REFUSAL_TARGET, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    candidate_path = tmp_path / "candidate.json"
+    candidate_path.write_text(json.dumps(_PARTIAL_CANDIDATE, indent=2), encoding="utf-8")
+    before = song_path.read_bytes()
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["promote", str(candidate_path), str(song_path)])
+
+    assert result.exit_code != 0
+    assert "partial" in result.output.lower()
+    assert "complete" in result.output.lower()
+    assert song_path.read_bytes() == before
+    assert list(tmp_path.glob("song.json.backup-*")) == []
+
+
+def test_promote_succeeds_with_complete_candidate_over_complete_target(tmp_path):
+    """Normal case: still succeeds when both sides are complete."""
+    song_path = tmp_path / "song.json"
+    song_path.write_text(
+        json.dumps(_REFUSAL_TARGET, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    candidate_path = tmp_path / "candidate.json"
+    candidate_path.write_text(json.dumps(_COMPLETE_CANDIDATE, indent=2), encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["promote", str(candidate_path), str(song_path)])
+
+    assert result.exit_code == 0, result.output
+    updated = json.loads(song_path.read_text(encoding="utf-8"))
+    assert updated["timeline"] == _COMPLETE_CANDIDATE["timeline"]
+
+
+def test_promote_never_refuses_a_bare_v2_envelope_candidate(promote_ws):
+    """A bare envelope carries no completeness information, so no refusal
+    is ever possible against it — regression against the existing
+    promote_ws fixture, whose target song is "complete" (it has `media`)."""
+    result = run_promote(promote_ws)
+    assert result.exit_code == 0, result.output
+
+
+# ---------------------------------------------------------------------------
+# One merge path only (B2)
+# ---------------------------------------------------------------------------
+
+
+def test_exactly_one_merge_implementation_in_the_repo():
+    import ast
+
+    import timeline_extractor
+
+    pkg_dir = Path(timeline_extractor.__file__).parent
+    count = 0
+    for py_file in pkg_dir.glob("*.py"):
+        tree = ast.parse(py_file.read_text(encoding="utf-8"))
+        count += sum(
+            1
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "merge_envelope"
+        )
+    assert count == 1
+    assert "_apply_envelope" not in (pkg_dir / "cli.py").read_text(encoding="utf-8")
+
+
+def test_promote_and_songjson_writer_produce_the_same_merged_result(promote_ws):
+    """Acceptance #5: promote and the songjson writer produce the same
+    merged result for the same inputs — because they call the same
+    function."""
+    from timeline_extractor.writers import merge_envelope
+
+    result = run_promote(promote_ws)
+    assert result.exit_code == 0, result.output
+    via_promote = json.loads(promote_ws["song"].read_text(encoding="utf-8"))
+
+    via_writer = merge_envelope(PROMOTE_SONG, PROMOTE_ENVELOPE)
+
+    assert via_promote["timelineVersion"] == via_writer["timelineVersion"]
+    assert via_promote["leadIn"] == via_writer["leadIn"]
+    assert via_promote["timeline"] == via_writer["timeline"]
+    assert list(via_promote.keys()) == list(via_writer.keys())

@@ -110,6 +110,29 @@ def _normalise_cp(song: dict, *, path: Path) -> NormalisedInput:
     return NormalisedInput(song=song, bombista={"completeness": "complete"})
 
 
+def song_completeness(song: dict) -> str:
+    """`"complete"` or `"partial"` — B2's `promote` refusal rule.
+
+    A song is complete when either:
+      - it already carries `_bombista.completeness == "complete"` (an
+        emitted `--emit songjson` candidate whose input was CP JSON), or
+      - it carries any of `MISSING_CP_FIELDS` (`artist`, `tempo`, `media`,
+        ...) — fields the plain-text path can never fill in. This second
+        clause is what makes the rule work on the real song files in
+        `songs/`, which predate the `_bombista` block entirely and so
+        never satisfy the first clause.
+
+    Anything else — no `_bombista` block, none of `MISSING_CP_FIELDS`
+    present — is `"partial"`: exactly what the plain-text path produces.
+    """
+    bombista = song.get("_bombista")
+    if isinstance(bombista, dict) and bombista.get("completeness") == "complete":
+        return "complete"
+    if any(field in song for field in MISSING_CP_FIELDS):
+        return "complete"
+    return "partial"
+
+
 def read_lyrics_input(path: Path, *, lang: str = "es") -> NormalisedInput:
     """Detect and normalise *path* — a CP song JSON or a plain lyrics text
     file — into a `NormalisedInput`. `lang` is only used on the plain-text

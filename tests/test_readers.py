@@ -17,6 +17,7 @@ from timeline_extractor.readers import (
     MISSING_CP_FIELDS,
     NormalisedInput,
     read_lyrics_input,
+    song_completeness,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -174,3 +175,37 @@ def test_cp_song_json_with_non_list_lyrics_fails_loudly(tmp_path):
 
     with pytest.raises(ValueError, match="lyrics"):
         read_lyrics_input(path, lang="es")
+
+
+# ---------------------------------------------------------------------------
+# song_completeness — B2, used by `promote`'s partial-over-complete refusal
+# ---------------------------------------------------------------------------
+
+
+def test_song_completeness_complete_via_bombista_block():
+    song = {"title": "x", "lyrics": [], "_bombista": {"completeness": "complete"}}
+    assert song_completeness(song) == "complete"
+
+
+def test_song_completeness_partial_via_bombista_block():
+    song = {"title": "x", "lyrics": [], "_bombista": {"completeness": "partial"}}
+    assert song_completeness(song) == "partial"
+
+
+def test_song_completeness_complete_when_no_bombista_but_has_a_missing_cp_field():
+    """The real song files on disk predate the `_bombista` block entirely —
+    presence of any field the plain-text path can never infer (artist,
+    tempo, media, ...) is what makes the rule work on them."""
+    song = {"title": "x", "lyrics": [], "media": {"type": "audio"}}
+    assert song_completeness(song) == "complete"
+
+
+@pytest.mark.parametrize("field", list(MISSING_CP_FIELDS))
+def test_song_completeness_complete_for_each_missing_cp_field(field):
+    song = {"title": "x", "lyrics": [], field: "anything"}
+    assert song_completeness(song) == "complete"
+
+
+def test_song_completeness_partial_with_neither_signal():
+    song = {"title": "x", "lyrics": [{"es": "una linea"}]}
+    assert song_completeness(song) == "partial"

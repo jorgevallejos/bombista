@@ -22,9 +22,20 @@ from .aligner import load_words, save_words, transcribe_words
 from .anchoring import anchor_lines
 from .pipeline import build_timeline, lyric_lines, normalize_to_lead_in
 from .provenance import build_provenance
-from .readers import read_lyrics_input
+from .readers import read_lyrics_input, song_completeness
 from .report import band_counts, render_qa_report
-from .serializer import validate_v2_envelope, write_timeline
+from .serializer import to_dict, validate_v2_envelope, write_timeline
+from .writers import (
+    build_bombista_block,
+    merge_envelope,
+    write_lrc,
+    write_report_json,
+    write_songjson,
+    write_srt,
+)
+
+_EMIT_CHOICES = ("timeline", "songjson", "report-json", "srt", "lrc")
+_ENVELOPE_KEYS = ("timelineVersion", "leadIn", "timeline")
 
 _EXTRACT_EPILOG = """\
 \b
@@ -97,6 +108,21 @@ def _parse_anchor_overrides(values: tuple[str, ...], line_count: int) -> dict[in
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     help="Reuse a saved asr-words.jsonl and skip transcription (fast re-runs).",
 )
+@click.option(
+    "--emit",
+    "emit_targets",
+    type=click.Choice(_EMIT_CHOICES),
+    multiple=True,
+    default=("timeline",),
+    show_default=True,
+    help=(
+        "Output(s) to write into the staging directory (repeatable). "
+        "Passing --emit at all REPLACES the default set — it does not add "
+        "to it, so `--emit songjson` alone writes only the song JSON, not "
+        "timeline.json too. asr-words.jsonl and the QA report are always "
+        "written regardless of --emit."
+    ),
+)
 def extract(
     audio: Path,
     song_json: Path,
@@ -105,6 +131,7 @@ def extract(
     lang: str,
     anchor_opts: tuple[str, ...],
     words_path: Path | None,
+    emit_targets: tuple[str, ...],
 ) -> None:
     """Extract a candidate timeline from AUDIO for the song in
     SONG_JSON_OR_LYRICS_TXT.
@@ -115,9 +142,13 @@ def extract(
     markers) — either way it is normalised to a CP-shaped song dict
     before this pipeline runs (see readers.py).
 
-    Writes asr-words.jsonl, <song>-timeline.json, and <song>-qa-report.md
-    into the staging directory. Never writes to the song JSON — review the
-    QA report, then apply with `timeline-extractor promote`.
+    Writes asr-words.jsonl and <song>-qa-report.md into the staging
+    directory unconditionally — those are part of the workflow, not an
+    --emit output. --emit (repeatable) picks which of timeline / songjson
+    / report-json / srt / lrc also get written there; default is
+    `timeline` alone, matching today's behaviour. Never writes to the song
+    JSON — review the QA report, then apply with `timeline-extractor
+    promote` (accepts either a bare timeline or an emitted songjson).
 
     Timeline times are only meaningful relative to the audio you feed in:
     for Video-mode songs extract the audio from the linked animation video
@@ -166,10 +197,45 @@ def extract(
     provenance = build_provenance(audio, model_size=model_size, lang=lang)
 
     stem = song_json.stem
-    timeline_out = staging_dir / f"{stem}-timeline.json"
-    report_out = staging_dir / f"{stem}-qa-report.md"
-    write_timeline(lead_in, normalized_entries, song, timeline_out)
+    emit_set = set(emit_targets)
+    # Built once regardless of which --emit targets are requested: songjson,
+    # srt, and lrc all need it, and it's cheap/pure.
+    envelope = to_dict(lead_in, normalized_entries, song)
 
+    produced: list[str] = []
+
+    if "timeline" in emit_set:
+        timeline_out = staging_dir / f"{stem}-timeline.json"
+        write_timeline(lead_in, normalized_entries, song, timeline_out)
+        produced.append(f"timeline: {timeline_out}")
+
+    if "songjson" in emit_set:
+        bombista = build_bombista_block(normalised.bombista, provenance)
+        songjson_out = staging_dir / f"{stem}-song.json"
+        write_songjson(song, envelope, bombista, songjson_out)
+        produced.append(f"songjson: {songjson_out}")
+
+    if "report-json" in emit_set:
+        report_json_out = staging_dir / f"{stem}-report.json"
+        write_report_json(
+            provenance=provenance,
+            lead_in_block=envelope["leadIn"],
+            anchors=anchors,
+            lines=lines,
+            line_entries=entries,  # raw audio-clock — see writers.py docstring
+            out_path=report_json_out,
+        )
+        produced.append(f"report-json: {report_json_out}")
+
+    if "srt" in emit_set:
+        srt_paths = write_srt(song, envelope, stem, staging_dir)
+        produced.append("srt: " + ", ".join(str(p) for p in srt_paths))
+
+    if "lrc" in emit_set:
+        lrc_paths = write_lrc(song, envelope, stem, staging_dir)
+        produced.append("lrc: " + ", ".join(str(p) for p in lrc_paths))
+
+    report_out = staging_dir / f"{stem}-qa-report.md"
     report = render_qa_report(
         anchors=anchors,
         lines=lines,
@@ -185,50 +251,46 @@ def extract(
         stripped_lines=stripped_lines,
     )
     report_out.write_text(report, encoding="utf-8")
+    produced.append(f"report: {report_out}")
+    produced.append(f"words: {words_out}")
 
     counts = band_counts(anchors)
     click.echo(
         f"HIGH {counts['HIGH']} / REVIEW {counts['REVIEW']} / FAIL {counts['FAIL']} "
-        f"— timeline: {timeline_out} — report: {report_out} — words: {words_out}"
+        "— " + " — ".join(produced)
     )
 
 
-def _load_promotable_envelope(timeline_json: Path) -> dict:
-    """Load and contract-validate a timeline v2 envelope file (see
-    docs/timeline-v2-contract.md). Raises ClickException — naming the
-    problem, never coercing — on any shape/type/version violation,
-    including a v1 candidate (missing or non-2 `timelineVersion`)."""
+def _load_promotable_candidate(timeline_json: Path) -> dict:
+    """Load *timeline_json* as JSON, no shape assumptions yet — the caller
+    (`promote`) picks the envelope keys back out with `_extract_envelope`,
+    which works identically whether this file is a bare v2 envelope or a
+    full `--emit songjson` output (envelope keys plus everything else)."""
     try:
         data = json.loads(timeline_json.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise click.ClickException(f"{timeline_json}: not valid JSON ({exc})")
-    try:
-        validate_v2_envelope(data)
-    except ValueError as exc:
-        raise click.ClickException(f"{timeline_json}: {exc}")
+    if not isinstance(data, dict):
+        raise click.ClickException(f"{timeline_json}: candidate must be a JSON object")
     return data
 
 
-def _apply_envelope(song: dict, envelope: dict) -> dict:
-    """Return a copy of *song* with `timelineVersion`, `leadIn` and
-    `timeline` set from *envelope*, in that order, replacing any existing
-    occurrence of those keys in place (or appending them at the end if none
-    existed) — every other key is preserved untouched and in order."""
-    new_keys = ("timelineVersion", "leadIn", "timeline")
-    new_song: dict = {}
-    inserted = False
-    for key, value in song.items():
-        if key in new_keys:
-            if not inserted:
-                for k in new_keys:
-                    new_song[k] = envelope[k]
-                inserted = True
-            continue
-        new_song[key] = value
-    if not inserted:
-        for k in new_keys:
-            new_song[k] = envelope[k]
-    return new_song
+def _extract_envelope(timeline_json: Path, data: dict) -> dict:
+    """Pull `{timelineVersion, leadIn, timeline}` out of *data* and
+    contract-validate the result (docs/timeline-v2-contract.md). Works
+    whether *data* IS a bare v2 envelope already, or a full song JSON (an
+    `--emit songjson` output) that carries those three keys plus everything
+    else — extra keys on *data* are simply not part of the extracted
+    envelope, so both shapes validate identically. Raises ClickException —
+    naming the problem, never coercing — on any shape/type/version
+    violation, including a v1 candidate (missing or non-2
+    `timelineVersion`)."""
+    envelope = {k: data.get(k) for k in _ENVELOPE_KEYS}
+    try:
+        validate_v2_envelope(envelope)
+    except ValueError as exc:
+        raise click.ClickException(f"{timeline_json}: {exc}")
+    return envelope
 
 
 def _timeline_diff(old: list | None, new: list[dict]) -> list[str]:
@@ -253,12 +315,27 @@ def _timeline_diff(old: list | None, new: list[dict]) -> list[str]:
 def promote(timeline_json: Path, song_json: Path) -> None:
     """Write the timeline v2 envelope from TIMELINE_JSON into SONG_JSON.
 
+    TIMELINE_JSON may be either a bare timeline v2 envelope (`extract`'s
+    default `--emit timeline` output) or a full `--emit songjson` output
+    (the envelope plus every other song field and a `_bombista` block) —
+    only the envelope keys are read out of it either way. A bare envelope
+    carries no completeness information, so no refusal (below) is ever
+    possible against one.
+
     Validates the envelope against the timeline v2 contract (rejecting a
     v1 candidate loudly) and the song's item count, backs the song file up
     next to itself, and writes `timelineVersion`, `leadIn` and `timeline`
-    — every other key is preserved untouched, in order.
+    (via `writers.merge_envelope` — the one merge path shared with
+    `--emit songjson`) — every other key is preserved untouched, in order.
+
+    Refuses to overwrite a target song whose `readers.song_completeness`
+    is `"complete"` with a candidate (only possible when TIMELINE_JSON is
+    an emitted songjson) whose own completeness is `"partial"` — promoting
+    a thin, plain-text-derived candidate over a song that already has full
+    CP data is very likely a mistake, not an upgrade.
     """
-    envelope = _load_promotable_envelope(timeline_json)
+    data = _load_promotable_candidate(timeline_json)
+    envelope = _extract_envelope(timeline_json, data)
     new_timeline = envelope["timeline"]
 
     song = json.loads(song_json.read_text(encoding="utf-8"))
@@ -271,12 +348,28 @@ def promote(timeline_json: Path, song_json: Path) -> None:
             f"lyrics item count ({len(items)}) — refusing to promote"
         )
 
+    carries_more_than_envelope = set(data.keys()) - set(_ENVELOPE_KEYS)
+    if carries_more_than_envelope:
+        candidate_completeness = song_completeness(data)
+        target_completeness = song_completeness(song)
+        if target_completeness == "complete" and candidate_completeness == "partial":
+            raise click.ClickException(
+                f"{song_json}: refusing to promote — the target song is "
+                "complete (it already carries CP fields a plain-text "
+                f"extraction can't infer), but the candidate ({timeline_json}) "
+                "is partial (no _bombista.completeness \"complete\", and none "
+                "of those fields either). Promoting it would risk silently "
+                "narrowing a complete song's timeline to a thinner source. "
+                "Re-run extract against the complete song JSON, or promote a "
+                "bare timeline envelope instead."
+            )
+
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     backup = song_json.with_name(f"{song_json.name}.backup-{stamp}")
     shutil.copyfile(song_json, backup)
 
     old_timeline = song.get("timeline")
-    song = _apply_envelope(song, envelope)
+    song = merge_envelope(song, envelope)
     song_json.write_text(
         json.dumps(song, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )

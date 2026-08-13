@@ -152,7 +152,18 @@ def validate_v2_envelope(envelope: dict) -> None:
                 raise ValueError(f"timeline[{i}]: {name} must be a number, got {value!r}")
         entries.append(TimelineEntry(start=float(start), end=float(end)))
 
-    if entries and entries[0].start != 0.0:
+    if not entries:
+        # Contract amendment 2026-08-13: a file claiming to be a timeline
+        # while carrying no timeline is malformed (truncated or half-written),
+        # not an untimed song. Loading it silently would make the song look
+        # like it simply has no timings — the exact silent failure this
+        # format exists to eliminate.
+        raise ValueError(
+            "this timeline file is incomplete — it declares version "
+            f"{TIMELINE_VERSION} but contains no timeline"
+        )
+
+    if entries[0].start != 0.0:
         raise ValueError(
             "timeline[0].start must be exactly 0.0 (entries are relative to "
             f"the start cue) — got {entries[0].start}"

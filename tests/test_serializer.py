@@ -178,6 +178,16 @@ def test_validate_v2_envelope_rejects_entry_zero_not_starting_at_zero():
         validate_v2_envelope(envelope)
 
 
+def test_validate_v2_envelope_rejects_a_version_2_file_with_no_timeline():
+    """Contract amendment 2026-08-13: a file that declares version 2 and
+    carries no timeline is malformed — truncated or half-written — not an
+    untimed song. Accepting it would make the song look silently untimed."""
+    envelope = _envelope()
+    envelope["timeline"] = []
+    with pytest.raises(ValueError, match="incomplete"):
+        validate_v2_envelope(envelope)
+
+
 def test_validate_v2_envelope_rejects_non_monotonic_timeline():
     envelope = _envelope()
     envelope["timeline"] = [{"start": 0.0, "end": 8.0}, {"start": 4.0, "end": 9.0}]

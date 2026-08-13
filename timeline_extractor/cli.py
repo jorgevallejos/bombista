@@ -21,7 +21,7 @@ import click
 from .aligner import load_words, save_words, transcribe_words
 from .anchoring import anchor_lines
 from .pipeline import build_timeline, lyric_lines, normalize_to_lead_in
-from .provenance import build_provenance
+from .provenance import build_provenance, compute_lines_hash
 from .readers import read_lyrics_input, song_completeness
 from .report import band_counts, render_qa_report
 from .serializer import to_dict, validate_v2_envelope, write_timeline
@@ -36,6 +36,13 @@ from .writers import (
 
 _EMIT_CHOICES = ("timeline", "songjson", "report-json", "srt", "lrc")
 _ENVELOPE_KEYS = ("timelineVersion", "leadIn", "timeline")
+
+_FALLBACK_LANG = "es"
+"""B4's linesHash guard needs the `lang` a candidate was extracted with to
+recompute the target song's hash the same way. Both carriers record it
+(`_bombista.source.lang` on a songjson, `source.lang` on a sibling rich
+JSON) — this is only the documented fallback for when that's absent,
+matching `extract --lang`'s own default."""
 
 _EXTRACT_EPILOG = """\
 \b
@@ -172,6 +179,7 @@ def extract(
         raise click.ClickException(
             f"{song_json}: no lyric lines carry the {lang!r} language key"
         )
+    lines_hash = compute_lines_hash(lines)  # B4 — positional-fragility guard
     overrides = _parse_anchor_overrides(anchor_opts, len(lines))
 
     staging_dir.mkdir(parents=True, exist_ok=True)
@@ -210,7 +218,7 @@ def extract(
         produced.append(f"timeline: {timeline_out}")
 
     if "songjson" in emit_set:
-        bombista = build_bombista_block(normalised.bombista, provenance)
+        bombista = build_bombista_block(normalised.bombista, provenance, lines_hash)
         songjson_out = staging_dir / f"{stem}-song.json"
         write_songjson(song, envelope, bombista, songjson_out)
         produced.append(f"songjson: {songjson_out}")
@@ -219,6 +227,7 @@ def extract(
         report_json_out = staging_dir / f"{stem}-report.json"
         write_report_json(
             provenance=provenance,
+            lines_hash=lines_hash,
             lead_in_block=envelope["leadIn"],
             anchors=anchors,
             lines=lines,
@@ -293,6 +302,76 @@ def _extract_envelope(timeline_json: Path, data: dict) -> dict:
     return envelope
 
 
+def _find_candidate_lines_hash(timeline_json: Path, data: dict) -> tuple[str | None, str | None]:
+    """Locate a `linesHash` to check the promotion candidate against (B4),
+    and the `lang` it was computed with, by naming convention:
+
+    1. If *data* is an emitted `--emit songjson` (carries `_bombista`),
+       read `_bombista.linesHash` and `_bombista.source.lang`.
+    2. Otherwise *data* is a bare v2 envelope, which cannot carry a hash
+       (the contract freezes it at three keys) — look for the sibling rich
+       JSON `--emit report-json` would have written next to it:
+       `<stem>-timeline.json` -> `<stem>-report.json` in the same
+       directory. Read its `linesHash` / `source.lang` if it exists.
+
+    Returns `(None, None)` if neither carrier is found or usable — the
+    caller prints a "could not be checked" note rather than skipping
+    quietly (this tool's whole philosophy, see module docstrings)."""
+    bombista = data.get("_bombista")
+    if isinstance(bombista, dict):
+        lines_hash = bombista.get("linesHash")
+        if isinstance(lines_hash, str):
+            source = bombista.get("source")
+            lang = source.get("lang") if isinstance(source, dict) else None
+            return lines_hash, lang
+
+    suffix = "-timeline.json"
+    if timeline_json.name.endswith(suffix):
+        sibling = timeline_json.with_name(timeline_json.name[: -len(suffix)] + "-report.json")
+        if sibling.exists():
+            try:
+                report_data = json.loads(sibling.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                return None, None
+            if isinstance(report_data, dict):
+                lines_hash = report_data.get("linesHash")
+                if isinstance(lines_hash, str):
+                    source = report_data.get("source")
+                    lang = source.get("lang") if isinstance(source, dict) else None
+                    return lines_hash, lang
+
+    return None, None
+
+
+def _lines_hash_mismatch_warning(candidate_hash: str, target_hash: str) -> str:
+    return (
+        "WARNING: this timeline's linesHash does not match the target "
+        "song's current lyrics.\n"
+        f"    recorded (at extraction time): {candidate_hash}\n"
+        f"    song's lyrics right now:        {target_hash}\n"
+        "The lyrics changed since this timeline was extracted — a line was "
+        "likely inserted, deleted, or reordered. Because the timeline is "
+        "matched to lyrics BY POSITION, every entry from the changed line "
+        "onward may now be pointing at the wrong lyric line.\n"
+        "Promoting anyway. To fix it: re-run `timeline-extractor extract` "
+        "against the current lyrics and promote the new candidate instead."
+    )
+
+
+def _lines_hash_unavailable_note(timeline_json: Path) -> str:
+    suffix = "-timeline.json"
+    if timeline_json.name.endswith(suffix):
+        sibling_name = timeline_json.name[: -len(suffix)] + "-report.json"
+        hint = f"no sibling {sibling_name} was found next to it"
+    else:
+        hint = f"{timeline_json.name} doesn't follow the <stem>-timeline.json naming convention"
+    return (
+        "note: linesHash guard could not be checked — the candidate carries "
+        f"no linesHash and {hint}. Re-run extract with --emit report-json "
+        "or --emit songjson to enable this guard next time."
+    )
+
+
 def _timeline_diff(old: list | None, new: list[dict]) -> list[str]:
     if not old:
         return [f"timeline added ({len(new)} entries)"]
@@ -347,6 +426,29 @@ def promote(timeline_json: Path, song_json: Path) -> None:
             f"timeline length ({len(new_timeline)}) must match the song's "
             f"lyrics item count ({len(items)}) — refusing to promote"
         )
+
+    # B4 — positional-fragility guard: warn (never block) if the target
+    # song's lyrics changed since this candidate was extracted.
+    candidate_lines_hash, candidate_lang = _find_candidate_lines_hash(timeline_json, data)
+    if candidate_lines_hash is None:
+        click.echo(_lines_hash_unavailable_note(timeline_json), err=True)
+    else:
+        try:
+            target_lines = lyric_lines(items, candidate_lang or _FALLBACK_LANG)
+        except ValueError as exc:
+            # Can't recompute the hash, so the guard can't run — say so
+            # rather than let it look like a clean check.
+            target_lines = None
+            click.echo(
+                f"note: linesHash guard could not be checked — {exc}", err=True
+            )
+        if target_lines is not None:
+            target_lines_hash = compute_lines_hash(target_lines)
+            if target_lines_hash != candidate_lines_hash:
+                click.echo(
+                    _lines_hash_mismatch_warning(candidate_lines_hash, target_lines_hash),
+                    err=True,
+                )
 
     carries_more_than_envelope = set(data.keys()) - set(_ENVELOPE_KEYS)
     if carries_more_than_envelope:

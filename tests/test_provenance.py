@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from timeline_extractor.aligner import DEVICE_STRING
-from timeline_extractor.provenance import build_provenance
+from timeline_extractor.provenance import build_provenance, compute_lines_hash
 
 FIXTURE_AUDIO = Path(__file__).parent / "fixtures" / "tragedia-opening-12s.wav"
 
@@ -158,3 +158,57 @@ def test_build_provenance_tool_version_names_the_tool_and_its_version(tmp_path):
     result = build_provenance(audio, model_size="medium", lang="es")
 
     assert result["toolVersion"] == f"timeline-extractor {version('timeline-extractor')}"
+
+
+# ---------------------------------------------------------------------------
+# compute_lines_hash — B4 (docs/bombista-product-backlog.md §1, §4)
+# ---------------------------------------------------------------------------
+
+
+def test_compute_lines_hash_returns_sha256_prefixed_string():
+    result = compute_lines_hash(["uno", "dos", "tres"])
+
+    assert result.startswith("sha256:")
+    digest = result.split(":", 1)[1]
+    assert len(digest) == 64
+    assert all(c in "0123456789abcdef" for c in digest)
+
+
+def test_compute_lines_hash_matches_hashlib_over_newline_joined_utf8_bytes():
+    lines = ["Fui brasa viva en la oscuridad,", "Chispa que quiso brotar."]
+
+    result = compute_lines_hash(lines)
+
+    expected = hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
+    assert result == f"sha256:{expected}"
+
+
+def test_compute_lines_hash_identical_for_identical_line_lists():
+    lines = ["uno", "dos", "tres"]
+
+    assert compute_lines_hash(lines) == compute_lines_hash(list(lines))
+
+
+def test_compute_lines_hash_differs_when_a_line_is_edited():
+    original = ["uno", "dos", "tres"]
+    edited = ["uno", "dos editado", "tres"]
+
+    assert compute_lines_hash(original) != compute_lines_hash(edited)
+
+
+def test_compute_lines_hash_differs_when_a_line_is_inserted():
+    original = ["uno", "dos", "tres"]
+    with_insert = ["uno", "nueva linea", "dos", "tres"]
+
+    assert compute_lines_hash(original) != compute_lines_hash(with_insert)
+
+
+def test_compute_lines_hash_differs_from_a_reordering_of_the_same_lines():
+    lines = ["uno", "dos", "tres"]
+    reordered = ["tres", "dos", "uno"]
+
+    assert compute_lines_hash(lines) != compute_lines_hash(reordered)
+
+
+def test_compute_lines_hash_of_empty_list_is_stable():
+    assert compute_lines_hash([]) == compute_lines_hash([])

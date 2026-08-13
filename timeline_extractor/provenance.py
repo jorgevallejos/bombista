@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime
 from pathlib import Path
+from typing import Sequence
 
 from .aligner import DEVICE_STRING
 
@@ -106,3 +107,21 @@ def build_provenance(
         "extractedAt": now.isoformat(timespec="seconds"),
         "toolVersion": _tool_version(),
     }
+
+
+def compute_lines_hash(lines: Sequence[str]) -> str:
+    """`linesHash` — B4 (docs/bombista-product-backlog.md §1, §4).
+
+    The timeline is matched to lyrics **by position**: insert or delete one
+    line and every entry after it is silently wrong. This hashes the exact
+    ordered line texts a timeline was built against (`pipeline.lyric_lines`'s
+    output — the same `lines` list the aligner works from), so `promote` can
+    detect that the target song's lyrics moved since extraction.
+
+    Canonical form: the lines joined with `"\\n"`, UTF-8 encoded, sha256'd.
+    Returned as `"sha256:<hex digest>"` (docs/bombista-product-backlog.md
+    §3.6) — the prefix names the algorithm so the string is self-describing
+    wherever it lands (rich JSON, `_bombista.linesHash`).
+    """
+    digest = hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
+    return f"sha256:{digest}"

@@ -89,9 +89,13 @@ PROVENANCE = {
 def test_build_bombista_block_combines_reader_block_with_provenance_under_source():
     reader_bombista = {"completeness": "complete"}
 
-    block = build_bombista_block(reader_bombista, PROVENANCE)
+    block = build_bombista_block(reader_bombista, PROVENANCE, "sha256:abc123")
 
-    assert block == {"completeness": "complete", "source": PROVENANCE}
+    assert block == {
+        "completeness": "complete",
+        "source": PROVENANCE,
+        "linesHash": "sha256:abc123",
+    }
 
 
 def test_build_bombista_block_preserves_partial_fields():
@@ -102,13 +106,14 @@ def test_build_bombista_block_preserves_partial_fields():
         "strippedLines": [{"line": 1, "text": "", "reason": "blank"}],
     }
 
-    block = build_bombista_block(reader_bombista, PROVENANCE)
+    block = build_bombista_block(reader_bombista, PROVENANCE, "sha256:abc123")
 
     assert block["completeness"] == "partial"
     assert block["filledLang"] == "es"
     assert block["missing"] == ["artist", "tempo"]
     assert block["strippedLines"] == reader_bombista["strippedLines"]
     assert block["source"] == PROVENANCE
+    assert block["linesHash"] == "sha256:abc123"
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +123,7 @@ def test_build_bombista_block_preserves_partial_fields():
 
 def test_write_songjson_merges_envelope_and_appends_bombista(tmp_path):
     song = {"title": "T", "lyrics": [{"es": "uno"}, {"es": "dos"}]}
-    bombista = build_bombista_block({"completeness": "complete"}, PROVENANCE)
+    bombista = build_bombista_block({"completeness": "complete"}, PROVENANCE, "sha256:abc123")
     out = tmp_path / "song.json"
 
     result = write_songjson(song, ENVELOPE, bombista, out)
@@ -135,7 +140,7 @@ def test_write_songjson_round_trips_libertad_fixture_non_timeline_fields_byte_id
     identical text to the original fixture's own serialisation of those
     keys."""
     song = json.loads(LIBERTAD_SONG.read_text(encoding="utf-8"))
-    bombista = build_bombista_block({"completeness": "complete"}, PROVENANCE)
+    bombista = build_bombista_block({"completeness": "complete"}, PROVENANCE, "sha256:abc123")
     out = tmp_path / "libertad-song.json"
 
     result = write_songjson(song, ENVELOPE, bombista, out)
@@ -175,6 +180,7 @@ def test_write_report_json_shape(tmp_path):
 
     result = write_report_json(
         provenance=PROVENANCE,
+        lines_hash="sha256:abc123",
         lead_in_block=LEAD_IN_BLOCK,
         anchors=ANCHORS,
         lines=LINES,
@@ -183,9 +189,9 @@ def test_write_report_json_shape(tmp_path):
     )
 
     assert result["source"] == PROVENANCE
+    assert result["linesHash"] == "sha256:abc123"  # B4
     assert result["leadIn"] == LEAD_IN_BLOCK
     assert result["summary"] == {"high": 1, "review": 1, "fail": 1}
-    assert "linesHash" not in result  # B4, not this item
     assert len(result["lines"]) == 3
 
     line0 = result["lines"][0]
@@ -210,6 +216,7 @@ def test_write_report_json_omits_asr_context_when_empty(tmp_path):
 
     result = write_report_json(
         provenance=PROVENANCE,
+        lines_hash="sha256:abc123",
         lead_in_block=LEAD_IN_BLOCK,
         anchors=ANCHORS,
         lines=LINES,
@@ -228,6 +235,7 @@ def test_write_report_json_uses_raw_audio_clock_times_not_normalised(tmp_path):
 
     result = write_report_json(
         provenance=PROVENANCE,
+        lines_hash="sha256:abc123",
         lead_in_block=LEAD_IN_BLOCK,
         anchors=ANCHORS,
         lines=LINES,

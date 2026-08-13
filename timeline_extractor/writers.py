@@ -67,13 +67,18 @@ def merge_envelope(song: dict, envelope: dict) -> dict:
     return new_song
 
 
-def build_bombista_block(reader_bombista: dict, provenance: dict) -> dict:
+def build_bombista_block(reader_bombista: dict, provenance: dict, lines_hash: str) -> dict:
     """Combine `readers.py`'s `_bombista` block (`completeness`, and for a
     plain-text input `filledLang`/`missing`/`strippedLines`) with B1's
-    provenance dict under a `source` key — the shape written into a
-    `songjson` output's `_bombista` block and, unmodified, into
-    `report-json`'s `source` field."""
-    return {**reader_bombista, "source": provenance}
+    provenance dict under a `source` key, plus B4's `linesHash` — the shape
+    written into a `songjson` output's `_bombista` block.
+
+    `lines_hash` is `provenance.compute_lines_hash`'s output over the exact
+    ordered lyric texts this run aligned against (docs/bombista-product-
+    backlog.md B4) — `promote` reads it back out of `_bombista.linesHash`
+    to detect lyrics that changed since extraction.
+    """
+    return {**reader_bombista, "source": provenance, "linesHash": lines_hash}
 
 
 def write_songjson(song: dict, envelope: dict, bombista: dict, out_path: Path) -> dict:
@@ -96,6 +101,7 @@ def write_songjson(song: dict, envelope: dict, bombista: dict, out_path: Path) -
 def write_report_json(
     *,
     provenance: dict,
+    lines_hash: str,
     lead_in_block: dict,
     anchors: Sequence[LineAnchor],
     lines: Sequence[str],
@@ -106,10 +112,13 @@ def write_report_json(
     at serialisation into the plain timeline (backlog §3.6).
 
     `provenance` is embedded verbatim under `source` (same dict as B1's
-    QA-report header and `songjson`'s `_bombista.source`). `lead_in_block`
-    is the *whole* `leadIn` object from the v2 envelope (not just the raw
-    float) so the relationship between these raw times and the emitted,
-    normalised timeline is explicit here rather than implied.
+    QA-report header and `songjson`'s `_bombista.source`). `lines_hash` is
+    `provenance.compute_lines_hash`'s output over `lines` (B4) — a top-level
+    `linesHash`, which `promote` reads back out of a candidate's sibling
+    `<stem>-report.json` when the candidate itself is a bare v2 envelope.
+    `lead_in_block` is the *whole* `leadIn` object from the v2 envelope (not
+    just the raw float) so the relationship between these raw times and the
+    emitted, normalised timeline is explicit here rather than implied.
 
     **Times in `lines[].start`/`.end` are raw audio-clock seconds** — the
     same clock as the markdown QA report and `--anchor LINE=SECONDS`
@@ -124,9 +133,6 @@ def write_report_json(
     `--anchor` correction) but nothing in `anchoring.py` populates it yet
     — it is never emitted here, by construction, until that tracking
     exists.
-
-    `linesHash` belongs in this shape too but is item **B4**, landing
-    right after this one — deliberately not implemented here.
     """
     counts = band_counts(anchors)
     lines_out = []
@@ -146,6 +152,7 @@ def write_report_json(
 
     result = {
         "source": provenance,
+        "linesHash": lines_hash,
         "leadIn": lead_in_block,
         "summary": {
             "high": counts.get("HIGH", 0),

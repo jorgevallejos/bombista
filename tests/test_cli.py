@@ -15,6 +15,7 @@ from click.testing import CliRunner
 from timeline_extractor.aligner import save_words
 from timeline_extractor.cli import main
 from timeline_extractor.models import Word
+from timeline_extractor.provenance import compute_lines_hash
 
 
 # ---------------------------------------------------------------------------
@@ -755,10 +756,10 @@ def test_extract_emit_report_json_produces_expected_shape(workspace):
     data = json.loads(
         (workspace["staging"] / "cancion-de-prueba-report.json").read_text(encoding="utf-8")
     )
-    assert set(data.keys()) == {"source", "leadIn", "summary", "lines"}
+    assert set(data.keys()) == {"source", "linesHash", "leadIn", "summary", "lines"}
     assert data["summary"] == {"high": 3, "review": 0, "fail": 0}
     assert len(data["lines"]) == 3
-    assert "linesHash" not in data  # B4, not this item
+    assert data["linesHash"].startswith("sha256:")
 
 
 # ---------------------------------------------------------------------------
@@ -875,3 +876,222 @@ def test_promote_and_songjson_writer_produce_the_same_merged_result(promote_ws):
     assert via_promote["leadIn"] == via_writer["leadIn"]
     assert via_promote["timeline"] == via_writer["timeline"]
     assert list(via_promote.keys()) == list(via_writer.keys())
+
+
+# ---------------------------------------------------------------------------
+# promote — linesHash guard (B4)
+# ---------------------------------------------------------------------------
+
+HASH_SONG = {
+    "title": "T",
+    "lyrics": [{"es": "uno"}, {"es": "dos"}, {"es": "tres"}],
+    "media": {"type": "audio", "src": "x.wav"},
+}
+HASH_SONG_LINES_HASH = compute_lines_hash(["uno", "dos", "tres"])
+
+HASH_ENVELOPE = {
+    "timelineVersion": 2,
+    "leadIn": {"durationSec": 1.0, "source": "measured", "confidence": "low", "apply": False},
+    "timeline": [
+        {"start": 0.0, "end": 1.0},
+        {"start": 1.0, "end": 2.0},
+        {"start": 2.0, "end": 3.0},
+    ],
+}
+
+
+def _songjson_candidate(lines_hash, lang="es"):
+    return {
+        **HASH_SONG,
+        **HASH_ENVELOPE,
+        "_bombista": {
+            "completeness": "complete",
+            "source": {"lang": lang, "audio": "x.wav"},
+            "linesHash": lines_hash,
+        },
+    }
+
+
+def test_promote_linesHash_guard_no_warning_when_target_lyrics_unchanged(tmp_path):
+    """Acceptance #2: an unchanged target produces no warning."""
+    song_path = tmp_path / "song.json"
+    song_path.write_text(json.dumps(HASH_SONG, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    candidate_path = tmp_path / "song-song.json"
+    candidate_path.write_text(
+        json.dumps(_songjson_candidate(HASH_SONG_LINES_HASH), indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["promote", str(candidate_path), str(song_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "WARNING" not in result.stderr
+    assert "could not be checked" not in result.stderr
+    updated = json.loads(song_path.read_text(encoding="utf-8"))
+    assert updated["timeline"] == HASH_ENVELOPE["timeline"]
+
+
+def test_promote_linesHash_guard_warns_loudly_on_mismatch_and_still_promotes(tmp_path):
+    """Acceptance #1: editing one lyric line in the target song and then
+    promoting an older timeline produces the warning, and the promotion
+    still completes — assert both the stderr warning AND the song file
+    actually being updated."""
+    edited_song = json.loads(json.dumps(HASH_SONG))
+    edited_song["lyrics"][1] = {"es": "dos-editado"}  # one line changed after extraction
+    song_path = tmp_path / "song.json"
+    song_path.write_text(json.dumps(edited_song, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    candidate_path = tmp_path / "song-song.json"
+    candidate_path.write_text(
+        # candidate's linesHash was computed from the ORIGINAL lyrics
+        json.dumps(_songjson_candidate(HASH_SONG_LINES_HASH), indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["promote", str(candidate_path), str(song_path)])
+
+    assert result.exit_code == 0, result.output  # a warning, NOT an error
+    assert "WARNING" in result.stderr
+    assert "lyrics changed" in result.stderr.lower() or "lyrics changed since" in result.stderr.lower()
+    assert "position" in result.stderr.lower()
+    assert "re-run" in result.stderr.lower() and "extract" in result.stderr.lower()
+
+    # the promotion still completed
+    updated = json.loads(song_path.read_text(encoding="utf-8"))
+    assert updated["timeline"] == HASH_ENVELOPE["timeline"]
+    assert updated["timelineVersion"] == 2
+
+
+def test_promote_linesHash_guard_reads_hash_from_sibling_report_json(tmp_path):
+    """Acceptance #4 (part 1): when the candidate is a bare v2 envelope (no
+    _bombista), promote falls back to the sibling
+    <stem>-timeline.json -> <stem>-report.json rich JSON for the hash."""
+    edited_song = json.loads(json.dumps(HASH_SONG))
+    edited_song["lyrics"][2] = {"es": "tres-editado"}
+    song_path = tmp_path / "song.json"
+    song_path.write_text(json.dumps(edited_song, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    candidate_path = tmp_path / "cancion-timeline.json"
+    candidate_path.write_text(json.dumps(HASH_ENVELOPE, indent=2), encoding="utf-8")
+    sibling_report = tmp_path / "cancion-report.json"
+    sibling_report.write_text(
+        json.dumps({"source": {"lang": "es"}, "linesHash": HASH_SONG_LINES_HASH}, indent=2),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["promote", str(candidate_path), str(song_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "WARNING" in result.stderr
+    updated = json.loads(song_path.read_text(encoding="utf-8"))
+    assert updated["timeline"] == HASH_ENVELOPE["timeline"]
+
+
+def test_promote_linesHash_guard_prints_could_not_be_checked_when_no_hash_available(tmp_path):
+    """Acceptance #4 (part 2): a bare envelope with no sibling rich JSON
+    prints the "could not be checked" note rather than skipping quietly,
+    and still promotes."""
+    song_path = tmp_path / "song.json"
+    song_path.write_text(json.dumps(HASH_SONG, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    candidate_path = tmp_path / "cancion-timeline.json"
+    candidate_path.write_text(json.dumps(HASH_ENVELOPE, indent=2), encoding="utf-8")
+    # no cancion-report.json sibling written
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["promote", str(candidate_path), str(song_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "could not be checked" in result.stderr.lower()
+    assert "--emit report-json" in result.stderr or "--emit songjson" in result.stderr
+    assert "WARNING" not in result.stderr
+    updated = json.loads(song_path.read_text(encoding="utf-8"))
+    assert updated["timeline"] == HASH_ENVELOPE["timeline"]
+
+
+def test_promote_linesHash_guard_says_so_when_the_target_lines_cannot_be_read(tmp_path):
+    """The guard can't recompute a hash from a song whose lyrics aren't all
+    lyric lines. It must say so — a skipped check must never look like a
+    clean one."""
+    broken_song = json.loads(json.dumps(HASH_SONG))
+    broken_song["lyrics"][1] = {"type": "section", "label": "Bridge"}
+    song_path = tmp_path / "song.json"
+    song_path.write_text(json.dumps(broken_song, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    candidate_path = tmp_path / "cancion-timeline.json"
+    candidate_path.write_text(json.dumps(HASH_ENVELOPE, indent=2), encoding="utf-8")
+    sibling = tmp_path / "cancion-report.json"
+    sibling.write_text(
+        json.dumps({"linesHash": "sha256:deadbeef", "source": {"lang": "es"}}),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(main, ["promote", str(candidate_path), str(song_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "could not be checked" in result.stderr.lower()
+    assert "lyrics[1]" in result.stderr
+    assert "WARNING" not in result.stderr
+
+
+def test_promote_linesHash_guard_falls_back_to_default_lang_when_source_lang_absent(tmp_path):
+    """Documented fallback: when the sibling rich JSON carries no
+    `source.lang`, promote still recomputes using the default (`es`,
+    matching `extract --lang`'s own default) rather than skipping the
+    guard."""
+    edited_song = json.loads(json.dumps(HASH_SONG))
+    edited_song["lyrics"][0] = {"es": "uno-editado"}
+    song_path = tmp_path / "song.json"
+    song_path.write_text(json.dumps(edited_song, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    candidate_path = tmp_path / "cancion-timeline.json"
+    candidate_path.write_text(json.dumps(HASH_ENVELOPE, indent=2), encoding="utf-8")
+    sibling_report = tmp_path / "cancion-report.json"
+    # no "source" key at all -> lang must fall back
+    sibling_report.write_text(json.dumps({"linesHash": HASH_SONG_LINES_HASH}), encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["promote", str(candidate_path), str(song_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "WARNING" in result.stderr
+
+
+def test_promote_linesHash_never_leaks_into_the_song_top_level_keys(tmp_path):
+    """Acceptance #5: promoting a songjson candidate (whose _bombista
+    carries linesHash) must never leak `linesHash` into the target song's
+    top-level keys — merge_envelope only ever touches the three envelope
+    keys."""
+    song_path = tmp_path / "song.json"
+    song_path.write_text(json.dumps(HASH_SONG, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    candidate_path = tmp_path / "song-song.json"
+    candidate_path.write_text(
+        json.dumps(_songjson_candidate(HASH_SONG_LINES_HASH), indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["promote", str(candidate_path), str(song_path)])
+
+    assert result.exit_code == 0, result.output
+    updated = json.loads(song_path.read_text(encoding="utf-8"))
+    assert "linesHash" not in updated
+    assert "_bombista" not in updated
+
+
+def test_extract_native_envelope_never_carries_linesHash(workspace):
+    """Acceptance #5 (extract side): the native v2 envelope
+    (`--emit timeline`, the default) still has exactly the three top-level
+    keys — linesHash must not leak into it even though it's now computed
+    every run."""
+    result = run_extract(workspace)
+
+    assert result.exit_code == 0, result.output
+    envelope = json.loads(
+        (workspace["staging"] / "cancion-de-prueba-timeline.json").read_text(encoding="utf-8")
+    )
+    assert set(envelope.keys()) == {"timelineVersion", "leadIn", "timeline"}
+    assert "linesHash" not in envelope

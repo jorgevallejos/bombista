@@ -112,14 +112,14 @@ Plain text in → a **valid but incomplete** CP song file. Only the `--lang` key
 
 ```json
 {
-  "title": "Libertad",
+  "title": "Río de Sal",
   "lyrics": [
-    { "en": "I was a glowing ember in the dark," },
-    { "en": "a spark longing to break free." }
+    { "en": "I keep the salt in my pockets," },
+    { "en": "counting the lighthouses as they pass." }
   ],
   "timeline": [
-    { "start": 7.26, "end": 13.10 },
-    { "start": 13.10, "end": 16.90 }
+    { "start": 5.40, "end": 11.02 },
+    { "start": 11.02, "end": 15.18 }
   ],
   "_bombista": { "completeness": "partial", "filledLang": "en",
                  "missing": ["artist","tempo","media","title_translations","intro","translations"] }
@@ -130,25 +130,33 @@ The `_bombista` block tells a downstream tool (or a human, or an LLM asked to fi
 
 ---
 
-## 3. Worked example — real data, Libertad, run of 2026-08-11
+## 3. Worked example — illustrative, *Río de Sal*
+
+> **The song, and every number below, is invented.** This section previously
+> reproduced a real run against a Chango Pepper master recording; it was
+> replaced when the repo went public (B18), because a repo whose worked
+> example is one artist's own song reads as that artist's private tool, and
+> §1 positions Bombista at theatre surtitles and captioning. The shapes,
+> field names, signal vocabulary and orders of magnitude are faithful to
+> what the tool actually emits — the measurements are not measurements.
 
 ### 3.1 Input A — the audio
 
-`songs/audio/Song Libertad.m4a`
+`songs/audio/rio-de-sal.m4a`
 
 > ⚠ A timeline is only meaningful relative to the exact audio fed in. Auto-mode songs use the master recording; Video-mode songs must use audio extracted from the linked animation:
 > `ffmpeg -i video.mp4 -vn -ac 1 -ar 16000 audio.wav`
-> Getting this wrong is what put the original Tragedia timeline ~17 s off, silently, with clean confidence bands. **B1 makes this failure visible.**
+> Getting this wrong is what put an early shipped timeline ~17 s off, silently, with clean confidence bands. **B1 makes this failure visible.**
 
 ### 3.2 Input B — the lines, as plain text (target, B5)
 
 ```text
-Fui brasa viva en la oscuridad,
-Chispa que quiso brotar.
-Tantas noches que pasé
-soñando un nuevo lugar.
+Guardo la sal en los bolsillos,
+cuento los faros al pasar.
+El muelle duerme boca arriba
+y el agua aprende a esperar.
 …
-Elijo arder más.
+Vuelvo a empezar.
 ```
 
 Blank lines and `[Bracketed]` lines are **stripped**, not turned into markers — and what was stripped is listed in the QA report and the `_bombista` block, so the removal is visible rather than silent.
@@ -156,8 +164,8 @@ Blank lines and `[Bracketed]` lines are **stripped**, not turned into markers �
 ### 3.3 Command
 
 ```bash
-bombista align "songs/audio/Song Libertad.m4a" songs/libertad.json \
-  -o staging/libertad --lang es --model-size medium
+bombista align songs/audio/rio-de-sal.m4a songs/rio-de-sal.json \
+  -o staging/rio-de-sal --lang es --model-size medium
 ```
 
 51.5 s. Console prints one line:
@@ -171,26 +179,26 @@ HIGH 18 / REVIEW 2 / FAIL 0 — timeline: … — report: … — words: …
 What the alignment measured (raw, against the audio file):
 
 ```
-line 0: 7.26 → 13.10    line 12: 55.88 → 59.52    line 19: 83.90 → 106.10
+line 0: 5.40 → 11.02    line 12: 61.35 → 64.88    line 19: 92.40 → 111.75
 ```
 
-What Bombista now emits — every value shifted by `−7.26`, the offset banked in `leadIn`:
+What Bombista now emits — every value shifted by `−5.40`, the offset banked in `leadIn`:
 
 ```json
 {
   "timelineVersion": 2,
-  "leadIn": { "durationSec": 7.26, "source": "measured", "confidence": "low", "apply": false },
+  "leadIn": { "durationSec": 5.40, "source": "measured", "confidence": "low", "apply": false },
   "timeline": [
-    { "start": 0.00,  "end": 5.84 },
-    { "start": 48.62, "end": 52.26 },
-    { "start": 76.64, "end": 98.84 }
+    { "start": 0.00,  "end": 5.62 },
+    { "start": 55.95, "end": 59.48 },
+    { "start": 87.00, "end": 106.35 }
   ]
 }
 ```
 
 Lossless and reversible: `normalised[i] = raw[i] − raw[0].start`, `leadIn = raw[0].start`. Nothing is thrown away — the same information is just stored where a human can edit the uncertain part without touching the reliable parts.
 
-*(20 entries in reality. The last line spans 22 s because `end` falls back to the last transcribed word — see B7.)*
+*(20 entries in full; three shown. The last line spans 19 s because `end` falls back to the last transcribed word — see B7.)*
 
 ### 3.5 Output 2 — CP song JSON, complete (B2)
 
@@ -198,17 +206,17 @@ Input was a CP song file, so everything is preserved and `timeline` is merged in
 
 ```json
 {
-  "title": "Libertad",
-  "artist": "Chango Pepper",
-  "notes": "Capo 5, Acordes de Lam",
-  "tempo": { "bpm": 66.67, "numerator": 6, "denominator": 8, "countInBars": 1 },
-  "title_translations": { "en": "Freedom", "fr": "Liberté", "nl": "Vrijheid" },
-  "intro": { "es": "Ese pequeño grano de locura…", "en": "That small touch of madness…" },
+  "title": "Río de Sal",
+  "artist": "Puerto Nueve",
+  "notes": "Capo 3, acordes de Mim",
+  "tempo": { "bpm": 92, "numerator": 4, "denominator": 4, "countInBars": 1 },
+  "title_translations": { "en": "River of Salt", "fr": "Rivière de sel", "nl": "Rivier van zout" },
+  "intro": { "es": "Una canción para los que vuelven tarde…", "en": "A song for those who come home late…" },
   "lyrics": [
-    { "es": "Fui brasa viva en la oscuridad,", "en": "I was a glowing ember in the dark,",
-      "fr": "J'étais une braise vive dans l'ombre,", "nl": "Ik was een gloeiende sintel in het donker," }
+    { "es": "Guardo la sal en los bolsillos,", "en": "I keep the salt in my pockets,",
+      "fr": "Je garde le sel dans mes poches,", "nl": "Ik bewaar het zout in mijn zakken," }
   ],
-  "timeline": [ { "start": 7.26, "end": 13.1 } ],
+  "timeline": [ { "start": 5.40, "end": 11.02 } ],
   "_bombista": { "completeness": "complete" }
 }
 ```
@@ -220,20 +228,20 @@ Already computed in `anchoring.py`; currently discarded at serialisation.
 ```json
 {
   "source": {
-    "audio": "songs/audio/Song Libertad.m4a",
-    "sha256": "4f2a9c…", "durationSec": 172.4,
+    "audio": "songs/audio/rio-de-sal.m4a",
+    "sha256": "4f2a9c…", "durationSec": 180.6,
     "model": "faster-whisper:medium", "device": "cpu/int8", "lang": "es",
     "extractedAt": "2026-08-11T16:45:34+02:00", "toolVersion": "bombista 1.1.0"
   },
   "linesHash": "sha256:9d41b…",
   "summary": { "high": 18, "review": 2, "fail": 0 },
   "lines": [
-    { "i": 0,  "text": "Fui brasa viva en la oscuridad,", "start": 7.26,  "end": 13.10,
+    { "i": 0,  "text": "Guardo la sal en los bolsillos,", "start": 5.40,  "end": 11.02,
       "band": "HIGH",   "signals": ["clean-anchor"] },
-    { "i": 12, "text": "Fui más impulso que voz,",        "start": 55.88, "end": 59.52,
+    { "i": 12, "text": "No soy la orilla, soy la sed,",   "start": 61.35, "end": 64.88,
       "band": "REVIEW", "signals": ["ambiguous"],
-      "asrContext": "Fui más impulsó que vos Fui fuego que" },
-    { "i": 19, "text": "Elijo arder más.",                "start": 83.90, "end": 106.10,
+      "asrContext": "No soy la orilla soy la se No soy el mar que" },
+    { "i": 19, "text": "Vuelvo a empezar.",               "start": 92.40, "end": 111.75,
       "band": "HIGH",   "signals": ["override"], "previousSignals": ["lead-fallback"] }
   ]
 }
@@ -245,21 +253,21 @@ One file per language key present. This is what makes reel and YouTube subtitles
 
 ```srt
 1
-00:00:07,260 --> 00:00:13,100
-Fui brasa viva en la oscuridad,
+00:00:05,400 --> 00:00:11,020
+Guardo la sal en los bolsillos,
 
 2
-00:00:13,100 --> 00:00:16,900
-Chispa que quiso brotar.
+00:00:11,020 --> 00:00:15,180
+cuento los faros al pasar.
 ```
 
-### 3.8 Output 5 — the QA report (today, real)
+### 3.8 Output 5 — the QA report (the shape shipping today)
 
 ```markdown
-# QA report — Libertad
+# QA report — Río de Sal
 
-- Song file: `songs/libertad.json`
-- Audio file: `songs/audio/Song Libertad.m4a`
+- Song file: `songs/rio-de-sal.json`
+- Audio file: `songs/audio/rio-de-sal.m4a`
 - Model: faster-whisper `medium` (lang `es`)
 - Generated: 2026-08-11T16:45:34
 - Bands: HIGH 18 / REVIEW 2 / FAIL 0
@@ -268,11 +276,11 @@ Chispa que quiso brotar.
 
 | line | band | canonical text | ASR context | start | end | dur | signals |
 |------|------|----------------|-------------|-------|-----|-----|---------|
-| 12 | REVIEW | Fui más impulso que voz, | Fui más impulsó que vos Fui fuego que | 55.88 | 59.52 | 3.64 | ambiguous |
-| 19 | REVIEW | Elijo arder más. | arder más Soñando mi sombra en llamas | 84.96 | 106.10 | 21.14 | lead-fallback |
+| 12 | REVIEW | No soy la orilla, soy la sed, | No soy la orilla soy la se No soy el mar que | 61.35 | 64.88 | 3.53 | ambiguous |
+| 19 | REVIEW | Vuelvo a empezar. | Vuelvo a empezar Contando faros en la niebla | 92.40 | 111.75 | 19.35 | lead-fallback |
 
-- Line 12: re-run with `--anchor 12=<seconds>` and `--words …` (candidate start was 55.88 s).
-- Line 19: re-run with `--anchor 19=<seconds>` and `--words …` (candidate start was 84.96 s).
+- Line 12: re-run with `--anchor 12=<seconds>` and `--words …` (candidate start was 61.35 s).
+- Line 19: re-run with `--anchor 19=<seconds>` and `--words …` (candidate start was 92.40 s).
 
 ## All lines
 … 20 rows …
@@ -283,11 +291,11 @@ Chispa que quiso brotar.
 ### 3.9 Correction + promote
 
 ```bash
-bombista align "songs/audio/Song Libertad.m4a" songs/libertad.json \
-  -o staging/libertad-anchored --lang es \
-  --words staging/libertad/asr-words.jsonl --anchor 19=83.9   # 0.07 s
+bombista align songs/audio/rio-de-sal.m4a songs/rio-de-sal.json \
+  -o staging/rio-de-sal-anchored --lang es \
+  --words staging/rio-de-sal/asr-words.jsonl --anchor 19=91.2   # 0.07 s
 
-bombista promote staging/libertad-anchored/libertad-timeline.json songs/libertad.json
+bombista promote staging/rio-de-sal-anchored/rio-de-sal-timeline.json songs/rio-de-sal.json
 ```
 
 `promote` backs up, refuses on count mismatch, replaces only `timeline`, prints a per-line diff.

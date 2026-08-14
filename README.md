@@ -62,10 +62,13 @@ If `bombista` is not on your PATH — an unactivated venv, a `pip install --user
 
 You have a recording and its lyrics. You want to know when each line lands.
 
+The song below — *Río de Sal*, twenty lines — is invented, and so are its
+numbers; they are representative of a real run, not a transcript of one.
+
 ### 1. Align
 
 ```bash
-bombista align "audio/Song Libertad.m4a" lyrics/libertad.json -o staging/libertad --lang es
+bombista align audio/rio-de-sal.m4a lyrics/rio-de-sal.json -o staging/rio-de-sal --lang es
 ```
 
 The lyrics input can be a **CP song JSON** or a **plain text file**, one line per line. In a text file, blank lines and `[Bracketed]` section labels are stripped — and *reported*, so the removal is visible rather than silent.
@@ -73,44 +76,44 @@ The lyrics input can be a **CP song JSON** or a **plain text file**, one line pe
 About 50 seconds later, one line of output:
 
 ```
-HIGH 18 / REVIEW 2 / FAIL 0 — timeline: staging/libertad/libertad-timeline.json — report: staging/libertad/libertad-qa-report.md — words: staging/libertad/asr-words.jsonl
+HIGH 18 / REVIEW 2 / FAIL 0 — timeline: staging/rio-de-sal/rio-de-sal-timeline.json — report: staging/rio-de-sal/rio-de-sal-qa-report.md — words: staging/rio-de-sal/asr-words.jsonl
 ```
 
 Eighteen lines Bombista is confident about. **Two to look at.** That number is the product.
 
 ### 2. Read the report
 
-`staging/libertad/libertad-qa-report.md` opens with the provenance of the run — which audio file, its sha256, the model, the language — then gets to the point:
+`staging/rio-de-sal/rio-de-sal-qa-report.md` opens with the provenance of the run — which audio file, its sha256, the model, the language — then gets to the point:
 
 ```markdown
 ## Needs attention
 
 | line | band | canonical text | ASR context | start | end | dur | signals |
 |------|------|----------------|-------------|-------|-----|-----|---------|
-| 12 | REVIEW | Fui más impulso que voz, | Fui más impulsó que vos Fui fuego que | 55.88 | 59.52 | 3.64 | ambiguous |
-| 19 | REVIEW | Elijo arder más. | arder más Soñando mi sombra en llamas | 84.96 | 106.10 | 21.14 | lead-fallback |
+| 12 | REVIEW | No soy la orilla, soy la sed, | No soy la orilla soy la se No soy el mar que | 61.35 | 64.88 | 3.53 | ambiguous |
+| 19 | REVIEW | Vuelvo a empezar. | Vuelvo a empezar Contando faros en la niebla | 92.40 | 111.75 | 19.35 | lead-fallback |
 
-- Line 12: re-run `align` with `--anchor 12=<seconds>` and `--words staging/libertad/asr-words.jsonl` to skip re-transcription (candidate start was 55.88 s).
+- Line 12: re-run `align` with `--anchor 12=<seconds>` and `--words staging/rio-de-sal/asr-words.jsonl` to skip re-transcription (candidate start was 61.35 s).
 ```
 
-`ambiguous` means the transcription heard something close to two different places. `lead-fallback` means the line's end had to fall back to the last transcribed word — which is why line 19 claims to run for 21 seconds.
+`ambiguous` means the transcription heard something close to two different places. `lead-fallback` means the line's end had to fall back to the last transcribed word — which is why line 19 claims to run for 19 seconds.
 
 To judge those two lines you need to *hear* them. Add `--emit html`:
 
 ```bash
-bombista align "audio/Song Libertad.m4a" lyrics/libertad.json -o staging/libertad \
-  --lang es --emit html --words staging/libertad/asr-words.jsonl
+bombista align audio/rio-de-sal.m4a lyrics/rio-de-sal.json -o staging/rio-de-sal \
+  --lang es --emit html --words staging/rio-de-sal/asr-words.jsonl
 ```
 
-That writes `libertad-review.html` — the same report as a page you open in a browser, with a play button on every row that seeks the audio to that line's onset, the `REVIEW` rows highlighted, and the fix command pre-written beside each one, click to copy. No server, no network, no build step.
+That writes `rio-de-sal-review.html` — the same report as a page you open in a browser, with a play button on every row that seeks the audio to that line's onset, the `REVIEW` rows highlighted, and the fix command pre-written beside each one, click to copy. No server, no network, no build step.
 
 ### 3. Correct
 
-Line 19 actually starts at 83.9 s. Pass it in, and reuse the cached transcription:
+Line 19 actually starts at 91.2 s. Pass it in, and reuse the cached transcription:
 
 ```bash
-bombista align "audio/Song Libertad.m4a" lyrics/libertad.json -o staging/libertad-fixed \
-  --lang es --words staging/libertad/asr-words.jsonl --anchor 19=83.9
+bombista align audio/rio-de-sal.m4a lyrics/rio-de-sal.json -o staging/rio-de-sal-fixed \
+  --lang es --words staging/rio-de-sal/asr-words.jsonl --anchor 19=91.2
 ```
 
 **0.07 seconds.** The expensive part was the transcription, and that is on disk. Correcting is free, so you correct until it is right instead of settling.
@@ -118,7 +121,7 @@ bombista align "audio/Song Libertad.m4a" lyrics/libertad.json -o staging/liberta
 ### 4. Apply
 
 ```bash
-bombista promote staging/libertad-fixed/libertad-timeline.json lyrics/libertad.json
+bombista promote staging/rio-de-sal-fixed/rio-de-sal-timeline.json lyrics/rio-de-sal.json
 ```
 
 `promote` backs the file up next to itself, refuses on a line-count mismatch, warns loudly if the lyrics have changed since alignment, replaces **only** the timeline, and prints a per-line diff.

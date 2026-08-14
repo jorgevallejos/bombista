@@ -582,3 +582,12 @@ def migrate(song_json: Path, dry_run: bool) -> None:
     click.echo(f"backup: {backup}")
     for line in report:
         click.echo(line)
+
+
+if __name__ == "__main__":  # pragma: no cover - exercised via subprocess
+    # `python -m timeline_extractor.cli` is the documented fallback when the
+    # console script is not on PATH (a venv that was not activated, a
+    # `pip install --user`). Without this guard the module imports, defines
+    # the group, and falls off the end — exit 0, no output. Silent success
+    # is the worst failure mode a CLI has; tests/test_cli.py pins it.
+    main()

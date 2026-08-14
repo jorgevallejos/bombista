@@ -7,6 +7,8 @@ the audio argument is a placeholder file that is never read.
 """
 import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -1307,3 +1309,45 @@ def test_migrate_dry_run_writes_nothing(migrate_ws):
     assert migrate_ws["song"].read_bytes() == original
     assert list(migrate_ws["dir"].glob("libertad.json.backup-*")) == []
     assert "7.26" in result.output
+
+
+# ---------------------------------------------------------------------------
+# `python -m timeline_extractor.cli` — the documented no-console-script path
+#
+# Without an `if __name__ == "__main__"` guard the module imports, defines
+# the group, and falls off the end: exit 0, no output, no error. That is
+# the worst possible failure — it looks like success. This is the one
+# entry point CliRunner cannot cover, because the defect is in module
+# execution rather than in the command, so it goes through subprocess.
+# ---------------------------------------------------------------------------
+
+def _run_module(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, "-m", "timeline_extractor.cli", *args],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parent.parent,
+    )
+
+
+def test_module_entry_point_prints_help():
+    result = _run_module("--help")
+
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    for command in ("extract", "promote", "migrate"):
+        assert command in result.stdout
+
+
+def test_module_entry_point_is_not_silently_empty():
+    """The exact shape of the bug: exit 0 with nothing written anywhere."""
+    result = _run_module()
+
+    assert (result.stdout + result.stderr).strip() != ""
+
+
+def test_module_entry_point_reports_an_unknown_command():
+    result = _run_module("no-such-command")
+
+    assert result.returncode != 0
+    assert "no-such-command" in result.stdout + result.stderr

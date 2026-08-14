@@ -1,6 +1,11 @@
 # Bombista — product backlog
 
 **Status:** drafted 2026-08-13, revised same day after Jorge's input on the input adapter.
+
+**Repo state — 2026-08-15 (verified, not assumed).** Bombista is **public** and **MIT**, tagged **`v0.9.0`**; 263 tests green. Its sibling **Pregonero is also public and MIT, tagged `v0.10.0`** — the two ship as a pair, and the timeline v2 contract is shared. B18 is closed as a decision record: go public, **history deliberately left untouched**, master excerpt reachable as an accepted outcome. **B20's step 0 is merged** (PR #18) — the pure refactor that lifted `promote`'s merge and the anchor-override parsing out of `cli.py` into `promotion.py` / `songfile.py` / `anchoring.py`; it added no tests by design, because `promote`'s existing ones are the proof.
+
+> **⚠ The B19 and B20 rows are not in this file yet.** They are written and waiting in **open PR #17** (`docs/b20-serve-spec`), which logs B20, records B19's absorption into it, and retires the v1 output contract. Code on `main` already cites "B20 §2" in `promotion.py`, `songfile.py`, `anchoring.py` and `CLAUDE.md`, which makes it easy to assume the backlog entry landed with it — it did not. **Merge #17 before adding any B19/B20 text here**, or the same rows get written twice and conflict. That branch predates step 0, so expect a `CLAUDE.md` conflict in the architecture tree; keep `main`'s post-step-0 module descriptions.
+
 **Codename:** Bombista (the bombo legüero player — the one who sets the pace for the ensemble). Part of the **Tramoya** suite.
 
 ---
@@ -474,6 +479,22 @@ A third option was named and deliberately rejected: putting the timing UI *insid
 Jorge bounced and reorganised `songs/`. **All 10 recordable songs now have audio directly in `songs/audio/`**, so the "audio bounced ❌" column above is stale for duelo, hasta-calmar-el-alma, luz-y-sal, no-te-voy-a-odiar, paso, soy-una-puerta and vidas. `songs/masters/` is gone — the Ableton projects were removed deliberately. The older fixture-ish audio moved to `songs/audio/test/`.
 
 **The naming convention is now binding and consistent: `songs/audio/<slug>.<ext>`, where `<slug>` is the song JSON's basename exactly** — `libertad.m4a`, `pimiento.m4a`, `tragedia-de-cerdo-asado.mp3`. Lowercase, hyphenated, no `Song-` prefix, no spaces, no capitals. Extensions are left as-is (`.mp3` / `.m4a`) because they reflect real format differences; nothing re-encodes to force uniformity. This makes the audio↔JSON pairing mechanical: given any song JSON, its audio is the same basename in `audio/`. **Every earlier spelling in every doc is dead** and will fail on paste.
+
+### ⚠ Update 2026-08-15 — the ten placeholder tempo blocks are gone
+
+The `tempo` column is not in the table above, but it gates as much as audio does: **no tempo means no Auto mode and no P9 scaling.** Until today ten songs *appeared* to have one and did not.
+
+don-bonifacio, duelo, hasta-calmar-el-alma, la-pajita, no-te-voy-a-odiar, paso, pimiento, quien-fuera, soy-una-puerta and vidas all carried a byte-identical **invented** block — `bpm 100, 4/4, countInBars 1`. All ten are removed, and deliberately **not** replaced with a flag, a null, or a "provisional" marker.
+
+**Why there is no marked-as-invented value to fall back on.** `tempo.bpm` has two consumers that need opposite things from a fake number: it is the **scaling denominator** in Pregonero's `performedTempo.ts`, and it also drives the **visual pulse**. A placeholder chosen to keep the pulse looking plausible is the wrong denominator for scaling; a value chosen to make scaling behave is the wrong pulse. No single number satisfies both, so no live setting can correct for it — the block is only ever correct when the number is real. Pregonero already degrades safely on absence: **no pulse, no count-in, scale pinned to 1.**
+
+This is **not** a reopening of B14, and nothing here licenses deriving the tempo. Rule 5 stands: Bombista's inputs are the audio and the lyrics JSON, nothing else — no `.als` parsing in any form. The tempo is data entry from the Ableton projects, where it is exact.
+
+Real measured tempos survive untouched: **libertad** (66.67, 6/8), **luz-y-sal** (140, 3/4), **tragedia-de-cerdo-asado** (128, 4/4, countInBars 2). All 13 song files re-parse; the change was 60 deletions, zero insertions.
+
+Note the asymmetry this exposes: **`luz-y-sal` has a real tempo but no timeline**, while **tragedia has a timeline but a known-bad one**. **Libertad remains the only song with both.**
+
+Also verified the same day, against every file in `songs/`: **no song carries the dead bare-timeline shape** (a `timeline` with no `timelineVersion: 2` and no `leadIn`) that the old Pregonero README documented and that P3 has rejected since. Only libertad and tragedia have a timeline at all, both correct v2; the other eleven have no `timeline` key, which the loader skips as a normal un-timed song. No song data was changed to make this true.
 
 Remaining sequence:
 

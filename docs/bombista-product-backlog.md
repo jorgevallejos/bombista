@@ -315,6 +315,7 @@ Because normalisation happens at the boundary (§2), **every item below is addit
 | **B9** | Decide the canonical import path | `promote` writes `songs/*.json`; the A+ button patches the app's localStorage snapshot. Two destinations, nothing reconciles them. | S (decision) |
 | **B10** | README with §1 positioning; repo public | The `/tramoya` page needs somewhere to point. | S |
 | **B11** | `align` as primary verb, `extract` kept as alias | "Forced alignment" is the category word. Cosmetic; last. | S |
+| **B14** | **Derive and propose the BPM from the aligned onsets** | Ten songs still need a `tempo` block, and **no tempo means no Auto mode** (rule, 2026-08-14). Bombista already holds the onsets, so it can fit the tempo instead of Jorge guessing — and a tempo derived from the timeline agrees with the timeline *by construction*. **Method verified 2026-08-14:** fitting Libertad's onsets gives 66.68 bpm against 66.67 declared — 0.02% rate error, 0.02 s accumulated across the whole song. | M |
 
 ### Pregonero (live-lyric-translator) — implied by B12/B3
 
@@ -326,6 +327,22 @@ Separate repo, separate submodule. These must land **before** a v2 timeline is l
 | **P2** | **Apply `leadIn` in Video mode** — timeline offset by `leadIn.durationSec` from video start | The animation is the clock; the lead-in is fixed. |
 | **P3** | **Reject/warn on missing or v1 `timelineVersion`** | Prevents a v1 file firing every line 7 s early with no error — exactly the silent-failure class B1 exists to kill. |
 | **P4** | **Drop the marker exemption need** in `validateTimeline` / `parseTimelineFromJsonText` | Falls out of B3. Simplification, not a fix. |
+
+**P1–P4 built and tested. Gate 4 PASSED on real hardware with the pedal, 2026-08-14.** Cue-start confirmed: armed shows no Play button, time passing changes nothing, the first pedal press reveals line 0, and the song then advances on its own.
+
+Four findings from that test session, none of them blocking the merge:
+
+| ID | Item | Why |
+|----|------|-----|
+| **P5** | **Beat pulse runs from Arm, and the cue must NOT re-phase it** | Jorge's real scenario: he talks to the audience while arming, the pulse starts, he picks the tempo up on guitar and plays a 2-bar intro *to* the pulse, then cues the lyrics when he's settled. The pulse is a **click track he plays to**, not a drift reference — so starting it at the cue is too late. And because "the lyrics don't always start on the first pulse of a bar", the performer owns the relationship between beat and first word. **`startAtCue` currently calls `setPhase(getBeatPhase(tempo, 0))`, forcing the pedal press to become a downbeat — that line must go.** Run the phase from Arm while idle; the cue starts `songElapsedMs` only. |
+| **P6** | **Next/Previous are dead during Auto playback — fix or remove** | The auto-advance effect recomputes the index from elapsed time every tick and snaps to it, so a manual Next reverts within a tick. The buttons *look* like a safety net and aren't one. This bites exactly when drift shows up mid-song and the instinct is to tap Next. **Preferred fix: pressing Next drops the song into Manual for the rest of the song** — one press to take the wheel, predictable under pressure, no new concepts. |
+| **P7** | **The `A✓` badge should mean "v2 timeline", not "has a timeline"** | A stale v1 song shows a green `A✓` and looks fully configured while silently taking the legacy path. |
+| **P8** | **Warn when importing a song whose title already exists** | Cost Jorge a debugging round on 2026-08-14: removing Libertad from the *setlist* left the v1 copy in the *library*, the import added a second, and the setlist kept pointing at the old one. Two identically-titled songs are indistinguishable in the UI. Related to **B9**. |
+
+### Rules established 2026-08-14
+
+1. **No `tempo` block → no Auto mode.** Tempo is a prerequisite, not a nicety. Only 3 of 13 songs have one; see **B14**.
+2. **The pulse and the timeline are separate clocks.** A constant offset between them is fine; what must match is the *rate*, so any shift stays consistent instead of accumulating. Verified on Libertad: 0.02 s across the whole song.
 
 ---
 

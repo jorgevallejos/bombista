@@ -7,6 +7,7 @@ the audio argument is a placeholder file that is never read.
 """
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -14,11 +15,11 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from timeline_extractor.aligner import save_words
-from timeline_extractor.cli import main
-from timeline_extractor.models import Word
-from timeline_extractor.provenance import compute_lines_hash
-from timeline_extractor.writers import ENVELOPE_KEYS
+from bombista.aligner import save_words
+from bombista.cli import main
+from bombista.models import Word
+from bombista.provenance import compute_lines_hash
+from bombista.writers import ENVELOPE_KEYS
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +94,7 @@ def run_extract(ws, *extra):
     return runner.invoke(
         main,
         [
-            "extract",
+            "align",
             str(ws["audio"]),
             str(ws["song"]),
             "-o",
@@ -348,7 +349,7 @@ def test_extract_accepts_plain_text_lyrics_input_and_produces_valid_v2_envelope(
     """Acceptance #5: extract driven through the CLI on a plain .txt lyrics
     file (not a CP song JSON) produces a valid, contract-passing v2
     envelope, and the QA report surfaces what the reader stripped."""
-    from timeline_extractor.serializer import validate_v2_envelope
+    from bombista.serializer import validate_v2_envelope
 
     audio = tmp_path / "cancion.wav"
     audio.write_bytes(b"")  # never read: --words skips transcription
@@ -915,9 +916,9 @@ def test_promote_never_refuses_a_bare_v2_envelope_candidate(promote_ws):
 def test_exactly_one_merge_implementation_in_the_repo():
     import ast
 
-    import timeline_extractor
+    import bombista
 
-    pkg_dir = Path(timeline_extractor.__file__).parent
+    pkg_dir = Path(bombista.__file__).parent
     count = 0
     for py_file in pkg_dir.glob("*.py"):
         tree = ast.parse(py_file.read_text(encoding="utf-8"))
@@ -934,7 +935,7 @@ def test_promote_and_songjson_writer_produce_the_same_merged_result(promote_ws):
     """Acceptance #5: promote and the songjson writer produce the same
     merged result for the same inputs — because they call the same
     function."""
-    from timeline_extractor.writers import merge_envelope
+    from bombista.writers import merge_envelope
 
     result = run_promote(promote_ws)
     assert result.exit_code == 0, result.output
@@ -1312,7 +1313,7 @@ def test_migrate_dry_run_writes_nothing(migrate_ws):
 
 
 # ---------------------------------------------------------------------------
-# `python -m timeline_extractor.cli` — the documented no-console-script path
+# `python -m bombista.cli` — the documented no-console-script path
 #
 # Without an `if __name__ == "__main__"` guard the module imports, defines
 # the group, and falls off the end: exit 0, no output, no error. That is
@@ -1323,7 +1324,7 @@ def test_migrate_dry_run_writes_nothing(migrate_ws):
 
 def _run_module(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [sys.executable, "-m", "timeline_extractor.cli", *args],
+        [sys.executable, "-m", "bombista.cli", *args],
         capture_output=True,
         text=True,
         cwd=Path(__file__).resolve().parent.parent,
@@ -1351,3 +1352,71 @@ def test_module_entry_point_reports_an_unknown_command():
 
     assert result.returncode != 0
     assert "no-such-command" in result.stdout + result.stderr
+
+
+# ---------------------------------------------------------------------------
+# B11 — `align` is the primary verb, `extract` is a working alias
+#
+# "Forced alignment" is the category word, and the tool's whole claim is
+# that it belongs to that category. `extract` was the original verb and
+# is kept working indefinitely: it is in the QA reports, the docs and the
+# shell history of every run so far, and breaking a paste is exactly the
+# failure B17 just fixed.
+#
+# The rest of this file drives `align`, so the alias is what needs its
+# own equivalence proof.
+# ---------------------------------------------------------------------------
+
+def _run_verb(ws, verb, *extra):
+    return CliRunner().invoke(
+        main,
+        [verb, str(ws["audio"]), str(ws["song"]), "-o", str(ws["staging"]),
+         "--words", str(ws["words"]), *extra],
+    )
+
+
+def test_align_is_listed_in_the_group_help():
+    result = CliRunner().invoke(main, ["--help"])
+
+    assert result.exit_code == 0
+    assert "align" in result.output
+
+
+def test_extract_alias_is_still_listed():
+    """Kept visible, not hidden — someone reading --help after pasting an
+    old command should find it and see that it still works."""
+    result = CliRunner().invoke(main, ["--help"])
+
+    assert "extract" in result.output
+
+
+def test_extract_alias_accepts_the_same_options(workspace):
+    result = _run_verb(workspace, "extract", "--emit", "timeline")
+
+    assert result.exit_code == 0, result.output
+
+
+def test_align_and_extract_produce_identical_timelines(tmp_path, workspace):
+    """The alias must be the same command, not a parallel implementation
+    that can drift."""
+    aligned = _run_verb(workspace, "align")
+    assert aligned.exit_code == 0, aligned.output
+    first = (workspace["staging"] / "cancion-de-prueba-timeline.json").read_text()
+
+    shutil.rmtree(workspace["staging"])
+    extracted = _run_verb(workspace, "extract")
+    assert extracted.exit_code == 0, extracted.output
+    second = (workspace["staging"] / "cancion-de-prueba-timeline.json").read_text()
+
+    assert first == second
+
+
+def test_printed_rerun_command_uses_the_primary_verb(workspace):
+    """The QA report is where a human copies a command from, so it must
+    teach `align` rather than perpetuate `extract`."""
+    _run_verb(workspace, "align")
+    report = (workspace["staging"] / "cancion-de-prueba-qa-report.md").read_text()
+
+    rerun = next(ln for ln in report.splitlines() if "Re-run" in ln)
+    assert "bombista align" in rerun
+    assert "bombista extract" not in rerun

@@ -5,7 +5,7 @@ stage (which consumes them).
 """
 import pytest
 
-from timeline_extractor.models import Word
+from bombista.models import Word
 
 
 def test_word_carries_text_and_times():

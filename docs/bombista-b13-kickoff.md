@@ -16,7 +16,7 @@ Both songs are still v1 on disk, verified today. **No migration script exists â€
 
 | what | where | who commits |
 |---|---|---|
-| the migration script + its tests | `projects/timeline-extractor` (submodule) | you |
+| the migration script + its tests | `projects/bombista` (submodule) | you |
 | the migrated song files | **`songs/`** (a separate private submodule) | you, inside `songs/` |
 | the vault-root pointer bumps for **both** submodules | `~/Chango Pepper` | **Jorge, once, at the end â€” do not touch it** |
 

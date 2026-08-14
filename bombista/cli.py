@@ -1,11 +1,11 @@
 """
-timeline-extractor CLI entrypoint — forced-alignment pipeline.
+bombista CLI entrypoint — forced-alignment pipeline.
 
-    timeline-extractor extract <audio> <song-json> -o <staging-dir>
-    timeline-extractor promote <timeline-json> <song-json>
-    timeline-extractor migrate <song-json>
+    bombista align <audio> <song-json> -o <staging-dir>
+    bombista promote <timeline-json> <song-json>
+    bombista migrate <song-json>
 
-`extract` transcribes the audio (faster-whisper word timestamps), anchors
+`align` transcribes the audio (faster-whisper word timestamps), anchors
 each lyric line, and writes a candidate timeline + QA report to a staging
 directory. It never writes to the song JSON. `promote` copies an approved
 timeline into the song JSON (backup + diff), touching nothing else.
@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+from copy import copy
 from datetime import datetime
 from pathlib import Path
 
@@ -48,9 +49,9 @@ _FALLBACK_LANG = "es"
 recompute the target song's hash the same way. Both carriers record it
 (`_bombista.source.lang` on a songjson, `source.lang` on a sibling rich
 JSON) — this is only the documented fallback for when that's absent,
-matching `extract --lang`'s own default."""
+matching `align --lang`'s own default."""
 
-_EXTRACT_EPILOG = """\
+_ALIGN_EPILOG = """\
 \b
 IMPORTANT — pick the right audio:
 Timeline times are only meaningful relative to the audio you feed in.
@@ -91,7 +92,7 @@ def _parse_anchor_overrides(values: tuple[str, ...], line_count: int) -> dict[in
     return overrides
 
 
-@main.command(epilog=_EXTRACT_EPILOG)
+@main.command(epilog=_ALIGN_EPILOG)
 @click.argument("audio", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.argument(
     "song_json",
@@ -136,7 +137,7 @@ def _parse_anchor_overrides(values: tuple[str, ...], line_count: int) -> dict[in
         "written regardless of --emit."
     ),
 )
-def extract(
+def align(
     audio: Path,
     song_json: Path,
     staging_dir: Path,
@@ -146,8 +147,8 @@ def extract(
     words_path: Path | None,
     emit_targets: tuple[str, ...],
 ) -> None:
-    """Extract a candidate timeline from AUDIO for the song in
-    SONG_JSON_OR_LYRICS_TXT.
+    """Align AUDIO against the lyric lines in SONG_JSON_OR_LYRICS_TXT and
+    stage a candidate timeline.
 
     The lyrics input may be a CP song JSON (passed through unchanged) or
     a plain text file, one lyric line per line (blank lines and
@@ -162,7 +163,7 @@ def extract(
     `timeline` alone, matching today's behaviour. `html` is the offline
     review page (B16) — the QA report with a per-line play button that
     seeks the audio, so a REVIEW line can be judged by ear. Never writes to the song
-    JSON — review the QA report, then apply with `timeline-extractor
+    JSON — review the QA report, then apply with `bombista
     promote` (accepts either a bare timeline or an emitted songjson).
 
     Timeline times are only meaningful relative to the audio you feed in:
@@ -296,6 +297,21 @@ def extract(
     )
 
 
+# B11: `align` is the primary verb — "forced alignment" is the category
+# word, and claiming the category is the point of the name. `extract` was
+# the original verb and keeps working indefinitely: it is written into
+# every QA report generated so far, into the acceptance records, and into
+# the shell history of every run. Breaking a paste is the failure B17
+# exists to prevent.
+#
+# A shallow copy of the same Command, not a second implementation — the
+# two cannot drift, which is what tests/test_cli.py pins.
+_extract_alias = copy(align)
+_extract_alias.name = "extract"
+_extract_alias.short_help = "Alias for `align`, the verb this command used to have."
+main.add_command(_extract_alias)
+
+
 def _load_promotable_candidate(timeline_json: Path) -> dict:
     """Load *timeline_json* as JSON, no shape assumptions yet — the caller
     (`promote`) picks the envelope keys back out with `_extract_envelope`,
@@ -379,7 +395,7 @@ def _lines_hash_mismatch_warning(candidate_hash: str, target_hash: str) -> str:
         "likely inserted, deleted, or reordered. Because the timeline is "
         "matched to lyrics BY POSITION, every entry from the changed line "
         "onward may now be pointing at the wrong lyric line.\n"
-        "Promoting anyway. To fix it: re-run `timeline-extractor extract` "
+        "Promoting anyway. To fix it: re-run `bombista align` "
         "against the current lyrics and promote the new candidate instead."
     )
 
@@ -585,7 +601,7 @@ def migrate(song_json: Path, dry_run: bool) -> None:
 
 
 if __name__ == "__main__":  # pragma: no cover - exercised via subprocess
-    # `python -m timeline_extractor.cli` is the documented fallback when the
+    # `python -m bombista.cli` is the documented fallback when the
     # console script is not on PATH (a venv that was not activated, a
     # `pip install --user`). Without this guard the module imports, defines
     # the group, and falls off the end — exit 0, no output. Silent success

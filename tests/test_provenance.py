@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from timeline_extractor.aligner import DEVICE_STRING
-from timeline_extractor.provenance import build_provenance, compute_lines_hash
+from bombista.aligner import DEVICE_STRING
+from bombista.provenance import build_provenance, compute_lines_hash
 
 FIXTURE_AUDIO = Path(__file__).parent / "fixtures" / "tragedia-opening-12s.wav"
 
@@ -157,7 +157,7 @@ def test_build_provenance_tool_version_names_the_tool_and_its_version(tmp_path):
 
     result = build_provenance(audio, model_size="medium", lang="es")
 
-    assert result["toolVersion"] == f"timeline-extractor {version('timeline-extractor')}"
+    assert result["toolVersion"] == f"bombista {version('bombista')}"
 
 
 # ---------------------------------------------------------------------------

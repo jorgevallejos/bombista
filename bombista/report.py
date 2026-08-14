@@ -1,6 +1,6 @@
 """
-Human-QA report for an extract run — the review surface between
-`extract` (staging) and `promote` (writes the song JSON).
+Human-QA report for an alignment run — the review surface between
+`align` (staging) and `promote` (writes the song JSON).
 
 One markdown file per run: band counts, the audio-clock rule, a
 "Needs attention" table for REVIEW/FAIL lines with a one-line
@@ -113,7 +113,7 @@ def render_qa_report(
     # defect B16 fixed in the HTML page; see writers.py::_anchor_command.
     quoted_words = shlex.quote(str(words_path))
     rerun = (
-        f"timeline-extractor extract {shlex.quote(str(audio_path))} "
+        f"bombista align {shlex.quote(str(audio_path))} "
         f"{shlex.quote(str(song_path))} -o {shlex.quote(str(staging_dir))} "
         f"--words {quoted_words} --lang {shlex.quote(lang)}"
     )

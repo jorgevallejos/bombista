@@ -11,16 +11,16 @@ the last transcribed word's end + LAST_LINE_PAD.
 """
 import pytest
 
-from timeline_extractor.anchoring import LineAnchor
-from timeline_extractor.models import TimelineEntry, Word
-from timeline_extractor.pipeline import (
+from bombista.anchoring import LineAnchor
+from bombista.models import TimelineEntry, Word
+from bombista.pipeline import (
     LAST_LINE_PAD,
     build_timeline,
     is_lyric_item,
     lyric_lines,
     normalize_to_lead_in,
 )
-from timeline_extractor.serializer import validate_timeline
+from bombista.serializer import validate_timeline
 
 
 def _anchor(i, start, band="HIGH", signals=("clean-anchor",)):

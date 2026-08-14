@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from timeline_extractor.readers import (
+from bombista.readers import (
     MISSING_CP_FIELDS,
     NormalisedInput,
     read_lyrics_input,

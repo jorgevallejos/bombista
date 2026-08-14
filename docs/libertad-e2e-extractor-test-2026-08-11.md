@@ -1,7 +1,7 @@
 # Claude Code prompt — E2E extractor test on Libertad (2026-08-11)
 
 **Paste to Claude Code at the vault root (`~/Chango Pepper`).** First real end-to-end
-run of the `timeline-extractor` → app pipeline on one Auto-mode song, Libertad.
+run of the `bombista` → app pipeline on one Auto-mode song, Libertad.
 Jorge tests the result in the app afterward.
 
 ## Role & objective
@@ -27,19 +27,19 @@ single file; spreading it across workers buys nothing. Delegate to a low-cost wo
 - Audio: `songs/audio/Song Libertad.m4a` (~105 s). Gitignored inside the submodule — never commit it.
 - `songs/libertad.json`: **20 lyric lines**, all real lines (no section markers), `lang` key `es`.
   It already has a `tempo` block (`bpm 200, 3/4, countInBars 1`) — see the tempo note below.
-- Extractor package: `projects/timeline-extractor/` (CLI `timeline-extractor`, commands
+- Extractor package: `projects/bombista/` (CLI `bombista`, commands
   `extract` and `promote`). Reuse its existing `.venv` if present; else create one and
-  `pip install -e projects/timeline-extractor`. Confirm `ffmpeg` is available for m4a decode.
+  `pip install -e projects/bombista`. Confirm `ffmpeg` is available for m4a decode.
 
 ## Steps
 
 **1. Environment.** Activate/create the extractor venv, install the package, confirm
-`timeline-extractor --help` works and `ffmpeg -version` succeeds.
+`bombista --help` works and `ffmpeg -version` succeeds.
 
 **2. Extract** (writes to a staging dir; never touches the song JSON):
 ```
-timeline-extractor extract "songs/audio/Song Libertad.m4a" songs/libertad.json \
-  -o projects/timeline-extractor/staging/libertad --lang es --model-size medium
+bombista extract "songs/audio/Song Libertad.m4a" songs/libertad.json \
+  -o projects/bombista/staging/libertad --lang es --model-size medium
 ```
 This writes `libertad-timeline.json`, `libertad-qa-report.md`, and `asr-words.jsonl`,
 and prints a `HIGH / REVIEW / FAIL` line-band summary.
@@ -48,9 +48,9 @@ and prints a `HIGH / REVIEW / FAIL` line-band summary.
 worker may summarize it). For any REVIEW/FAIL line, hand-correct by re-running with an
 anchor — reuse the saved words to skip re-transcription (fast):
 ```
-timeline-extractor extract "songs/audio/Song Libertad.m4a" songs/libertad.json \
-  -o projects/timeline-extractor/staging/libertad --lang es \
-  --words projects/timeline-extractor/staging/libertad/asr-words.jsonl \
+bombista extract "songs/audio/Song Libertad.m4a" songs/libertad.json \
+  -o projects/bombista/staging/libertad --lang es \
+  --words projects/bombista/staging/libertad/asr-words.jsonl \
   --anchor 0=SECONDS --anchor 7=SECONDS
 ```
 Expected: 20 timeline entries (must equal the lyric-item count or `promote` refuses).
@@ -60,7 +60,7 @@ in is **correct**, not an error. Wait for Jorge's go before promoting.
 **3. Promote** the approved timeline into the song JSON (auto-backs-up, replaces only the
 `timeline` key):
 ```
-timeline-extractor promote projects/timeline-extractor/staging/libertad/libertad-timeline.json \
+bombista promote projects/bombista/staging/libertad/libertad-timeline.json \
   songs/libertad.json
 ```
 

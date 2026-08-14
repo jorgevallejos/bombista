@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from timeline_extractor.aligner import (
+from bombista.aligner import (
     COMPUTE_TYPE,
     DEVICE,
     DEVICE_STRING,
@@ -22,7 +22,7 @@ from timeline_extractor.aligner import (
     save_words,
     transcribe_words,
 )
-from timeline_extractor.models import Word
+from bombista.models import Word
 
 
 FIXTURE_AUDIO = Path(__file__).parent / "fixtures" / "tragedia-opening-12s.wav"

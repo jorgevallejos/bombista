@@ -33,8 +33,8 @@ OUT_PATH = REPO_ROOT / "docs" / "spike-candidate-timeline.json"
 
 # Add package to path so we can import serializer
 sys.path.insert(0, str(REPO_ROOT))
-from timeline_extractor.models import TimelineEntry
-from timeline_extractor.serializer import write_timeline
+from bombista.models import TimelineEntry
+from bombista.serializer import write_timeline
 
 # ── tuning knobs ──────────────────────────────────────────────────────────────
 CROP = "crop=1620:320:0:760"       # subtitle band (bottom 320 rows)

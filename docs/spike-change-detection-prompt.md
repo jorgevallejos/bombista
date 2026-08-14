@@ -1,15 +1,15 @@
 # Claude Code prompt — change-detection spike (agenda item #3)
 
-Paste the block below into **Claude Code in the `timeline-extractor` repo** (not the translator).
+Paste the block below into **Claude Code in the `bombista` repo** (not the translator).
 It includes a repo guard as the first step. Model: **Sonnet** (build/iterate spike).
 
 ---
 
-You are working in the `timeline-extractor` repo.
+You are working in the `bombista` repo.
 
 **STEP 0 — guard, do this before anything else:**
 Run `pwd && git remote -v && git status -sb`. Confirm the remote is
-`jorgevallejos/timeline-extractor` — if it is `live-lyric-translator-dev` or anything
+`jorgevallejos/bombista` — if it is `live-lyric-translator-dev` or anything
 else, STOP and tell me, do not proceed. Also confirm `serializer.py`'s `to_dict` is
 implemented (not raising `NotImplementedError`); if it still raises, the
 `feat/green-serializer` PR isn't merged — STOP and tell me before continuing.

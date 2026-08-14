@@ -9,8 +9,8 @@ import json
 
 import pytest
 
-from timeline_extractor.models import TimelineEntry
-from timeline_extractor.serializer import (
+from bombista.models import TimelineEntry
+from bombista.serializer import (
     to_dict,
     validate_timeline,
     validate_v2_envelope,

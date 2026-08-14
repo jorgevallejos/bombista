@@ -156,7 +156,7 @@ Blank lines and `[Bracketed]` lines are **stripped**, not turned into markers �
 ### 3.3 Command
 
 ```bash
-timeline-extractor extract "songs/audio/Song Libertad.m4a" songs/libertad.json \
+bombista align "songs/audio/Song Libertad.m4a" songs/libertad.json \
   -o staging/libertad --lang es --model-size medium
 ```
 
@@ -283,11 +283,11 @@ Chispa que quiso brotar.
 ### 3.9 Correction + promote
 
 ```bash
-timeline-extractor extract "songs/audio/Song Libertad.m4a" songs/libertad.json \
+bombista align "songs/audio/Song Libertad.m4a" songs/libertad.json \
   -o staging/libertad-anchored --lang es \
   --words staging/libertad/asr-words.jsonl --anchor 19=83.9   # 0.07 s
 
-timeline-extractor promote staging/libertad-anchored/libertad-timeline.json songs/libertad.json
+bombista promote staging/libertad-anchored/libertad-timeline.json songs/libertad.json
 ```
 
 `promote` backs up, refuses on count mismatch, replaces only `timeline`, prints a per-line diff.
@@ -307,13 +307,13 @@ Because normalisation happens at the boundary (§2), **every item below is addit
 | **B2** | `--emit` (repeatable): `timeline` (default) · `songjson` · `report-json` · `srt` · `lrc` | Writers read the canonical CP form. Reuse `promote`'s merge as a shared function so there is one merge path. | M |
 | **B4** | **Lines-hash guard** — store `linesHash`; `promote` warns loudly if the lyrics changed since extraction | Positional coupling is silent; one inserted line misaligns everything after it. | S |
 | **B12** | **Normalise to line 0 = 0, bank the offset in `leadIn`** (§2). Add `timelineVersion: 2`. | Isolates the least reliable number Bombista produces into one editable field instead of contaminating all 20 timestamps. Gives the performer control of the start on Auto-mode songs. | M |
-| **B13** | ~~**Migrate the two existing timelines**~~ — **DONE 2026-08-14.** `timeline-extractor migrate <song.json>`; both songs migrated and committed in `songs/`. Libertad reproduces the contract's golden envelope entry for entry. | Two files. Reversible; `.backup-*` already exists for both. Must ship in the same pass as B12. | S |
+| **B13** | ~~**Migrate the two existing timelines**~~ — **DONE 2026-08-14.** `bombista migrate <song.json>`; both songs migrated and committed in `songs/`. Libertad reproduces the contract's golden envelope entry for entry. | Two files. Reversible; `.backup-*` already exists for both. Must ship in the same pass as B12. | S |
 | **B3** | **Remove section-marker support** — delete the `{0,0}` exemption from `serializer.py::validate_timeline`; normaliser strips and reports meta lines | Jorge's ruling: CP format carries sung lines only. **Deletes code.** Verified: no song has a marker, so nothing breaks. | S |
 | **B7** | Last-line `end` heuristic | Libertad line 19 runs 83.9 → 106.1 (22 s) because `end` falls back to the last transcribed word. Cap at max duration or audio end. | S |
 | **B6** | `--lead` global offset knob | Whole-timeline nudge without re-anchoring line by line. | S |
 | **B8** | Batch mode — N songs, one summary table | Ergonomics once the catalogue is >2 songs. Relevant as soon as the audio exists. | M |
 | **B9** | Decide the canonical import path | `promote` writes `songs/*.json`; the A+ button patches the app's localStorage snapshot. Two destinations, nothing reconciles them. | S (decision) |
-| **B10** | README with §1 positioning; repo public | The `/tramoya` page needs somewhere to point. **Sequence it *after* the rename (step 11), not before** — otherwise every "timeline-extractor" in it gets rewritten a week later. "Repo public" is a separate positioning decision, not housekeeping; decide it explicitly, and separately per tool. | S |
+| **B10** | README with §1 positioning; repo public | The `/tramoya` page needs somewhere to point. **Sequence it *after* the rename (step 11), not before** — otherwise every "bombista" in it gets rewritten a week later. "Repo public" is a separate positioning decision, not housekeeping; decide it explicitly, and separately per tool. | S |
 | **B11** | `align` as primary verb, `extract` kept as alias | "Forced alignment" is the category word. Cosmetic; last. | S |
 | **B17** | **The markdown QA report's re-run command is not shell-quoted** — `report.py` builds it by raw f-string interpolation (no `shlex.quote`) | Same defect B16 fixed in the HTML page, still live in the markdown report. The real audio path is `songs/audio/Song Libertad.m4a` under a `Chango Pepper` directory — **two spaces** — so the printed command splits into the wrong arguments and fails on paste. A copyable command that is broken is worse than no command. Spotted by the B16 agent 2026-08-14; deliberately left untouched as out of scope. | S |
 | **B15** | **`songs/_template.json` does not parse as JSON** — fails at line 28, col 8 (presumably placeholders). Make it valid JSON, or rename it out of `*.json`. | Harmless today: nothing points at it. But B5's reader would fall through to the plain-text path and treat the whole template as lyrics. Spotted while verifying B13, 2026-08-14. | S |
@@ -439,7 +439,7 @@ Realistic sequence:
 
 ## 6. Claude Code kickoff
 
-> Work in `projects/timeline-extractor`. Implement **B12, B13, B3, B1, B5, B2, B4** from `docs/bombista-product-backlog.md` — read that file first, especially §2 (architecture and timing model).
+> Work in `projects/bombista`. Implement **B12, B13, B3, B1, B5, B2, B4** from `docs/bombista-product-backlog.md` — read that file first, especially §2 (architecture and timing model).
 >
 > **Architecture constraint:** normalise at the boundary. Plain-text input is converted to a CP-shaped song dict *before* the existing pipeline runs; the core alignment code is not modified. Default behaviour with no new flags must be byte-identical to today apart from the new provenance block — add a regression test asserting the existing `{"timeline":[…]}` output for the Libertad fixture is unchanged.
 >

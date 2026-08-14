@@ -4,7 +4,7 @@
 - Audio file: `runs/tragedia-2026-07-03/tragedia-master-16k.wav`
 - Model: faster-whisper `medium` (lang `es`)
 - Generated: 2026-07-03T11:22:38
-- Re-run (skips transcription): `timeline-extractor extract runs/tragedia-2026-07-03/tragedia-master-16k.wav /Users/jorgevallejos/Chango Pepper/songs/tragedia-de-cerdo-asado.json -o runs/tragedia-2026-07-03 --words runs/tragedia-2026-07-03/asr-words.jsonl --lang es`
+- Re-run (skips transcription): `bombista extract runs/tragedia-2026-07-03/tragedia-master-16k.wav /Users/jorgevallejos/Chango Pepper/songs/tragedia-de-cerdo-asado.json -o runs/tragedia-2026-07-03 --words runs/tragedia-2026-07-03/asr-words.jsonl --lang es`
 - Bands: HIGH 28 / REVIEW 1 / FAIL 0
 
 > Timeline times are only meaningful relative to the audio you feed in. For Video-mode songs, extract the audio from the linked animation video (`ffmpeg -i video.mp4 -vn -ac 1 -ar 16000 audio.wav`); for Auto-mode songs, use the master recording.

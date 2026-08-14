@@ -484,6 +484,10 @@ Jorge bounced and reorganised `songs/`. **All 10 recordable songs now have audio
 
 **The naming convention is now binding and consistent: `songs/audio/<slug>.<ext>`, where `<slug>` is the song JSON's basename exactly** — `libertad.m4a`, `pimiento.m4a`, `tragedia-de-cerdo-asado.mp3`. Lowercase, hyphenated, no `Song-` prefix, no spaces, no capitals. Extensions are left as-is (`.mp3` / `.m4a`) because they reflect real format differences; nothing re-encodes to force uniformity. This makes the audio↔JSON pairing mechanical: given any song JSON, its audio is the same basename in `audio/`. **Every earlier spelling in every doc is dead** and will fail on paste.
 
+**Video has the same rule, added 2026-08-15: `songs/video/<slug>.<ext>`.** Video had no convention until now, which is why `tragedia-de-cerdo-asado.json` carried a `media.src` pointing at a file that existed nowhere. `songs/video/` is the **delivery** copy; `animations/<slug>/` remains the authoring home and is not moved. Copy the clean H.264 master across — **never** a ProRes `.mov` (mastering format, tens of GB), and **never** a "Big Screen" or "Small Screen" cut: those carry **burned-in EN subtitles** that would fight Pregonero's own surtitles.
+
+**This matters to Bombista because of the audio-clock rule.** For a Video-mode song the timeline must be aligned against the *animation's* audio, not the master recording. `songs/video/<slug>.<ext>` now gives that file a predictable home, so the extraction is `ffmpeg -i songs/video/<slug>.mp4 -vn -ac 1 -ar 16000 <slug>-video.wav` and no longer a hunt through `animations/`. Tragedia is the only Video-mode song, and its stored timeline is the known ~17 s-late one precisely because it was aligned against the wrong take.
+
 ### ⚠ Update 2026-08-15 — the ten placeholder tempo blocks are gone
 
 The `tempo` column is not in the table above, but it gates as much as audio does: **no tempo means no Auto mode and no P9 scaling.** Until today ten songs *appeared* to have one and did not.

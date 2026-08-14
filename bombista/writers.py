@@ -433,7 +433,9 @@ def _audio_href(audio_path: Path, staging_dir: Path) -> str:
     """The page is written into the staging directory and the audio lives
     outside it, so the reference is relative — the whole staging dir stays
     portable (copy it elsewhere and the page still plays). Percent-encoded
-    because real filenames have spaces in them ("Song Libertad.m4a").
+    because real paths have spaces in them — audio filenames follow the
+    `songs/audio/<slug>.<ext>` convention and are space-free, but they sit
+    under `~/Chango Pepper/`, so the relative href still crosses a space.
 
     Falls back to the absolute path only when no relative route exists
     (different volume) — a page that plays beats a page that is portable.
@@ -459,8 +461,10 @@ def _anchor_command(
     decide. `--words` is what makes the correction loop instant.
 
     Paths are shell-quoted: this command exists to be copied and pasted,
-    and real audio filenames have spaces in them ("Song Libertad.m4a"),
-    which would otherwise split into two arguments at the prompt.
+    and real paths have spaces in them — the filenames themselves are
+    space-free (`songs/audio/libertad.m4a`), but the vault directory above
+    them is `Chango Pepper`, which would otherwise split into two
+    arguments at the prompt.
     """
     quoted = " ".join(
         shlex.quote(str(p)) for p in (audio_path, song_path)

@@ -396,12 +396,12 @@ HTML_ENTRIES = [
 def render_html(tmp_path, **overrides):
     """Render a review page into a staging dir with the audio sitting in a
     sibling directory — the real layout, where the relative path has to
-    climb out of staging."""
+    climb out of staging and cross the space in `Chango Pepper`."""
     staging = overrides.pop("staging_dir", None) or tmp_path / "staging"
     staging.mkdir(parents=True, exist_ok=True)
-    audio_dir = tmp_path / "audio"
-    audio_dir.mkdir(exist_ok=True)
-    audio = overrides.pop("audio_path", None) or audio_dir / "Song Libertad.m4a"
+    audio_dir = tmp_path / "Chango Pepper" / "songs" / "audio"
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    audio = overrides.pop("audio_path", None) or audio_dir / "libertad.m4a"
     audio.write_bytes(b"")
     out = staging / "cancion-review.html"
 
@@ -455,12 +455,13 @@ def test_write_html_review_makes_no_network_requests(tmp_path):
 def test_write_html_review_references_audio_by_relative_url_encoded_path(tmp_path):
     """The page lives beside the run's other output, so the audio is
     reachable relatively — and must stay reachable when the staging dir is
-    moved or copied. Spaces in the filename have to be percent-encoded or
-    the browser will not resolve the href."""
+    moved or copied. Spaces in the path have to be percent-encoded or the
+    browser will not resolve the href — the filename is space-free, but the
+    `Chango Pepper` directory it climbs through is not."""
     html = render_html(tmp_path)
-    audio = tmp_path / "audio" / "Song Libertad.m4a"
+    audio = tmp_path / "Chango Pepper" / "songs" / "audio" / "libertad.m4a"
 
-    assert 'src="../audio/Song%20Libertad.m4a"' in html
+    assert 'src="../Chango%20Pepper/songs/audio/libertad.m4a"' in html
     assert f'src="{audio}"' not in html  # the media reference is never absolute
 
 
@@ -581,10 +582,12 @@ def test_write_html_review_returns_the_path_it_wrote(tmp_path):
 
 def test_write_html_review_shell_quotes_paths_in_the_anchor_command(tmp_path):
     """Click-to-copy is only worth having if the pasted command actually
-    runs. Real audio filenames have spaces in them — "Song Libertad.m4a" —
-    and an unquoted path silently becomes two arguments."""
+    runs. Real audio paths have spaces in them — not in the filename, which
+    the `songs/audio/<slug>.<ext>` convention keeps clean, but in the
+    `Chango Pepper` directory above it — and an unquoted path silently
+    becomes two arguments."""
     page = render_html(tmp_path)
-    audio = tmp_path / "audio" / "Song Libertad.m4a"
+    audio = tmp_path / "Chango Pepper" / "songs" / "audio" / "libertad.m4a"
 
     # what click-to-copy puts on the clipboard is the element's textContent,
     # i.e. the markup-unescaped command

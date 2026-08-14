@@ -27,7 +27,7 @@ ENTRIES = [
 ]
 
 PROVENANCE = {
-    "audio": "songs/audio/Song Libertad.m4a",
+    "audio": "songs/audio/libertad.m4a",
     "sha256": "4f2a9c" + "0" * 58,
     "durationSec": 172.4,
     "model": "faster-whisper:medium",
@@ -59,7 +59,7 @@ def _render(**overrides):
 
 def test_report_header_shows_audio_path():
     report = _render()
-    assert "songs/audio/Song Libertad.m4a" in report
+    assert "songs/audio/libertad.m4a" in report
 
 
 def test_report_header_shows_full_sha256_somewhere():
@@ -141,17 +141,20 @@ def test_report_stripped_lines_shows_source_line_numbers():
 # B17 — the printed commands must survive a paste
 #
 # Every path the report interpolates is attacker-free but space-full: the
-# real invocation is `~/Chango Pepper/songs/audio/Song Libertad.m4a`, two
-# spaces and a capital. Unquoted, that splits into four argv entries and
-# the command fails at the prompt. B16 fixed this in the HTML page; these
-# tests hold the same line for the markdown report.
+# real invocation is `~/Chango Pepper/songs/audio/libertad.m4a`. The
+# filename is space-free by the `songs/audio/<slug>.<ext>` convention, but
+# the vault directory above it is not — one space is all it takes for an
+# unquoted path to split into two argv entries and fail at the prompt. So
+# the fixtures below keep their space in the DIRECTORY, which is where it
+# actually lives. B16 fixed this in the HTML page; these tests hold the
+# same line for the markdown report.
 #
 # The assertions round-trip through `shlex.split` rather than looking for
 # quote characters, because what matters is the resulting argv, not which
 # quoting style produced it.
 # ---------------------------------------------------------------------------
 
-SPACEY_AUDIO = Path("Chango Pepper/songs/audio/Song Libertad.m4a")
+SPACEY_AUDIO = Path("Chango Pepper/songs/audio/libertad.m4a")
 SPACEY_SONG = Path("Chango Pepper/songs/libertad.json")
 SPACEY_STAGING = Path("Chango Pepper/staging/libertad run")
 

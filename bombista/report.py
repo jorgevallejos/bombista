@@ -108,8 +108,9 @@ def render_qa_report(
     words_path = staging_dir / "asr-words.jsonl"
     # Every path below is shell-quoted (B17). These commands exist to be
     # copied and pasted, and the real invocation lives under `Chango
-    # Pepper/` with an audio file called `Song Libertad.m4a` — unquoted,
-    # that splits into four arguments and fails at the prompt. Same
+    # Pepper/` — the audio filenames themselves are space-free by the
+    # `songs/audio/<slug>.<ext>` convention, but the vault directory above
+    # them is not, so an unquoted path still splits at the prompt. Same
     # defect B16 fixed in the HTML page; see writers.py::_anchor_command.
     quoted_words = shlex.quote(str(words_path))
     rerun = (

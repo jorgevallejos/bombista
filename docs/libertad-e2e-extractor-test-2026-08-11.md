@@ -24,7 +24,7 @@ single file; spreading it across workers buys nothing. Delegate to a low-cost wo
 
 - `songs/` is now a **private submodule**; edits to `songs/libertad.json` commit **inside**
   it, then the umbrella pointer is bumped.
-- Audio: `songs/audio/Song Libertad.m4a` (~105 s). Gitignored inside the submodule — never commit it.
+- Audio: `songs/audio/libertad.m4a` (~105 s). Gitignored inside the submodule — never commit it.
 - `songs/libertad.json`: **20 lyric lines**, all real lines (no section markers), `lang` key `es`.
   It already has a `tempo` block (`bpm 200, 3/4, countInBars 1`) — see the tempo note below.
 - Extractor package: `projects/bombista/` (CLI `bombista`, commands
@@ -38,7 +38,7 @@ single file; spreading it across workers buys nothing. Delegate to a low-cost wo
 
 **2. Extract** (writes to a staging dir; never touches the song JSON):
 ```
-bombista extract "songs/audio/Song Libertad.m4a" songs/libertad.json \
+bombista extract songs/audio/libertad.m4a songs/libertad.json \
   -o projects/bombista/staging/libertad --lang es --model-size medium
 ```
 This writes `libertad-timeline.json`, `libertad-qa-report.md`, and `asr-words.jsonl`,
@@ -48,7 +48,7 @@ and prints a `HIGH / REVIEW / FAIL` line-band summary.
 worker may summarize it). For any REVIEW/FAIL line, hand-correct by re-running with an
 anchor — reuse the saved words to skip re-transcription (fast):
 ```
-bombista extract "songs/audio/Song Libertad.m4a" songs/libertad.json \
+bombista extract songs/audio/libertad.m4a songs/libertad.json \
   -o projects/bombista/staging/libertad --lang es \
   --words projects/bombista/staging/libertad/asr-words.jsonl \
   --anchor 0=SECONDS --anchor 7=SECONDS
@@ -90,6 +90,6 @@ Band counts (HIGH/REVIEW/FAIL), any anchors used, the final 20-entry timeline ra
 ## Then — Jorge tests (not you)
 Load Libertad in the app in **Auto mode**. Auto runs the app's own clock (count-in →
 timeline in seconds), it does **not** play the recording. To check alignment, play
-`Song Libertad.m4a` alongside and confirm each line flips as that line is sung. Note
+`songs/audio/libertad.m4a` alongside and confirm each line flips as that line is sung. Note
 that a live performance must track the recording's timing for the lines to land — tempo
 drift is the known limitation (Manual + pedal stays the fallback).

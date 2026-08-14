@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import statistics
 import unicodedata
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from .models import Word
@@ -27,6 +28,7 @@ from .models import Word
 __all__ = [
     "LineAnchor",
     "anchor_lines",
+    "parse_anchor_overrides",
     "normalize_token",
     "tokenize_line",
     "levenshtein",
@@ -181,6 +183,41 @@ def _resync(toks: list[tuple[str, float, str]], at_or_after: float) -> int:
 def _asr_context(toks: list[tuple[str, float, str]], index: int) -> str:
     end = min(index + CORROBORATION_WINDOW, len(toks))
     return " ".join(tok[2] for tok in toks[index:end])
+
+
+def parse_anchor_overrides(values: Iterable[str], line_count: int) -> dict[int, float]:
+    """Parse `LINE=SECONDS` strings into the `overrides` mapping
+    `anchor_lines` takes, rejecting anything it cannot honour.
+
+    It lives beside `anchor_lines` rather than in the CLI because an
+    override is an anchoring concept, and every front end has to reach the
+    same mapping from the same text: `--anchor 7=93.4` on the command
+    line, a stepper's value posted by `serve`'s review page (B20). Raises
+    ValueError naming the offending value; the caller renders it.
+
+    `line_count` is checked here, not later, because an out-of-range index
+    would otherwise be silently ignored — the correction would look
+    applied and would not be.
+    """
+    overrides: dict[int, float] = {}
+    for raw in values:
+        line_part, sep, seconds_part = raw.partition("=")
+        try:
+            if not sep:
+                raise ValueError
+            line = int(line_part)
+            seconds = float(seconds_part)
+            if line < 0 or seconds < 0:
+                raise ValueError
+        except ValueError:
+            raise ValueError(f"--anchor must be LINE=SECONDS (non-negative), got {raw!r}")
+        if line >= line_count:
+            raise ValueError(
+                f"--anchor line {line} out of range: song has {line_count} "
+                f"lyric lines (0..{line_count - 1})"
+            )
+        overrides[line] = seconds
+    return overrides
 
 
 def anchor_lines(

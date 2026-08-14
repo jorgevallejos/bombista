@@ -77,7 +77,9 @@ bombista/
                    does not translate.
   aligner.py     — faster-whisper transcription → list[Word]; JSONL save/load
   anchoring.py   — pure, stdlib-only: fuzzy line-onset anchoring (forward-only) +
-                   named-signal confidence bands (HIGH/REVIEW/FAIL); --anchor overrides
+                   named-signal confidence bands (HIGH/REVIEW/FAIL); --anchor overrides,
+                   including parse_anchor_overrides (LINE=SECONDS text -> the mapping
+                   anchor_lines takes) — an anchoring concept, not a CLI one
   pipeline.py    — pure timeline building: anchors → TimelineEntry[] (end_i = next lyric
                    start, last line = last word end + 1.0 s pad, FAIL lines interpolated
                    so the candidate stays emittable) + normalize_to_lead_in
@@ -92,9 +94,19 @@ bombista/
   migrate.py     — B13: rebase a stored v1 timeline onto the v2 start cue. Adds no rules
                    of its own (it composes normalize_to_lead_in / to_dict / merge_envelope)
                    — what it owns is the refusal set. Idempotent by refusal, not no-op.
-  cli.py         — click CLI: align / promote / migrate. `extract` is a
-                   registered alias of `align` (B11) — the same Command object,
-                   so the two cannot drift
+  songfile.py    — back_up_and_replace (THE one song-write path: backup, scratch file,
+                   os.replace — never a half-stamped song on disk) + timeline_diff.
+                   Shared by promote and migrate; returns its lines, prints nothing
+  promotion.py   — promote_candidate: the whole promote flow as a callable — load the
+                   candidate, extract + validate the v2 envelope, run B4's linesHash
+                   guard, refuse a partial candidate over a complete target, merge,
+                   write. Raises ValueError; `note` is a callback so a warning is
+                   delivered before any refusal that follows it. B20 §2: `serve` must
+                   promote what `promote` promotes, so there is one flow, not two
+  cli.py         — click CLI: align / promote / migrate, and nothing else. Wiring only:
+                   options, help text, and translating ValueError into ClickException /
+                   BadParameter. `extract` is a registered alias of `align` (B11) — the
+                   same Command object, so the two cannot drift
 tests/           — 263 tests; all fast except one tiny-model integration test on a
                    committed 12 s fixture (tests/fixtures/)
 docs/

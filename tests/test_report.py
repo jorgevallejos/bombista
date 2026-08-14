@@ -34,7 +34,7 @@ PROVENANCE = {
     "device": "cpu/int8",
     "lang": "es",
     "extractedAt": "2026-08-11T16:45:34+02:00",
-    "toolVersion": "bombista 0.1.0",
+    "toolVersion": "bombista 0.9.0",
 }
 
 
@@ -94,7 +94,7 @@ def test_report_header_shows_extracted_at():
 
 def test_report_header_shows_tool_version():
     report = _render()
-    assert "bombista 0.1.0" in report
+    assert "bombista 0.9.0" in report
 
 
 def test_report_header_shows_null_duration_gracefully():

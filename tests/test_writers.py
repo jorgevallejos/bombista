@@ -113,7 +113,7 @@ PROVENANCE = {
     "device": "cpu/int8",
     "lang": "es",
     "extractedAt": "2026-08-13T10:00:00+02:00",
-    "toolVersion": "bombista 0.1.0",
+    "toolVersion": "bombista 0.9.0",
 }
 
 

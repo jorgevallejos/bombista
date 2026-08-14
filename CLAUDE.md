@@ -32,6 +32,9 @@ timeline-extractor extract <audio.wav> <song.json|lyrics.txt> -o <staging-dir> \
     [--model-size medium] [--lang es] [--anchor LINE=SECONDS] [--words <staging>/asr-words.jsonl] \
     [--emit timeline|songjson|report-json|srt|lrc]
 timeline-extractor promote <staging>/<song>-timeline.json <song.json>
+
+# One-off, for songs timed before timeline v2 (B13) — not part of the loop:
+timeline-extractor migrate <song.json> [--dry-run]
 ```
 
 The lyrics input may be a **CP song JSON or a plain text file** (one lyric line per line;
@@ -45,6 +48,11 @@ hand-fix REVIEW/FAIL lines by re-running with `--anchor <line>=<seconds>` (add `
 skip re-transcription — it's near-instant). `promote` validates the candidate against the
 timeline v2 contract, backs up the song JSON next to itself, and writes only
 `timelineVersion`, `leadIn` and `timeline`.
+
+`migrate` is the **one-off** for songs timed before v2 (B13): it rebases a *stored* v1
+timeline in place, applying exactly what `extract` applies to a fresh run. Both shipped
+songs were migrated on 2026-08-14, so it should have nothing left to do — it refuses an
+already-v2 song rather than subtracting the lead-in twice.
 
 **Report times are raw audio-clock seconds; emitted timelines are cue-relative.** That is the
 clock `--anchor LINE=SECONDS` is given in, and normalising the report would break the hand-fix
@@ -75,8 +83,11 @@ timeline_extractor/
   serializer.py  — the frozen timeline v2 envelope, and nothing else
   writers.py     — everything downstream of the canonical CP form: songjson, report-json,
                    srt, lrc — plus merge_envelope, THE one merge path (shared with promote)
-  cli.py         — click CLI: extract / promote
-tests/           — 196 tests; all fast except one tiny-model integration test on a
+  migrate.py     — B13: rebase a stored v1 timeline onto the v2 start cue. Adds no rules
+                   of its own (it composes normalize_to_lead_in / to_dict / merge_envelope)
+                   — what it owns is the refusal set. Idempotent by refusal, not no-op.
+  cli.py         — click CLI: extract / promote / migrate
+tests/           — 234 tests; all fast except one tiny-model integration test on a
                    committed 12 s fixture (tests/fixtures/)
 docs/
   timeline-v2-contract.md           — THE live contract with the translator (Pregonero).

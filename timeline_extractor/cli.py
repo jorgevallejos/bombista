@@ -3,11 +3,14 @@ timeline-extractor CLI entrypoint — forced-alignment pipeline.
 
     timeline-extractor extract <audio> <song-json> -o <staging-dir>
     timeline-extractor promote <timeline-json> <song-json>
+    timeline-extractor migrate <song-json>
 
 `extract` transcribes the audio (faster-whisper word timestamps), anchors
 each lyric line, and writes a candidate timeline + QA report to a staging
 directory. It never writes to the song JSON. `promote` copies an approved
 timeline into the song JSON (backup + diff), touching nothing else.
+`migrate` (B13) rebases a stored v1 timeline onto the v2 start cue in
+place — a one-off for songs timed before v2, not part of the loop.
 """
 from __future__ import annotations
 
@@ -21,6 +24,7 @@ import click
 
 from .aligner import load_words, save_words, transcribe_words
 from .anchoring import anchor_lines
+from .migrate import migrate_song_to_v2
 from .pipeline import build_timeline, lyric_lines, normalize_to_lead_in
 from .provenance import build_provenance, compute_lines_hash
 from .readers import read_lyrics_input, song_completeness
@@ -373,6 +377,32 @@ def _lines_hash_unavailable_note(timeline_json: Path) -> str:
     )
 
 
+def _back_up_and_replace(song_json: Path, song: dict) -> Path:
+    """Copy *song_json* to a timestamped `.backup-<stamp>` sibling (never
+    over an existing one — the stamp is the current second), then replace
+    the original with *song*, atomically.
+
+    THE one song-write path: `promote` and `migrate` both go through it.
+    `timelineVersion`, `leadIn` and `timeline` are written as a unit, so
+    an interrupted write must not be able to leave a half-stamped song on
+    disk — hence the scratch file and `os.replace`, and the scratch file
+    is removed if anything goes wrong. Returns the backup's path.
+    """
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup = song_json.with_name(f"{song_json.name}.backup-{stamp}")
+    shutil.copyfile(song_json, backup)
+
+    payload = json.dumps(song, indent=2, ensure_ascii=False) + "\n"
+    temp = song_json.with_name(f"{song_json.name}.tmp-{stamp}")
+    try:
+        temp.write_text(payload, encoding="utf-8")
+        os.replace(temp, song_json)
+    except BaseException:
+        temp.unlink(missing_ok=True)
+        raise
+    return backup
+
+
 def _timeline_diff(old: list | None, new: list[dict]) -> list[str]:
     if not old:
         return [f"timeline added ({len(new)} entries)"]
@@ -475,22 +505,59 @@ def promote(timeline_json: Path, song_json: Path) -> None:
     except ValueError as exc:
         raise click.ClickException(f"{timeline_json}: {exc}")
 
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    backup = song_json.with_name(f"{song_json.name}.backup-{stamp}")
-    shutil.copyfile(song_json, backup)
-
-    # Atomically replace the song file. timelineVersion, leadIn and timeline
-    # are written as a unit, so an interrupted write must not be able to leave
-    # a half-stamped song on disk.
-    payload = json.dumps(song, indent=2, ensure_ascii=False) + "\n"
-    temp = song_json.with_name(f"{song_json.name}.tmp-{stamp}")
-    try:
-        temp.write_text(payload, encoding="utf-8")
-        os.replace(temp, song_json)
-    except BaseException:
-        temp.unlink(missing_ok=True)
-        raise
+    backup = _back_up_and_replace(song_json, song)
 
     click.echo(f"backup: {backup}")
     for line in _timeline_diff(old_timeline, new_timeline):
+        click.echo(line)
+
+
+@main.command()
+@click.argument("song_json", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Report what would change and write nothing.",
+)
+def migrate(song_json: Path, dry_run: bool) -> None:
+    """Rebase a **v1** SONG_JSON onto the timeline v2 start cue, in place.
+
+    Subtracts `timeline[0].start` from every entry, banks it in `leadIn`
+    (`apply` defaulting from `media.type`, as B12 does) and stamps
+    `timelineVersion: 2` — the song's other keys are preserved untouched
+    and in order. Backs the file up next to itself first, then replaces
+    it atomically.
+
+    Refuses, without writing anything, if the song is already v2, is
+    half-stamped, has no timeline, or has an entry count that does not
+    match its lyric count. It is **idempotent by refusal**: running it
+    twice must not subtract the lead-in twice, and a silent no-op would
+    look too much like success.
+    """
+    song = json.loads(song_json.read_text(encoding="utf-8"))
+    old_timeline = song.get("timeline")
+
+    try:
+        migrated = migrate_song_to_v2(song)
+    except ValueError as exc:
+        raise click.ClickException(f"{song_json}: {exc}")
+
+    lead_in = migrated["leadIn"]
+    report = [
+        f"leadIn: {lead_in['durationSec']}s "
+        f"({lead_in['source']}, confidence {lead_in['confidence']}, "
+        f"apply={str(lead_in['apply']).lower()})",
+        *_timeline_diff(old_timeline, migrated["timeline"]),
+    ]
+
+    if dry_run:
+        click.echo(f"dry run — {song_json} not written")
+        for line in report:
+            click.echo(line)
+        return
+
+    backup = _back_up_and_replace(song_json, migrated)
+
+    click.echo(f"backup: {backup}")
+    for line in report:
         click.echo(line)

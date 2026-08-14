@@ -9,6 +9,7 @@ what `provenance.build_provenance` would produce.
 """
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 
 from timeline_extractor.anchoring import LineAnchor
@@ -134,3 +135,86 @@ def test_report_stripped_lines_shows_source_line_numbers():
 
     assert "| 1 " in section or "|1|" in section.replace(" ", "")
     assert "| 2 " in section or "|2|" in section.replace(" ", "")
+
+
+# ---------------------------------------------------------------------------
+# B17 — the printed commands must survive a paste
+#
+# Every path the report interpolates is attacker-free but space-full: the
+# real invocation is `~/Chango Pepper/songs/audio/Song Libertad.m4a`, two
+# spaces and a capital. Unquoted, that splits into four argv entries and
+# the command fails at the prompt. B16 fixed this in the HTML page; these
+# tests hold the same line for the markdown report.
+#
+# The assertions round-trip through `shlex.split` rather than looking for
+# quote characters, because what matters is the resulting argv, not which
+# quoting style produced it.
+# ---------------------------------------------------------------------------
+
+SPACEY_AUDIO = Path("Chango Pepper/songs/audio/Song Libertad.m4a")
+SPACEY_SONG = Path("Chango Pepper/songs/libertad.json")
+SPACEY_STAGING = Path("Chango Pepper/staging/libertad run")
+
+REVIEW_ANCHORS = [
+    LineAnchor(0, 10.0, "HIGH", ("clean-anchor",), "hola mundo", 0),
+    LineAnchor(1, 20.0, "REVIEW", ("ambiguous",), "vamos ya", 0),
+]
+
+
+def _spacey_report(**overrides):
+    return _render(
+        audio_path=SPACEY_AUDIO,
+        song_path=SPACEY_SONG,
+        staging_dir=SPACEY_STAGING,
+        **overrides,
+    )
+
+
+def _backticked(report: str, marker: str) -> str:
+    """The one backticked span on the line introduced by `marker`."""
+    line = next(ln for ln in report.splitlines() if marker in ln)
+    return line.split("`")[1]
+
+
+def test_rerun_command_survives_shlex_split():
+    command = _backticked(_spacey_report(), "Re-run")
+    argv = shlex.split(command)
+
+    assert str(SPACEY_AUDIO) in argv
+    assert str(SPACEY_SONG) in argv
+    assert str(SPACEY_STAGING) in argv
+    assert str(SPACEY_STAGING / "asr-words.jsonl") in argv
+
+
+def test_rerun_command_keeps_its_argument_count():
+    """A quoting failure shows up as extra argv entries, not as a crash —
+    so pin the count rather than only checking the paths are findable."""
+    command = _backticked(_spacey_report(), "Re-run")
+
+    # bombista extract <audio> <song> -o <staging> --words <words> --lang es
+    assert len(shlex.split(command)) == 10
+
+
+def test_anchor_hint_paths_survive_shlex_split():
+    report = _spacey_report(anchors=REVIEW_ANCHORS)
+    # Not just any line mentioning `--anchor` — the audio-clock blockquote
+    # names the flag too. The hints are the "- Line N:" bullets.
+    hint = next(ln for ln in report.splitlines() if ln.startswith("- Line 1:"))
+
+    # `--anchor 1=<seconds>` and `--words <path>` are separate backticked
+    # spans; the words path is the one carrying the spaces.
+    words = next(
+        span for span in hint.split("`") if "asr-words.jsonl" in span
+    )
+    argv = shlex.split(words)
+
+    assert argv == ["--words", str(SPACEY_STAGING / "asr-words.jsonl")]
+
+
+def test_unspaced_paths_are_not_gratuitously_quoted():
+    """`shlex.quote` leaves safe paths alone. Keeping that true means the
+    common case reads exactly as it did before B17."""
+    command = _backticked(_render(), "Re-run")
+
+    assert "staging/libertad" in command
+    assert "'staging/libertad'" not in command

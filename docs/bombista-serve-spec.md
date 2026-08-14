@@ -166,12 +166,47 @@ not free text where avoidable:
 - A test asserts line 0 cannot be moved and that a lead offset lands in `leadIn`.
 - A test asserts the emitted file carries `linesHash` and the hand-set provenance.
 
+### The acceptance case for page 2 — the pimiento canary
+
+**Page 2 is accepted when a user who has never read the CLI docs can resolve line 3 of pimiento and reach a correct emit.** Not "can edit a timestamp" — can resolve *this* line, unaided.
+
+The fixture is real and already on disk, so this is reproducible rather than hypothetical:
+
+| | |
+|---|---|
+| song | `songs/pimiento.json` |
+| audio | `songs/audio/pimiento.m4a` |
+| bands | **HIGH 18 · REVIEW 1 · FAIL 0** (19 lyric lines) |
+| measured lead-in | **8.92 s** |
+| the flagged line | **line 3**, `desde niño quiere más que latir`, band **REVIEW**, signal **`lead-fallback`** |
+| candidate start | **37.54 s**, raw audio-clock seconds |
+
+**Why this is the acceptance case and not an invented one.** Jorge ran the canary by hand on 2026-08-15. The alignment itself was fine — 18 of 19 lines HIGH, nothing failed. What he could not do was **act on the one flagged line through the CLI**. The report told him which line to check and why; it did not give him a way to judge and fix it in the same place. He promoted the timeline with line 3 still unresolved, which is where it sits today. That gap — a correction loop that identifies but cannot resolve — is the entire reason B20 exists. If page 2 does not close it for this exact line, it has not been built.
+
+**The specific ambiguity that must not survive: is `LINE` 0- or 1-indexed?** The CLI never answered this for Jorge, and it is not answerable from any user-facing text — `README.md`, `docs/`, and every `--help` string are silent on it. The only place the base is stated at all is the *out-of-range error* in `parse_anchor_overrides` (`"song has N lyric lines (0..N-1)"`), which a user sees only by first getting it wrong.
+
+For the record, it is **0-indexed**, and this canary proves it arithmetically rather than by assertion. The promoted timeline is cue-relative, so raw = cue-relative + `leadIn`:
+
+- entry **3** → `28.62 + 8.92 = 37.54` ✅ matches the candidate start
+- entry **2** → `20.54 + 8.92 = 29.46` ❌
+
+So "line 3" is index 3, the **fourth** line — `desde niño quiere más que latir`, not `Con el corazón afuera nací`.
+
+**This is a UI requirement, not a documentation one.** Page 2 must make the identity of a line unmistakable without the user knowing the base at all: show the line's **text** next to any number, and let the row be confirmed by ear through the seek button. A page that shows a bare index and expects the user to know the convention has failed in exactly the way the CLI failed — it just fails in a browser instead of a terminal.
+
 ---
 
 ## 7. Open
 
-- Does `serve` ship in `v1.0.0` or after? The pimiento canary gates 1.0.0; this is larger than the
-  canary and probably wants its own version.
+- ~~Does `serve` ship in `v1.0.0` or after? The pimiento canary gates 1.0.0.~~ **Settled 2026-08-15
+  — `serve` ships *in* `v1.0.0`. The gate moved.** It used to be "the canary runs clean end to
+  end". The canary has now run, and it ran clean enough to promote — 18 HIGH, 1 REVIEW, 0 FAIL —
+  so on the old wording the gate is met. But pimiento's timeline is promoted **with line 3 still
+  unresolved**, because the CLI gave no way to resolve it (§6). Cutting `v1.0.0` on that would
+  certify a loop that identifies problems it cannot fix, which is precisely the thing the
+  positioning claims Bombista is *for*.
+  **`v1.0.0` is therefore now gated on two things: `serve` shipping, and line 3 of pimiento being
+  fixable through it.** The canary is no longer the gate — it is the test case for the gate.
 - Installation is still `pipx install bombista` — one line, but a line. A packaged binary is the
   answer if that ever needs to go, **not** a hosted service.
 - `changopepper.com/tramoya/bombista` remains a shopfront: what it does, the *Río de Sal* worked

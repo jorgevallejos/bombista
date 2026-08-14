@@ -11,8 +11,11 @@ the song's ordered lyric lines, and writes the result as a JSON file consumed by
 **Live Lyric Translator**'s timeline-import surface. The tool **only defines the timeline** —
 it never edits lyric text.
 
-The output contract is **frozen** in `docs/output-contract.md`. Do not change the
-interchange format without coordinating with the translator side.
+The live output contract is `docs/timeline-v2-contract.md` — shared with Pregonero, and
+carrying the golden fixture both sides test against. Do not change the interchange format
+without coordinating with the translator side. `docs/output-contract.md` is the **superseded
+v1** spec, kept for the type derivation and the `videoCueLookup` / `media.offset` background;
+never read it for what the tool produces today.
 
 > **The audio-clock rule (critical):** timeline times are only meaningful relative to the
 > audio you feed in. For **Video-mode** songs, extract the audio from the linked animation
@@ -115,6 +118,9 @@ docs/
   output-contract.md                — v1 interface spec; superseded by timeline-v2-contract.md
   acceptance-tragedia-2026-07-03.md — v1 acceptance record (calibration + promote diff)
   bombista-product-backlog.md       — the v2 spec (§2 is the architecture and timing model)
+  bombista-serve-spec.md            — B20: `bombista serve`, the local web interface.
+                                      Absorbs B19. §2 is the step-0 extraction that must
+                                      land before any of it is built
   assignment-qa-design.md           — SUPERSEDED video-OCR design (banner explains what carried over)
 ```
 
@@ -172,4 +178,4 @@ stdlib-only by design — test it with synthetic `Word` lists, never with the wh
   `src/songState.ts`; cue lookup is `videoCueLookup` in `src/videoCueLookup.ts`.
 - Song JSONs live in `~/Chango Pepper/songs/`; linked animation videos in
   `~/Chango Pepper/animations/<song-id>/`.
-- Do not import or duplicate translator code here; `docs/output-contract.md` is the bridge.
+- Do not import or duplicate translator code here; `docs/timeline-v2-contract.md` is the bridge.

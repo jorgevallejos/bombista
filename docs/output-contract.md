@@ -7,10 +7,17 @@
 > banked in `leadIn` (items B12/B3), and lyrics arrays carry sung lines only. Kept for the
 > type derivation and the `videoCueLookup` / `media.offset` background, which still hold.
 > **Read `timeline-v2-contract.md` for what the tool actually produces.**
+>
+> This file is now a **historical record, not a live contract.** Do not amend it to describe
+> current behaviour and do not cite it as authority in new work — amend
+> `timeline-v2-contract.md` instead. Everything below the line is preserved as written in
+> June 2026, including instructions that were live then and are not now.
 
 _Frozen 2026-06-24. Source of truth: `projects/live-lyric-translator-dev/src/songState.ts`
 and `projects/live-lyric-translator-dev/src/videoCueLookup.ts`. Do not modify this file
-without also updating the translator side._
+without also updating the translator side._ **(Superseded — see the banner above. The
+translator repo is `projects/pregonero` since the 2026-08-14 rename; the `-dev` paths in
+this file are dead.)**
 
 ---
 

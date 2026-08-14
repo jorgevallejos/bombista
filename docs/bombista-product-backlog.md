@@ -350,6 +350,14 @@ The §3 heading was relabelled, not just repointed. Invented data cannot sit und
 
 **The one genuinely new exposure was the 12 s master excerpt** — neighbouring-rights material (SIMIM), where registration is not yet filed. It is off `main` as of `255f7a1`, but it remains reachable in history at `6829c2d`, which is what "history untouched" means here.
 
+**That it stays publicly reachable is a reviewed and accepted outcome, not an oversight.** It was put to the visibility decision on 2026-08-14 and left in place. Three things carried that call:
+
+- The lyrics the excerpt accompanies are **already published on changopepper.com by Jorge's own choice**. The excerpt is not the first public disclosure of the work.
+- **Neighbouring rights are established by registration, not by secrecy.** Keeping a file unreachable creates no right; filing does.
+- The mitigation is therefore **filing with SIMIM** — tracked in `projects/song-registration`, not here — rather than deleting the commit.
+
+**Reversal remains possible, and its cost rises with time.** A history rewrite plus force-push would remove the excerpt from this repo, but it cannot recall clones or forks, and every fork that appears raises the cost and lowers the completeness of any later removal. Nothing currently schedules a rewrite; if one is ever wanted, sooner is cheaper than later.
+
 ### Pregonero (live-lyric-translator) — implied by B12/B3
 
 Separate repo, separate submodule. These must land **before** a v2 timeline is loaded into the app.

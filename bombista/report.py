@@ -155,7 +155,7 @@ def render_qa_report(
                 else " (no anchor found — listen for the line and time its onset)"
             )
             parts.append(
-                f"- Line {anchor.line_index}: re-run `extract` with "
+                f"- Line {anchor.line_index}: re-run `align` with "
                 f"`--anchor {anchor.line_index}=<seconds>` and "
                 f"`--words {quoted_words}` "
                 f"to skip re-transcription{near}."

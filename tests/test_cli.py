@@ -452,6 +452,17 @@ def test_promote_writes_envelope_preserving_other_key_order(promote_ws):
     assert promote_ws["song"].read_text(encoding="utf-8").endswith("\n")
 
 
+def test_promote_leaves_no_temp_file_behind(promote_ws):
+    """The song file is replaced atomically so an interrupted write can't
+    leave a half-stamped song on disk — and the scratch file it goes through
+    must not survive the run."""
+    result = run_promote(promote_ws)
+
+    assert result.exit_code == 0, result.output
+    leftovers = [p.name for p in promote_ws["song"].parent.glob("*.tmp-*")]
+    assert leftovers == []
+
+
 def test_promote_backs_up_original_before_writing(promote_ws):
     original = promote_ws["song"].read_bytes()
 

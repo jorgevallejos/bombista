@@ -50,7 +50,21 @@ def merge_envelope(song: dict, envelope: dict) -> dict:
 
     This is THE merge path (see module docstring) — do not reimplement it
     elsewhere.
+
+    The three keys are written **as a unit, never partially**: a song
+    carrying normalised timings without a `timelineVersion` stamp would be
+    rejected by the translator, and one carrying a stamp without a `leadIn`
+    would lose the offset needed to reconstruct the raw times. An envelope
+    missing any of them raises ValueError *before* anything is written,
+    rather than producing a half-stamped song.
     """
+    absent = [k for k in _ENVELOPE_KEYS if k not in envelope]
+    if absent:
+        raise ValueError(
+            f"refusing to merge a partial envelope — missing {absent}. "
+            f"{list(_ENVELOPE_KEYS)} are written as a unit or not at all"
+        )
+
     new_song: dict = {}
     inserted = False
     for key, value in song.items():

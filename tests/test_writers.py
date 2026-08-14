@@ -64,6 +64,33 @@ def test_merge_envelope_appends_new_keys_when_none_existed():
     assert list(merged.keys()) == ["title", "lyrics", "timelineVersion", "leadIn", "timeline"]
 
 
+@pytest.mark.parametrize("dropped", ["timelineVersion", "leadIn", "timeline"])
+def test_merge_envelope_refuses_a_partial_envelope(dropped):
+    """The three keys go in as a unit or not at all. A song with normalised
+    timings but no version stamp would be rejected by the translator; one
+    with a stamp but no leadIn would lose the offset that reconstructs the
+    raw times."""
+    partial = {k: v for k, v in ENVELOPE.items() if k != dropped}
+    song = {"title": "T", "lyrics": [1, 2]}
+
+    with pytest.raises(ValueError, match="partial envelope"):
+        merge_envelope(song, partial)
+
+
+@pytest.mark.parametrize("dropped", ["timelineVersion", "leadIn", "timeline"])
+def test_merge_envelope_writes_nothing_when_the_envelope_is_partial(dropped):
+    """Not merely 'raises' — the song must come back untouched, with none of
+    the three keys half-applied."""
+    partial = {k: v for k, v in ENVELOPE.items() if k != dropped}
+    song = {"title": "T", "lyrics": [1, 2]}
+    before = json.dumps(song)
+
+    with pytest.raises(ValueError):
+        merge_envelope(song, partial)
+
+    assert json.dumps(song) == before
+
+
 def test_merge_envelope_does_not_mutate_the_input_song():
     song = {"title": "T", "lyrics": [1, 2]}
     merge_envelope(song, ENVELOPE)

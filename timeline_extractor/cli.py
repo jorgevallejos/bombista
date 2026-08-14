@@ -12,6 +12,7 @@ timeline into the song JSON (backup + diff), touching nothing else.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -466,15 +467,29 @@ def promote(timeline_json: Path, song_json: Path) -> None:
                 "bare timeline envelope instead."
             )
 
+    old_timeline = song.get("timeline")
+    # Merge before touching the disk: an incomplete envelope must raise here,
+    # with the song file still untouched, rather than after the backup.
+    try:
+        song = merge_envelope(song, envelope)
+    except ValueError as exc:
+        raise click.ClickException(f"{timeline_json}: {exc}")
+
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     backup = song_json.with_name(f"{song_json.name}.backup-{stamp}")
     shutil.copyfile(song_json, backup)
 
-    old_timeline = song.get("timeline")
-    song = merge_envelope(song, envelope)
-    song_json.write_text(
-        json.dumps(song, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
+    # Atomically replace the song file. timelineVersion, leadIn and timeline
+    # are written as a unit, so an interrupted write must not be able to leave
+    # a half-stamped song on disk.
+    payload = json.dumps(song, indent=2, ensure_ascii=False) + "\n"
+    temp = song_json.with_name(f"{song_json.name}.tmp-{stamp}")
+    try:
+        temp.write_text(payload, encoding="utf-8")
+        os.replace(temp, song_json)
+    except BaseException:
+        temp.unlink(missing_ok=True)
+        raise
 
     click.echo(f"backup: {backup}")
     for line in _timeline_diff(old_timeline, new_timeline):

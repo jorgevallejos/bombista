@@ -466,7 +466,7 @@ def _anchor_command(
         shlex.quote(str(p)) for p in (audio_path, song_path)
     )
     return (
-        f"timeline-extractor extract {quoted} -o {shlex.quote(str(staging_dir))} "
+        f"bombista align {quoted} -o {shlex.quote(str(staging_dir))} "
         f"--words {shlex.quote(str(words_path))} --lang {shlex.quote(lang)} "
         f"--anchor {line_index}=<seconds>"
     )

@@ -2,7 +2,7 @@
 
 _Project-specific Cowork context. Read this **after** `~/Chango Pepper/personal-context.md` (and any relevant `~/Chango Pepper/disciplines/<topic>.md`). Acknowledge briefly ("Context loaded. Ready.") and wait for Jorge to describe what's on his plate. At the end of the session, propose updates if anything important changed._
 
-> **Stub created 2026-06-24**, spun out of the Live Lyric Translator D-wire round 3. The engineering counterpart for Claude Code lives in `CLAUDE.md` at the repo root (`projects/timeline-extractor/CLAUDE.md`). Stack, output contract, and interchange format are now decided (see Build state) — the sections below are kept as the method/contract record.
+> **Stub created 2026-06-24**, spun out of the Live Lyric Translator D-wire round 3. The engineering counterpart for Claude Code lives in `CLAUDE.md` at the repo root (`projects/bombista/CLAUDE.md`). Stack, output contract, and interchange format are now decided (see Build state) — the sections below are kept as the method/contract record.
 
 ---
 
@@ -49,7 +49,7 @@ Libertad fixture exactly.
 
 **Acceptance (Tragedia, `docs/acceptance-tragedia-2026-07-03.md`):** exact convergence with the spike's derived ground truth (Δ = 0.000 on all 29 lines after two documented hand anchors: line 0 = 0.96 — whisper clamps the first word to 0.0; line 13 = 58.5 — the known misheard line, FAIL→override). vs the card reference: median −0.36 s / stdev 0.70 (cards lag sung onsets) → a **`--lead` knob is proposed, not built** — Jorge decides if cards-style timing is wanted. The regenerated timeline is **promoted into `songs/tragedia-de-cerdo-asado.json`** (backup: `tragedia-de-cerdo-asado.json.backup-20260703-112259`); only real change vs the spike-derived values: line 28's end now 160.48 (last word + 1.0 s pad). Jorge's in-app test (Auto + Video modes) closes v1.
 
-**Re-run on new recordings:** `timeline-extractor extract <audio.wav> <song.json> -o <staging>` then `promote` — no code changes needed; see repo CLAUDE.md.
+**Re-run on new recordings:** `bombista align <audio.wav> <song.json> -o <staging>` then `promote` — no code changes needed; see repo CLAUDE.md.
 
 **Known contract wrinkle (translator-side) — RESOLVED 2026-08-13 by B3; markers no longer exist on either side.** Original note: the translator's `validateTimeline` (`songState.ts`) has no exemption for zero-length `{0,0}` entries in its monotonic check, so any song with **mid-song section markers** would fail import. The extractor's validator exempts them (PR #9). Resolve translator-side before a marker-carrying song needs a timeline.
 
@@ -61,7 +61,7 @@ Libertad fixture exactly.
 
 **Opus design pass DONE (2026-06-25) — `docs/assignment-qa-design.md`.** Architecture for assignment + human-QA settled with Jorge. Key decisions: (1) assignment is a **global DP alignment** (cards↔lines, monotonic, ops MATCH/MERGE≤3/SKIP-CARD/SKIP-LINE/SPLIT), replacing the spike's greedy walk; merge-vs-split decided by the file's **newline count = expected card count** vs cards the video shows. (2) **Video rules on structure, file rules on wording.** Splits + adds (video shows more phrasing) are **auto-applied and reported, no confirmation**; removals + hard FAILs still gate; wording mismatches (e.g. lines 11/20 defects) are flagged only, never auto-overwritten. (3) Auto-applied structural edits re-split the es/fr/nl variants via an **LLM-assisted apply step** kept separate from the deterministic core — **deferred** in the build (not on the Tragedia acceptance path); lyrics file is backed up + diffed so any auto-edit reverts. (4) Confidence = named signals → HIGH/REVIEW/FAIL bands; QA artifact = markdown report + `qa-frames/` thumbnails; CLI is two steps, `extract` (staging, never writes song JSON) → `promote`. (5) Fixed bottom-band crop (`crop=1620:320:0:760`) is the v1 standard (no position auto-detect). v1 DoD = Tragedia end-to-end, start ±0.20 s vs reference, plays in Auto mode.
 
-**Resume at Sonnet build-out** — paste `docs/build-plan-prompt.md` into Claude Code (timeline-extractor repo). 9-step plan, TDD; check in after step 2 (alignment) and step 9 (acceptance).
+**Resume at Sonnet build-out** — paste `docs/build-plan-prompt.md` into Claude Code (bombista repo). 9-step plan, TDD; check in after step 2 (alignment) and step 9 (acceptance).
 
 **Spike result detail:** 24 lines matched 1:1; 5 two-card lyric lines (6, 14, 20, 24, 25) reconciled as merges; the intra-text pixel-diff splitter correctly split the no-gap pair at line 6 (~25.66s). End times = brightness falling edges (full card display duration).
 
@@ -73,7 +73,7 @@ Libertad fixture exactly.
 
 - **Stack: Python CLI (`click`)** — decided, no longer open. Output format kept language-agnostic so a later Node/in-app caller is unaffected.
 - **Interchange format: JSON, locked 2026-06-24.** `{ "timeline": [...] }` envelope deserializing straight into the translator's `TimelineEntry[]`; parallel-array contract preserved (one entry per song item, section markers as `start == end == 0`). **SRT rejected** (carries cue text that duplicates the song JSON's source-of-truth lyric order, and can't represent section markers). An optional `.srt` export may be added later as a human-QA debug convenience only — never the canonical contract. This is mirrored in the translator's `project-context.md` so Prompt 16 (the A+ import button) conforms.
-- **Scaffold shipped** (PR `chore/scaffold-cli-and-output-contract`, on `main`): `docs/output-contract.md` (frozen interface extracted from `songState.ts` — `TimelineEntry = {start, end}`, half-open `[start, end)`, parallel-array semantics, `videoCueLookup` quoted, `offset`/`trimStart` documented as living on `media`), `pyproject.toml`, `timeline_extractor/` package, `click` CLI entrypoint stub (`extract <video> <lyrics> -o <out>` — validates args only), `models.py` (frozen `TimelineEntry` dataclass, non-negative guard), `serializer.py` stubs, `tests/`, `CLAUDE.md`, `.gitignore`, `.claude/`.
+- **Scaffold shipped** (PR `chore/scaffold-cli-and-output-contract`, on `main`): `docs/output-contract.md` (frozen interface extracted from `songState.ts` — `TimelineEntry = {start, end}`, half-open `[start, end)`, parallel-array semantics, `videoCueLookup` quoted, `offset`/`trimStart` documented as living on `media`), `pyproject.toml`, `bombista/` package, `click` CLI entrypoint stub (`extract <video> <lyrics> -o <out>` — validates args only), `models.py` (frozen `TimelineEntry` dataclass, non-negative guard), `serializer.py` stubs, `tests/`, `CLAUDE.md`, `.gitignore`, `.claude/`.
 - **Serializer greened** (PR branch `feat/green-serializer`, **pushed, open — merge next session**): `to_dict` / `write_timeline` implemented, round-trip tests pass.
 
 **Git state (verified 2026-06-25 — both housekeeping items still OPEN):**

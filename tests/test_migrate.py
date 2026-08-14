@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from timeline_extractor.migrate import ENVELOPE_KEYS, migrate_song_to_v2
+from bombista.migrate import ENVELOPE_KEYS, migrate_song_to_v2
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

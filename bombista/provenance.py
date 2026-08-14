@@ -56,7 +56,7 @@ def _duration_sec(path: Path) -> float | None:
         return None
 
 
-TOOL_NAME = "timeline-extractor"
+TOOL_NAME = "bombista"
 
 
 def _tool_version() -> str:

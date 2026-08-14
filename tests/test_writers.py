@@ -14,9 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from timeline_extractor.anchoring import LineAnchor
-from timeline_extractor.models import TimelineEntry
-from timeline_extractor.writers import (
+from bombista.anchoring import LineAnchor
+from bombista.models import TimelineEntry
+from bombista.writers import (
     build_bombista_block,
     merge_envelope,
     write_html_review,
@@ -113,7 +113,7 @@ PROVENANCE = {
     "device": "cpu/int8",
     "lang": "es",
     "extractedAt": "2026-08-13T10:00:00+02:00",
-    "toolVersion": "timeline-extractor 0.1.0",
+    "toolVersion": "bombista 0.1.0",
 }
 
 
@@ -593,5 +593,5 @@ def test_write_html_review_shell_quotes_paths_in_the_anchor_command(tmp_path):
 
     argv = shlex.split(command)
     assert str(audio) in argv  # one argument, not two
-    assert argv[:2] == ["timeline-extractor", "extract"]
+    assert argv[:2] == ["bombista", "align"]  # B11: the primary verb
     assert "--anchor" in argv

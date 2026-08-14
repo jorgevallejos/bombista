@@ -4,7 +4,7 @@
 > **audio forced alignment** (faster-whisper `medium` + fuzzy line-anchoring) after the
 > translator's ASR spike proved it near-verbatim at 46 s/song; see
 > `docs/alignment-pivot-kickoff-2026-07-03.md` and the shipped v1
-> (`timeline_extractor/aligner.py`, `anchoring.py`, `pipeline.py`).
+> (`bombista/aligner.py`, `anchoring.py`, `pipeline.py`).
 > §4 (named-signal confidence bands, `extract`→`promote`, markdown QA report) and the
 > §5 contract posture **carried over** into the alignment pipeline, adapted from OCR to
 > ASR signals. The change-detection/DP/OCR machinery (§2–§3, §5 video cases) and the
@@ -221,7 +221,7 @@ v1 is done when one song goes end-to-end with a human in the loop and the result
 
 Hand this list to Sonnet; each step is TDD-able and most map to one module. Work on a feature branch per the repo's release flow, not on `main`.
 
-1. **Lift the spike into the package.** Split `spike/change_detection.py` into clean modules under `timeline_extractor/`: `detect.py` (brightness edges), `split.py` (intra-text split), `ocr.py`, `align.py`, `confidence.py`, `report.py`. Keep behaviour identical first; cover each with unit tests against small fixtures before changing anything.
+1. **Lift the spike into the package.** Split `spike/change_detection.py` into clean modules under `bombista/`: `detect.py` (brightness edges), `split.py` (intra-text split), `ocr.py`, `align.py`, `confidence.py`, `report.py`. Keep behaviour identical first; cover each with unit tests against small fixtures before changing anything.
 2. **Replace greedy reconcile with the DP alignment** (`align.py`, §3.3). Implement MATCH / MERGE(≤3) / SKIP-CARD / SKIP-LINE / SPLIT with the cost function and penalties of §3.4. Unit-test on synthetic card/line sequences with known answers — clean 1:1, a two-card merge, an injected spurious card, an injected missing line — asserting the recovered operation sequence.
 3. **Make the split adaptive** (`split.py`, §3.7). Replace the 5-second gate and fixed 0.005 with the per-video noise-floor calibration (`μ + k·σ` or Otsu), the `MIN_CARD_DURATION` guard, the lyric-count sanity rail, and frame-accurate boundary refinement.
 4. **Build the confidence model** (`confidence.py`, §4.1–4.2). Capture Tesseract per-word confidence, derive brightness-edge cleanliness and boundary provenance, and implement the HIGH/REVIEW/FAIL band rule. Unit-test the band logic against crafted signal inputs.

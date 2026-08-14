@@ -1,6 +1,6 @@
 """
-Human-QA report for an extract run — the review surface between
-`extract` (staging) and `promote` (writes the song JSON).
+Human-QA report for an alignment run — the review surface between
+`align` (staging) and `promote` (writes the song JSON).
 
 One markdown file per run: band counts, the audio-clock rule, a
 "Needs attention" table for REVIEW/FAIL lines with a one-line
@@ -8,6 +8,7 @@ hand-anchoring instruction each, then a table of every lyric line.
 """
 from __future__ import annotations
 
+import shlex
 from datetime import datetime
 from pathlib import Path
 from typing import Sequence
@@ -105,9 +106,16 @@ def render_qa_report(
     generated_at = generated_at or datetime.now()
     counts = band_counts(anchors)
     words_path = staging_dir / "asr-words.jsonl"
+    # Every path below is shell-quoted (B17). These commands exist to be
+    # copied and pasted, and the real invocation lives under `Chango
+    # Pepper/` with an audio file called `Song Libertad.m4a` — unquoted,
+    # that splits into four arguments and fails at the prompt. Same
+    # defect B16 fixed in the HTML page; see writers.py::_anchor_command.
+    quoted_words = shlex.quote(str(words_path))
     rerun = (
-        f"timeline-extractor extract {audio_path} {song_path} -o {staging_dir} "
-        f"--words {words_path} --lang {lang}"
+        f"bombista align {shlex.quote(str(audio_path))} "
+        f"{shlex.quote(str(song_path))} -o {shlex.quote(str(staging_dir))} "
+        f"--words {quoted_words} --lang {shlex.quote(lang)}"
     )
 
     parts = [
@@ -147,8 +155,9 @@ def render_qa_report(
                 else " (no anchor found — listen for the line and time its onset)"
             )
             parts.append(
-                f"- Line {anchor.line_index}: re-run `extract` with "
-                f"`--anchor {anchor.line_index}=<seconds>` and `--words {words_path}` "
+                f"- Line {anchor.line_index}: re-run `align` with "
+                f"`--anchor {anchor.line_index}=<seconds>` and "
+                f"`--words {quoted_words}` "
                 f"to skip re-transcription{near}."
             )
     else:

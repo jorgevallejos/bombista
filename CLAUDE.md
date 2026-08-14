@@ -1,10 +1,11 @@
-# CLAUDE.md — timeline-extractor
+# CLAUDE.md — bombista
 
 This file provides guidance to Claude Code when working in this repository.
 
 ## What This Tool Does
 
-`timeline-extractor` is a Python CLI that derives a lyric/subtitle timeline for a song by
+`bombista` (renamed from `timeline-extractor` on 2026-08-14) is a Python CLI that
+derives a lyric/subtitle timeline for a song by
 **forced-aligning its audio** (faster-whisper word timestamps + fuzzy line-anchoring) against
 the song's ordered lyric lines, and writes the result as a JSON file consumed by the
 **Live Lyric Translator**'s timeline-import surface. The tool **only defines the timeline** —
@@ -25,23 +26,23 @@ interchange format without coordinating with the translator side.
 ```bash
 pip install -e ".[dev]"     # Install in editable mode with dev deps
 python -m pytest            # Run all tests (includes one tiny-whisper integration test)
-timeline-extractor --help   # CLI entry point
+bombista --help   # CLI entry point
 
-# The workflow (extract stages, promote applies):
-timeline-extractor extract <audio.wav> <song.json|lyrics.txt> -o <staging-dir> \
+# The workflow (align stages, promote applies):
+bombista align <audio.wav> <song.json|lyrics.txt> -o <staging-dir> \
     [--model-size medium] [--lang es] [--anchor LINE=SECONDS] [--words <staging>/asr-words.jsonl] \
     [--emit timeline|songjson|report-json|srt|lrc|html]
-timeline-extractor promote <staging>/<song>-timeline.json <song.json>
+bombista promote <staging>/<song>-timeline.json <song.json>
 
 # One-off, for songs timed before timeline v2 (B13) — not part of the loop:
-timeline-extractor migrate <song.json> [--dry-run]
+bombista migrate <song.json> [--dry-run]
 ```
 
 The lyrics input may be a **CP song JSON or a plain text file** (one lyric line per line;
 blank and `[Bracketed]` lines are stripped and reported). Either is normalised to a CP-shaped
 song dict at the boundary before the pipeline runs — see `readers.py`.
 
-`extract` always writes `asr-words.jsonl` and `<song>-qa-report.md` into staging and **never
+`align` always writes `asr-words.jsonl` and `<song>-qa-report.md` into staging and **never
 touches the song JSON**. `--emit` (repeatable, default `timeline`) picks which outputs join
 them; passing it **replaces** the default set rather than adding to it. `--emit html` (B16)
 writes `<song>-review.html` — the QA report as a self-contained offline page with a play
@@ -53,7 +54,7 @@ timeline v2 contract, backs up the song JSON next to itself, and writes only
 `timelineVersion`, `leadIn` and `timeline`.
 
 `migrate` is the **one-off** for songs timed before v2 (B13): it rebases a *stored* v1
-timeline in place, applying exactly what `extract` applies to a fresh run. Both shipped
+timeline in place, applying exactly what `align` applies to a fresh run. Both shipped
 songs were migrated on 2026-08-14, so it should have nothing left to do — it refuses an
 already-v2 song rather than subtracting the lead-in twice.
 
@@ -68,7 +69,7 @@ song transcribes in ~50 s on this Mac (CPU int8).
 ## Architecture
 
 ```
-timeline_extractor/
+bombista/
   models.py      — Word (ASR word + times), TimelineEntry (mirrors songState.ts)
   readers.py     — the boundary: CP song JSON or plain text → canonical CP song dict
                    + a _bombista block (completeness, filledLang, missing, strippedLines).
@@ -91,8 +92,10 @@ timeline_extractor/
   migrate.py     — B13: rebase a stored v1 timeline onto the v2 start cue. Adds no rules
                    of its own (it composes normalize_to_lead_in / to_dict / merge_envelope)
                    — what it owns is the refusal set. Idempotent by refusal, not no-op.
-  cli.py         — click CLI: extract / promote / migrate
-tests/           — 251 tests; all fast except one tiny-model integration test on a
+  cli.py         — click CLI: align / promote / migrate. `extract` is a
+                   registered alias of `align` (B11) — the same Command object,
+                   so the two cannot drift
+tests/           — 263 tests; all fast except one tiny-model integration test on a
                    committed 12 s fixture (tests/fixtures/)
 docs/
   timeline-v2-contract.md           — THE live contract with the translator (Pregonero).

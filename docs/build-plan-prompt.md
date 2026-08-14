@@ -1,12 +1,12 @@
 # Claude Code prompt — production build (agenda #4 + #5 settled)
 
-Paste the block below into **Claude Code in the `timeline-extractor` repo** (not the translator).
+Paste the block below into **Claude Code in the `bombista` repo** (not the translator).
 Model: **Sonnet** (build/iterate). The design is settled in `docs/assignment-qa-design.md` — that
 file is the authority; this prompt just sequences the work.
 
 ---
 
-You are working in the `timeline-extractor` repo, building the production assignment + QA pipeline
+You are working in the `bombista` repo, building the production assignment + QA pipeline
 designed in `docs/assignment-qa-design.md`. Read that spec first — it is the source of truth for the
 algorithm, the confidence model, the QA loop, scope, and the definition of done. Do **not** redesign;
 implement it. The verified spike lives in `spike/change_detection.py` and is your starting reference
@@ -14,7 +14,7 @@ for the detection/OCR primitives (lift from it, don't re-derive). The frozen out
 `docs/output-contract.md`. The signed-off accuracy reference is `docs/spike-candidate-timeline.json`.
 
 **STEP 0 — guards, before any code:**
-1. Run `pwd && git remote -v && git status -sb`. Confirm the remote is `jorgevallejos/timeline-extractor`.
+1. Run `pwd && git remote -v && git status -sb`. Confirm the remote is `jorgevallejos/bombista`.
    If it is `live-lyric-translator-dev` or anything else, STOP and tell me — do not proceed.
 2. Confirm `serializer.py`'s `to_dict` is implemented (not raising `NotImplementedError`). If it still
    raises, the `feat/green-serializer` PR isn't merged — merge it (or tell me), then
@@ -25,7 +25,7 @@ for the detection/OCR primitives (lift from it, don't re-derive). The frozen out
    no mixing feature work with refactoring.
 
 **Build order** (each step maps to the spec; section numbers in parentheses):
-1. **Lift the spike into the package.** Split `spike/change_detection.py` into `timeline_extractor/`
+1. **Lift the spike into the package.** Split `spike/change_detection.py` into `bombista/`
    modules: `detect.py` (brightness edges), `split.py` (intra-text split), `ocr.py`, `align.py`,
    `confidence.py`, `report.py`. Keep behaviour identical first; unit-test each against small fixtures
    before changing anything. (§2)
@@ -68,7 +68,7 @@ continue. Report test status at each PR.
 
 ---
 
-## Side note — housekeeping in the OTHER repo (do NOT do this from the timeline-extractor window)
+## Side note — housekeeping in the OTHER repo (do NOT do this from the bombista window)
 
 In the **translator** repo, a stray empty `feat/timeline-import-button` branch (zero commits, == main)
 is still present from the 2026-06-24 misfire. Delete it there, in a translator-rooted window:

@@ -3,10 +3,14 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "timeline-extractor"
+name = "bombista"
 version = "0.1.0"
-description = "Derive a lyric/subtitle timeline from a lyrics-only video"
+description = "Forced-alignment triage for lyric and subtitle timelines"
 requires-python = ">=3.11"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Jorge Vallejos" }]
+keywords = ["forced-alignment", "subtitles", "captions", "surtitles", "lyrics", "timeline", "whisper", "srt", "lrc"]
 dependencies = [
     "click>=8.1",
     "faster-whisper>=1.0",
@@ -19,10 +23,10 @@ dev = [
 ]
 
 [project.scripts]
-timeline-extractor = "timeline_extractor.cli:main"
+bombista = "bombista.cli:main"
 
 [tool.setuptools]
-packages = ["timeline_extractor"]
+packages = ["bombista"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

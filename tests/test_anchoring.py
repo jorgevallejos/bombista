@@ -12,7 +12,7 @@ first word was mis-heard; else the line gets no anchor.
 Each anchored line also gets a confidence band derived from named
 signals (see anchoring.py module constants for the exact thresholds).
 """
-from timeline_extractor.anchoring import (
+from bombista.anchoring import (
     LineAnchor,
     anchor_lines,
     fuzzy_match,
@@ -20,7 +20,7 @@ from timeline_extractor.anchoring import (
     normalize_token,
     tokenize_line,
 )
-from timeline_extractor.models import Word
+from bombista.models import Word
 
 
 # ---------------------------------------------------------------------------

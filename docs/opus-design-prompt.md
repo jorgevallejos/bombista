@@ -5,9 +5,9 @@ production code) — it ends by producing a spec doc to hand to Sonnet in Claude
 
 ---
 
-Working on the **timeline-extractor** project. Load context per the Chango Pepper
-bootstrap (personal-context → current-priorities → projects/timeline-extractor/
-project-context.md), and also read `projects/timeline-extractor/docs/output-contract.md`.
+Working on the **bombista** project. Load context per the Chango Pepper
+bootstrap (personal-context → current-priorities → projects/bombista/
+project-context.md), and also read `projects/bombista/docs/output-contract.md`.
 Acknowledge, then engage.
 
 This is the **Opus design pass** (kickoff agenda #4 + #5). The change-detection spike

@@ -12,10 +12,10 @@ from pathlib import Path
 
 import pytest
 
-from timeline_extractor.anchoring import LineAnchor
-from timeline_extractor.models import TimelineEntry, Word
-from timeline_extractor.pipeline import build_timeline, normalize_to_lead_in
-from timeline_extractor.serializer import to_dict
+from bombista.anchoring import LineAnchor
+from bombista.models import TimelineEntry, Word
+from bombista.pipeline import build_timeline, normalize_to_lead_in
+from bombista.serializer import to_dict
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

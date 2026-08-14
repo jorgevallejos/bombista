@@ -1,18 +1,18 @@
 # Dispatch — Timeline Extractor v1 via Forced Alignment (pivot) + Translator Housekeeping
 
-_2026-07-03. Two paste blocks for Claude Code (Fable/Opus coordinator + Sonnet crew). **Block A** goes in the **timeline-extractor** repo window; **Block B** goes in the **live-lyric-translator** repo window. Check the repo path Claude Code echoes before pasting (lesson from the 2026-06-24 wrong-repo incident)._
+_2026-07-03. Two paste blocks for Claude Code (Fable/Opus coordinator + Sonnet crew). **Block A** goes in the **bombista** repo window; **Block B** goes in the **live-lyric-translator** repo window. Check the repo path Claude Code echoes before pasting (lesson from the 2026-06-24 wrong-repo incident)._
 
 **Decision context:** the translator's ASR spike (2026-07-03, branch `spike/asr-following` there, report `docs/asr-spike-report-2026-07.md`) closed live-ASR following as NO-GO but proved **offline forced alignment** (faster-whisper `medium`, near-verbatim word timings, 46 s/song) is the right way to *author* timelines. This pivots the extractor's core from video change-detection + OCR to audio alignment, and finishes the project. Scope agreed with Jorge: **the tool only defines the timeline** — it never edits lyric text.
 
 ---
 
-## Block A — paste into Claude Code at the **timeline-extractor** repo
+## Block A — paste into Claude Code at the **bombista** repo
 
 You are the **coordinator** (PM role) for finishing this project. You frame, dispatch Sonnet subagents (worktree isolation) for build slices, integrate, and bring Jorge results + things to test. Follow the repo's `/release` flow (feature branches, TDD, PRs via `gh`); auto-merge on green is authorized as in the translator's recent batches, **end to end — including the final promote**. Jorge tests the finished result in the app afterwards.
 
 ### Step 0 — guards + housekeeping, before any building
 
-1. `pwd && git remote -v && git status -sb` — confirm remote is `jorgevallejos/timeline-extractor`. If not, STOP.
+1. `pwd && git remote -v && git status -sb` — confirm remote is `jorgevallejos/bombista`. If not, STOP.
 2. Housekeeping: `main` is 1 commit ahead of origin (unpushed) and the design docs (`docs/assignment-qa-design.md`, `docs/build-plan-prompt.md`, `docs/opus-design-prompt.md`, `docs/spike-candidate-timeline.json`, `docs/spike-change-detection-prompt.md`, this file) are untracked. Commit the docs to `main`, push. Leave `feat/lift-spike` and `feat/dp-alignment` **parked as-is** (pushed, unmerged — the superseded video-OCR track; do not delete, do not merge). Checkout a clean, pushed `main` before building.
 3. Read before framing: `docs/output-contract.md` (frozen output shape), `docs/assignment-qa-design.md` §4–§5 (confidence bands + `extract`→`promote` — the concepts carry over), and in the translator repo (`../live-lyric-translator-dev`, branch `spike/asr-following`): `spike/harness/derive_ground_truth.py` + `docs/asr-spike-report-2026-07.md` — the proven reference implementation to port, plus its known failure mode (a misheard anchor: "hacia el fuego ardiente" → REVIEW case).
 
@@ -26,7 +26,7 @@ You are the **coordinator** (PM role) for finishing this project. You frame, dis
 
 ### Slices (dispatch to Sonnet; S1 ∥ S2, then S3, then S4)
 
-- **S1 — aligner core:** port the spike's transcription + word-timestamp machinery into `timeline_extractor/aligner.py`; venv/model handling; tested against a short fixture.
+- **S1 — aligner core:** port the spike's transcription + word-timestamp machinery into `bombista/aligner.py`; venv/model handling; tested against a short fixture.
 - **S2 — anchoring + confidence:** pure functions, unit-tested (clean match, misheard anchor, repeated-chorus ambiguity, skipped line, `--anchor` override).
 - **S3 — CLI + serializer + QA report:** wire `extract`/`promote` through the existing `serializer.py` and `models.py`; report generation.
 - **S4 — acceptance on Tragedia** (see below).
@@ -48,7 +48,7 @@ Report: results per slice, calibration numbers, the QA report, and proposed memo
 Housekeeping only — no feature work. Guard first: `pwd && git remote -v` must show `jorgevallejos/live-lyric-translator`. If not, STOP.
 
 1. Push the spike branch for preservation: `git push -u origin spike/asr-following`. No PR, no merge — the report and reusable scripts live there.
-2. On a small docs branch off `main`: commit `docs/asr-following-spike-kickoff-2026-07-03.md` (currently untracked), and add this note to `CLAUDE.md`'s song-data section: *"`timeline` values are only meaningful relative to the linked video's own clock — generate/validate them against that video's audio (`media.offset` compensates). The 2026-07 ASR spike found the shipped Tragedia timeline ~17 s off. Forced alignment on the video's audio (timeline-extractor) is the sanctioned way to author timelines."* PR via `/release`, merge on green.
+2. On a small docs branch off `main`: commit `docs/asr-following-spike-kickoff-2026-07-03.md` (currently untracked), and add this note to `CLAUDE.md`'s song-data section: *"`timeline` values are only meaningful relative to the linked video's own clock — generate/validate them against that video's audio (`media.offset` compensates). The 2026-07 ASR spike found the shipped Tragedia timeline ~17 s off. Forced alignment on the video's audio (bombista) is the sanctioned way to author timelines."* PR via `/release`, merge on green.
 3. Delete the stray empty branch: `git branch -d feat/timeline-import-button` (verify it's still == `main` first).
 4. Do **not** commit the untracked `spike/` directory sitting on the `main` working tree (venv + WAVs — it belongs to the spike branch); confirm `.gitignore` keeps it out or leave it untracked.
 5. Report: confirm whether the A+ timeline-import button (Prompt 16) exists on `main`. If it doesn't, say so and stop — building it is a separate decision for Jorge (manual `promote` into the song JSON covers v1).

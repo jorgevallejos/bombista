@@ -27,7 +27,7 @@ Take the currently staged/unstaged changes (or the current branch if changes are
 
 Treat all of the following as legitimate, releasable project artifacts:
 
-- Source code anywhere under `timeline_extractor/`, `tests/`, `docs/`, `scripts/`
+- Source code anywhere under `bombista/`, `tests/`, `docs/`, `scripts/`
 - Project metadata: `pyproject.toml`, `.gitignore`, `README.md`
 - Repo-level `CLAUDE.md`
 - **`.claude/commands/*.md`** — shared Claude Code slash commands

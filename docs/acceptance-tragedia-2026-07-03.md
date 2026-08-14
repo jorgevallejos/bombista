@@ -1,7 +1,7 @@
 # Acceptance run — Tragedia de Cerdo Asado (2026-07-03)
 
 Slice **S4 — acceptance on Tragedia** for forced-alignment v1. Full end-to-end run of
-`timeline-extractor extract` / `promote` against the real production song file and its
+`bombista extract` / `promote` against the real production song file and its
 linked animation video, with operator review of the QA report and promotion into the
 song JSON.
 
@@ -25,13 +25,13 @@ ffmpeg -i "Tragedia de Cerdo Asado.mp4" -vn -ac 1 -ar 16000 \
   runs/tragedia-2026-07-03/tragedia-master-16k.wav
 
 # 2. First extract pass (real transcription)
-.venv/bin/timeline-extractor extract \
+.venv/bin/bombista extract \
   runs/tragedia-2026-07-03/tragedia-master-16k.wav \
   "/Users/jorgevallejos/Chango Pepper/songs/tragedia-de-cerdo-asado.json" \
   -o runs/tragedia-2026-07-03
 
 # 3. Re-run with hand anchors (reuses saved ASR words, no re-transcription)
-.venv/bin/timeline-extractor extract \
+.venv/bin/bombista extract \
   runs/tragedia-2026-07-03/tragedia-master-16k.wav \
   "/Users/jorgevallejos/Chango Pepper/songs/tragedia-de-cerdo-asado.json" \
   -o runs/tragedia-2026-07-03 \
@@ -39,7 +39,7 @@ ffmpeg -i "Tragedia de Cerdo Asado.mp4" -vn -ac 1 -ar 16000 \
   --anchor 0=0.96 --anchor 13=58.5
 
 # 4. Promote
-.venv/bin/timeline-extractor promote \
+.venv/bin/bombista promote \
   runs/tragedia-2026-07-03/tragedia-de-cerdo-asado-timeline.json \
   "/Users/jorgevallejos/Chango Pepper/songs/tragedia-de-cerdo-asado.json"
 ```
@@ -155,7 +155,7 @@ spike had promoted earlier — expected, since this song's current timeline *is*
 spike's ground truth and the calibration above shows exact convergence.
 
 The line 28 `end` change is **expected pipeline behavior, not an anomaly**: per
-`timeline_extractor/pipeline.py`, the last lyric line's `end` is set to
+`bombista/pipeline.py`, the last lyric line's `end` is set to
 `last_transcribed_word_end + LAST_LINE_PAD` (`LAST_LINE_PAD = 1.0`). The last
 transcribed word in this pass ended at 159.48 s (audio duration 159.509 s), giving
 `159.48 + 1.0 = 160.48`. The previous value (140.0) was presumably a hand-set or

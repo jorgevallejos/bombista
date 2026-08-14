@@ -1,0 +1,217 @@
+{
+  "title": "Tragedia (timings fixture)",
+  "notes": "B13 regression fixture. The 29 raw timeline entries and the media block are the real v1 data from songs/tragedia-de-cerdo-asado.json as of 2026-08-14; the lyric texts are placeholders on purpose — migration is positional on timings, so only the line COUNT matters here, and this repo is headed for public (B10).",
+  "media": {
+    "type": "video",
+    "src": "tragedia-de-cerdo-asado.mp4",
+    "offset": 0,
+    "trimStart": 0
+  },
+  "lyrics": [
+    {
+      "es": "linea 0"
+    },
+    {
+      "es": "linea 1"
+    },
+    {
+      "es": "linea 2"
+    },
+    {
+      "es": "linea 3"
+    },
+    {
+      "es": "linea 4"
+    },
+    {
+      "es": "linea 5"
+    },
+    {
+      "es": "linea 6"
+    },
+    {
+      "es": "linea 7"
+    },
+    {
+      "es": "linea 8"
+    },
+    {
+      "es": "linea 9"
+    },
+    {
+      "es": "linea 10"
+    },
+    {
+      "es": "linea 11"
+    },
+    {
+      "es": "linea 12"
+    },
+    {
+      "es": "linea 13"
+    },
+    {
+      "es": "linea 14"
+    },
+    {
+      "es": "linea 15"
+    },
+    {
+      "es": "linea 16"
+    },
+    {
+      "es": "linea 17"
+    },
+    {
+      "es": "linea 18"
+    },
+    {
+      "es": "linea 19"
+    },
+    {
+      "es": "linea 20"
+    },
+    {
+      "es": "linea 21"
+    },
+    {
+      "es": "linea 22"
+    },
+    {
+      "es": "linea 23"
+    },
+    {
+      "es": "linea 24"
+    },
+    {
+      "es": "linea 25"
+    },
+    {
+      "es": "linea 26"
+    },
+    {
+      "es": "linea 27"
+    },
+    {
+      "es": "linea 28"
+    }
+  ],
+  "timeline": [
+    {
+      "start": 0.96,
+      "end": 3.76
+    },
+    {
+      "start": 3.76,
+      "end": 8.0
+    },
+    {
+      "start": 8.0,
+      "end": 12.04
+    },
+    {
+      "start": 12.04,
+      "end": 15.9
+    },
+    {
+      "start": 15.9,
+      "end": 19.72
+    },
+    {
+      "start": 19.72,
+      "end": 23.24
+    },
+    {
+      "start": 23.24,
+      "end": 30.46
+    },
+    {
+      "start": 30.46,
+      "end": 38.24
+    },
+    {
+      "start": 38.24,
+      "end": 42.04
+    },
+    {
+      "start": 42.04,
+      "end": 45.62
+    },
+    {
+      "start": 45.62,
+      "end": 48.14
+    },
+    {
+      "start": 48.14,
+      "end": 55.2
+    },
+    {
+      "start": 55.2,
+      "end": 58.5
+    },
+    {
+      "start": 58.5,
+      "end": 62.16
+    },
+    {
+      "start": 62.16,
+      "end": 68.8
+    },
+    {
+      "start": 68.8,
+      "end": 72.92
+    },
+    {
+      "start": 72.92,
+      "end": 76.6
+    },
+    {
+      "start": 76.6,
+      "end": 83.84
+    },
+    {
+      "start": 83.84,
+      "end": 88.74
+    },
+    {
+      "start": 88.74,
+      "end": 91.48
+    },
+    {
+      "start": 91.48,
+      "end": 95.74
+    },
+    {
+      "start": 95.74,
+      "end": 102.6
+    },
+    {
+      "start": 102.6,
+      "end": 106.4
+    },
+    {
+      "start": 106.4,
+      "end": 112.22
+    },
+    {
+      "start": 112.22,
+      "end": 120.44
+    },
+    {
+      "start": 120.44,
+      "end": 127.96
+    },
+    {
+      "start": 127.96,
+      "end": 132.0
+    },
+    {
+      "start": 132.0,
+      "end": 136.16
+    },
+    {
+      "start": 136.16,
+      "end": 160.48
+    }
+  ]
+}

@@ -16,6 +16,7 @@ from timeline_extractor.aligner import save_words
 from timeline_extractor.cli import main
 from timeline_extractor.models import Word
 from timeline_extractor.provenance import compute_lines_hash
+from timeline_extractor.writers import ENVELOPE_KEYS
 
 
 # ---------------------------------------------------------------------------
@@ -1106,3 +1107,147 @@ def test_extract_native_envelope_never_carries_linesHash(workspace):
     )
     assert set(envelope.keys()) == {"timelineVersion", "leadIn", "timeline"}
     assert "linesHash" not in envelope
+
+
+# ---------------------------------------------------------------------------
+# migrate — B13: rebase a shipped v1 song onto the start cue, in place
+# ---------------------------------------------------------------------------
+
+MIGRATE_FIXTURE = Path(__file__).parent / "fixtures" / "libertad-song.json"
+
+
+@pytest.fixture
+def migrate_ws(tmp_path):
+    """A copy of the real shipped v1 Libertad, byte-for-byte, in a tmp dir."""
+    song = tmp_path / "libertad.json"
+    song.write_bytes(MIGRATE_FIXTURE.read_bytes())
+    return {"dir": tmp_path, "song": song}
+
+
+def run_migrate(ws, *extra):
+    return CliRunner().invoke(main, ["migrate", str(ws["song"]), *extra])
+
+
+def test_migrate_rebases_the_song_in_place(migrate_ws):
+    result = run_migrate(migrate_ws)
+
+    assert result.exit_code == 0, result.output
+    migrated = json.loads(migrate_ws["song"].read_text(encoding="utf-8"))
+    assert migrated["timelineVersion"] == 2
+    assert migrated["leadIn"]["durationSec"] == 7.26
+    assert migrated["leadIn"]["apply"] is False
+    assert migrated["timeline"][0] == {"start": 0.00, "end": 5.84}
+    assert len(migrated["timeline"]) == 20
+
+
+def test_migrate_backs_up_the_original_before_writing(migrate_ws):
+    original = migrate_ws["song"].read_bytes()
+
+    result = run_migrate(migrate_ws)
+
+    assert result.exit_code == 0, result.output
+    backups = list(migrate_ws["dir"].glob("libertad.json.backup-*"))
+    assert len(backups) == 1
+    assert re.search(r"backup-\d{8}-\d{6}$", backups[0].name)
+    assert backups[0].read_bytes() == original
+    assert str(backups[0]) in result.output
+
+
+def test_migrate_never_overwrites_an_existing_backup(migrate_ws):
+    """The two shipped songs already have older `.backup-*` siblings; a
+    new one must be written alongside them, never over them."""
+    older = migrate_ws["dir"] / "libertad.json.backup-20260811-164840"
+    older.write_bytes(b"the older backup, do not touch\n")
+
+    result = run_migrate(migrate_ws)
+
+    assert result.exit_code == 0, result.output
+    assert older.read_bytes() == b"the older backup, do not touch\n"
+    assert len(list(migrate_ws["dir"].glob("libertad.json.backup-*"))) == 2
+
+
+def test_migrate_leaves_no_temp_file_behind(migrate_ws):
+    result = run_migrate(migrate_ws)
+
+    assert result.exit_code == 0, result.output
+    assert [p.name for p in migrate_ws["dir"].glob("*.tmp-*")] == []
+
+
+def test_migrate_preserves_the_rest_of_the_file_byte_for_byte(migrate_ws):
+    """A diff of the migrated file must show only `timeline` plus the two
+    added keys. Asserted two ways, because either alone has a hole: the
+    file text ahead of the envelope is compared byte for byte (catches
+    reformatting, re-escaped unicode, changed indentation), and every
+    preserved key is compared by its serialized value and its position
+    (catches a value quietly rewritten further down the file)."""
+    original_text = migrate_ws["song"].read_text(encoding="utf-8")
+
+    result = run_migrate(migrate_ws)
+
+    assert result.exit_code == 0, result.output
+    migrated_text = migrate_ws["song"].read_text(encoding="utf-8")
+
+    # 1. everything ahead of the envelope, byte for byte
+    cut = original_text.index('  "timeline": [')
+    assert migrated_text[:cut] == original_text[:cut]
+
+    # 2. every non-envelope key: same order, same serialized bytes
+    original, migrated = json.loads(original_text), json.loads(migrated_text)
+    preserved = [k for k in original if k not in ENVELOPE_KEYS]
+    assert [k for k in migrated if k not in ENVELOPE_KEYS] == preserved
+    for key in preserved:
+        assert json.dumps(migrated[key], indent=2, ensure_ascii=False) == json.dumps(
+            original[key], indent=2, ensure_ascii=False
+        ), f"{key} was not preserved"
+
+    # 3. the file still ends in a single trailing newline
+    assert migrated_text.endswith("}\n") and not migrated_text.endswith("}\n\n")
+
+
+def test_migrate_is_idempotent_by_refusing_a_second_run(migrate_ws):
+    """Running it twice must not subtract the lead-in twice — and must
+    say so loudly rather than silently no-op."""
+    assert run_migrate(migrate_ws).exit_code == 0
+    after_first = migrate_ws["song"].read_bytes()
+
+    result = run_migrate(migrate_ws)
+
+    assert result.exit_code != 0
+    assert "already timeline v2" in result.output
+    assert migrate_ws["song"].read_bytes() == after_first
+
+
+def test_migrate_leaves_the_song_untouched_when_it_refuses(migrate_ws):
+    """Refusal happens before anything is written — no backup, no partial
+    file, no scratch file."""
+    song = json.loads(migrate_ws["song"].read_text(encoding="utf-8"))
+    song["timeline"] = song["timeline"][:-1]
+    payload = json.dumps(song, indent=2, ensure_ascii=False) + "\n"
+    migrate_ws["song"].write_text(payload, encoding="utf-8")
+
+    result = run_migrate(migrate_ws)
+
+    assert result.exit_code != 0
+    assert "lyric" in result.output
+    assert migrate_ws["song"].read_text(encoding="utf-8") == payload
+    assert list(migrate_ws["dir"].glob("libertad.json.backup-*")) == []
+    assert list(migrate_ws["dir"].glob("*.tmp-*")) == []
+
+
+def test_migrate_reports_what_moved(migrate_ws):
+    result = run_migrate(migrate_ws)
+
+    assert result.exit_code == 0, result.output
+    assert "7.26" in result.output
+    assert "line 0:" in result.output
+
+
+def test_migrate_dry_run_writes_nothing(migrate_ws):
+    original = migrate_ws["song"].read_bytes()
+
+    result = run_migrate(migrate_ws, "--dry-run")
+
+    assert result.exit_code == 0, result.output
+    assert migrate_ws["song"].read_bytes() == original
+    assert list(migrate_ws["dir"].glob("libertad.json.backup-*")) == []
+    assert "7.26" in result.output

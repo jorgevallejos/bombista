@@ -31,6 +31,7 @@ from .models import TimelineEntry
 from .report import band_counts
 
 __all__ = [
+    "ENVELOPE_KEYS",
     "merge_envelope",
     "build_bombista_block",
     "write_songjson",
@@ -39,7 +40,10 @@ __all__ = [
     "write_lrc",
 ]
 
-_ENVELOPE_KEYS = ("timelineVersion", "leadIn", "timeline")
+ENVELOPE_KEYS = ("timelineVersion", "leadIn", "timeline")
+"""The three envelope keys, in contract order. Public because `migrate.py`
+needs the same ordered tuple to reason about "everything except the
+envelope" — one definition, not a copy."""
 
 
 def merge_envelope(song: dict, envelope: dict) -> dict:
@@ -58,25 +62,25 @@ def merge_envelope(song: dict, envelope: dict) -> dict:
     missing any of them raises ValueError *before* anything is written,
     rather than producing a half-stamped song.
     """
-    absent = [k for k in _ENVELOPE_KEYS if k not in envelope]
+    absent = [k for k in ENVELOPE_KEYS if k not in envelope]
     if absent:
         raise ValueError(
             f"refusing to merge a partial envelope — missing {absent}. "
-            f"{list(_ENVELOPE_KEYS)} are written as a unit or not at all"
+            f"{list(ENVELOPE_KEYS)} are written as a unit or not at all"
         )
 
     new_song: dict = {}
     inserted = False
     for key, value in song.items():
-        if key in _ENVELOPE_KEYS:
+        if key in ENVELOPE_KEYS:
             if not inserted:
-                for k in _ENVELOPE_KEYS:
+                for k in ENVELOPE_KEYS:
                     new_song[k] = envelope[k]
                 inserted = True
             continue
         new_song[key] = value
     if not inserted:
-        for k in _ENVELOPE_KEYS:
+        for k in ENVELOPE_KEYS:
             new_song[k] = envelope[k]
     return new_song
 

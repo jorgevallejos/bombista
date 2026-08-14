@@ -313,10 +313,11 @@ Because normalisation happens at the boundary (§2), **every item below is addit
 | **B6** | `--lead` global offset knob | Whole-timeline nudge without re-anchoring line by line. | S |
 | **B8** | Batch mode — N songs, one summary table | Ergonomics once the catalogue is >2 songs. Relevant as soon as the audio exists. | M |
 | **B9** | Decide the canonical import path | `promote` writes `songs/*.json`; the A+ button patches the app's localStorage snapshot. Two destinations, nothing reconciles them. | S (decision) |
-| **B10** | README with §1 positioning; repo public | The `/tramoya` page needs somewhere to point. | S |
+| **B10** | README with §1 positioning; repo public | The `/tramoya` page needs somewhere to point. **Sequence it *after* the rename (step 11), not before** — otherwise every "timeline-extractor" in it gets rewritten a week later. "Repo public" is a separate positioning decision, not housekeeping; decide it explicitly, and separately per tool. | S |
 | **B11** | `align` as primary verb, `extract` kept as alias | "Forced alignment" is the category word. Cosmetic; last. | S |
 | **B15** | **`songs/_template.json` does not parse as JSON** — fails at line 28, col 8 (presumably placeholders). Make it valid JSON, or rename it out of `*.json`. | Harmless today: nothing points at it. But B5's reader would fall through to the plain-text path and treat the whole template as lyrics. Spotted while verifying B13, 2026-08-14. | S |
-| **B14** | **Derive and propose the BPM from the aligned onsets** | Ten songs still need a `tempo` block, and **no tempo means no Auto mode** (rule, 2026-08-14). Bombista already holds the onsets, so it can fit the tempo instead of Jorge guessing — and a tempo derived from the timeline agrees with the timeline *by construction*. **Method verified 2026-08-14:** fitting Libertad's onsets gives 66.68 bpm against 66.67 declared — 0.02% rate error, 0.02 s accumulated across the whole song. | M |
+| **B14** | **Derive and propose the BPM from the aligned onsets** | Ten songs still need a `tempo` block, and **no tempo means no Auto mode** (rule, 2026-08-14). Bombista already holds the onsets, so it can fit the tempo instead of Jorge guessing — and a tempo derived from the timeline agrees with the timeline *by construction*. **Method verified 2026-08-14:** fitting Libertad's onsets gives 66.68 bpm against 66.67 declared — 0.02% rate error, 0.02 s accumulated across the whole song. **Upgraded in value by P9** — no tempo now means no pulse *and* no performed-tempo scaling. | M |
+| **B16** | **`--emit html` — a self-contained review page** | Chosen 2026-08-14 over building a Bombista GUI (see the interface decision below). The CLI is not the friction; the friction is that judging a `REVIEW` line means *hearing* the audio at 55.88 s, which today means opening the m4a elsewhere and scrubbing. One page, audio embedded, a seek-and-play button per line, REVIEW lines highlighted, the `--anchor` command pre-written beside each. Slots in beside `srt`/`lrc` as another writer in B2's architecture — no Electron, no second app, no packaging. **Worth doing before the 8-song batch** — it pays for itself over 8 reviews. | M |
 
 ### Pregonero (live-lyric-translator) — implied by B12/B3
 
@@ -340,10 +341,44 @@ Four findings from that test session, none of them blocking the merge:
 | **P7** | **The `A✓` badge should mean "v2 timeline", not "has a timeline"** | A stale v1 song shows a green `A✓` and looks fully configured while silently taking the legacy path. |
 | **P8** | **Warn when importing a song whose title already exists** | Cost Jorge a debugging round on 2026-08-14: removing Libertad from the *setlist* left the v1 copy in the *library*, the import added a second, and the setlist kept pointing at the old one. Two identically-titled songs are indistinguishable in the UI. Related to **B9**. |
 
+**Priority call, 2026-08-14: P5 and P6 are pulled forward, ahead of the rename and the site work.** Jorge is playing to the pulse for the 21 Aug solo-ready date. P5 is therefore not polish — `startAtCue` re-phasing the pulse means the click jumps under his fingers at the exact moment he starts singing, which is a live failure. P6 is the escape hatch when drift shows up mid-song. P7 and P8 stay lower. Kickoff: `projects/live-lyric-translator/docs/pregonero-p5-p6-p9-kickoff.md`.
+
+### P9 — performed-tempo scaling (added 2026-08-14)
+
+**Question (Jorge):** if he decides to play a song at a different tempo, should Bombista rewrite the timestamps, or should Pregonero scale them on the fly?
+
+**Answer: Pregonero, live. Never Bombista.**
+
+The timeline is a **measurement of the recording** — a true statement about that audio file, and it stays true however the song is played on a given night. A performed tempo is a fact about *the performance*. Rewriting the file to match it would put a value in the timeline that no longer corresponds to the audio it was measured from — the exact silent-failure class **B1** exists to kill.
+
+This is the same shape as `leadIn`, and that is the argument: **Bombista always measures and records; the consumer decides whether and how to apply.** `leadIn.apply` is a playback switch; performed tempo is a playback switch. One rule, applied twice — no new concepts, and modes are where bugs live.
+
+```
+scale        = tempo.bpm (declared, from the recording) / performedBpm
+cueTime[i]   = timeline[i].start × scale
+```
+
+**Why linear scaling is sound here, when normally it would not be.** The standard objection is that humans do not slow down uniformly — they stretch verses, hold the last chord, keep the bridge — so the error accumulates and the last lines land seconds out. That objection does not apply **because of P5**: the pulse runs at the performed tempo and Jorge plays to it, so he is metronomically uniform at that tempo *by construction*. The click enforces the thing that would otherwise be an unsafe assumption. And because the pulse and the scaled timeline both derive from the same number, they cannot drift apart — satisfying rule 2 below by construction.
+
+**Honest limit:** this holds while he is on the click. Off it, linear scaling degrades like any other approach would. **P6 is the escape hatch** — a second reason it belongs before 21 Aug.
+
+**The trap — never overwrite `tempo.bpm`.** That field is the recording's tempo and the anchor the whole scale depends on. Overwrite it once and the scaling silently becomes relative to a past gig, with nothing to detect it. If the performed tempo persists at all it persists as a **separate key, `performedBpm`**, with `tempo.bpm` untouched.
+
+**Live safety:** adjustable while idle, **frozen once armed.** Changing the scale mid-song would jump the current line under the performer.
+
 ### Rules established 2026-08-14
 
 1. **No `tempo` block → no Auto mode.** Tempo is a prerequisite, not a nicety. Only 3 of 13 songs have one; see **B14**.
 2. **The pulse and the timeline are separate clocks.** A constant offset between them is fine; what must match is the *rate*, so any shift stays consistent instead of accumulating. Verified on Libertad: 0.02 s across the whole song.
+3. **The timeline measures the recording; the performance is a playback-side transform.** Anything describing how a song is played on a given night — lead-in application, performed tempo — is applied by Pregonero at playback and never written back over the measured values. Bombista measures and records; the consumer decides. (Established via P9.)
+
+### Interface decision, 2026-08-14: no Bombista GUI
+
+Considered and declined for now. Bombista runs ~8 times over the next two weeks and then goes quiet; building an interface for a tool about to go idle is premature. A real GUI only pays off if the generic positioning in §1 (theatre surtitles, captioning, karaoke) is a bet actually being placed — which is not a bet to make three weeks before a new job starts.
+
+The friction is not the CLI. It is that judging a `REVIEW` line requires *hearing* the audio at a candidate timestamp. **B16 (`--emit html`) captures most of that value at a fraction of the cost.** Revisit the GUI question after the 8-song batch, with real data on how many minutes review actually took.
+
+A third option was named and deliberately rejected: putting the timing UI *inside* Pregonero, which already has the library, the audio and an Electron shell. It is the cheapest path to a real GUI, but it fuses two stations the Tramoya framing says should stay separable, and drags Bombista's language-independence into an app that is entirely about language.
 
 ---
 

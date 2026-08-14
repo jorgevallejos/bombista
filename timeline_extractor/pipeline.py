@@ -1,13 +1,13 @@
 """
 Pure timeline-building: anchors + word stream + song items -> TimelineEntry list.
 
-One entry per song item, in item order (the contract's parallel-array rule):
+One entry per song item, in item order (the contract's parallel-array rule).
+Every item must be a lyric line (a dict carrying the chosen language key) —
+section markers and meta entries are no longer supported; encountering one
+raises ValueError naming the offending index.
 
-- Section markers (any item that is not a dict carrying the chosen language
-  key) get the `{start: 0, end: 0}` placeholder and are skipped in alignment.
 - Lyric line i runs from its anchor's start to the NEXT lyric line's anchor
-  start (display-card continuity — markers between lyric lines don't break
-  the chain).
+  start.
 - The last lyric line ends at the last transcribed word's end + LAST_LINE_PAD.
 - A FAIL anchor (start is None) gets a start linearly interpolated between
   the nearest anchored neighbors (with the song edges as virtual endpoints:
@@ -29,16 +29,30 @@ LAST_LINE_PAD = 1.0
 
 
 def is_lyric_item(item: object, lang: str) -> bool:
-    """A lyric item is a dict carrying the chosen language key; anything else
-    (bare strings, `{"type": "section", ...}` dicts, dicts in other languages
-    only) is a section marker."""
+    """A lyric item is a dict carrying the chosen language key as a string."""
     return isinstance(item, dict) and isinstance(item.get(lang), str)
 
 
+def _require_lyric_items(items: Sequence[object], lang: str) -> None:
+    """Raises ValueError naming the index of the first item that is not a
+    lyric line. Section markers and meta entries are no longer supported —
+    every entry in a song's `lyrics` array must carry the chosen language
+    key."""
+    for i, item in enumerate(items):
+        if not is_lyric_item(item, lang):
+            raise ValueError(
+                f"lyrics[{i}]: not a lyric line — every entry must be an "
+                f"object carrying the {lang!r} key (section markers and "
+                f"meta entries are no longer supported)"
+            )
+
+
 def lyric_lines(items: Sequence[object], lang: str) -> list[str]:
-    """The ordered canonical lyric texts (markers skipped). A text may contain
-    embedded newlines — it is still one line, one timeline entry."""
-    return [item[lang] for item in items if is_lyric_item(item, lang)]
+    """The ordered canonical lyric texts. A text may contain embedded
+    newlines — it is still one line, one timeline entry. Raises ValueError
+    (see `_require_lyric_items`) if any item is not a lyric line."""
+    _require_lyric_items(items, lang)
+    return [item[lang] for item in items]
 
 
 def _fill_missing_starts(
@@ -72,17 +86,18 @@ def build_timeline(
     *,
     lang: str = "es",
 ) -> list[TimelineEntry]:
-    """Build the contract-shaped timeline: one entry per item, markers {0,0}.
+    """Build the contract-shaped timeline: one entry per item, 1:1 in order.
 
-    `anchors` is parallel to the lyric lines of `items` (markers excluded),
-    as produced by `anchoring.anchor_lines`. Raises ValueError if the counts
-    disagree or the result violates the output contract.
+    `items` must all be lyric lines (see `_require_lyric_items`); `anchors`
+    is parallel to them, as produced by `anchoring.anchor_lines`. Raises
+    ValueError if any item is not a lyric line, if the counts disagree, or
+    if the result violates the output contract.
     """
-    lyric_positions = [i for i, item in enumerate(items) if is_lyric_item(item, lang)]
-    if len(anchors) != len(lyric_positions):
+    _require_lyric_items(items, lang)
+    if len(anchors) != len(items):
         raise ValueError(
             f"anchor count ({len(anchors)}) must match lyric-line count "
-            f"({len(lyric_positions)}) of the song's items"
+            f"({len(items)}) of the song's items"
         )
 
     ordered = sorted(anchors, key=lambda a: a.line_index)
@@ -90,14 +105,40 @@ def build_timeline(
     starts = _fill_missing_starts([a.start for a in ordered], last_word_end)
     starts = [round(s, 2) for s in starts]
 
-    entries: list[TimelineEntry] = [TimelineEntry(0.0, 0.0) for _ in items]
-    for k, item_index in enumerate(lyric_positions):
+    entries: list[TimelineEntry] = []
+    for k in range(len(items)):
         start = starts[k]
         if k + 1 < len(starts):
             end = starts[k + 1]
         else:
             end = round(max(start, last_word_end + LAST_LINE_PAD), 2)
-        entries[item_index] = TimelineEntry(start, end)
+        entries.append(TimelineEntry(start, end))
 
     validate_timeline(entries)
     return entries
+
+
+def normalize_to_lead_in(
+    entries: Sequence[TimelineEntry],
+) -> tuple[float, list[TimelineEntry]]:
+    """Rebase a raw (audio-clock) timeline onto a start cue (timeline v2,
+    docs/timeline-v2-contract.md).
+
+    `lead_in` is `entries[0].start` (the measured onset of line 0), rounded
+    to 2 decimals. Every returned entry is `round(raw_value - lead_in, 2)`,
+    so entry 0 always starts at exactly `0.0`. Pure, stdlib only — does not
+    touch the song dict or decide whether the lead-in should be applied at
+    playback (that's `leadIn.apply`, decided in the serializer from
+    `media.type`).
+
+    An empty *entries* returns `(0.0, [])`.
+    """
+    if not entries:
+        return 0.0, []
+
+    lead_in = round(entries[0].start, 2)
+    normalized = [
+        TimelineEntry(round(e.start - lead_in, 2), round(e.end - lead_in, 2))
+        for e in entries
+    ]
+    return lead_in, normalized

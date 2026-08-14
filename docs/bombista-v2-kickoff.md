@@ -9,9 +9,10 @@ You are the **coordinator** for this piece of work. Do not hand-execute the whol
 
 ## Context — read before doing anything
 
-1. `projects/timeline-extractor/docs/bombista-product-backlog.md` — **the spec.** §2 (architecture and timing model) is the part that matters most; §4 is the item list.
-2. `projects/timeline-extractor/CLAUDE.md` and `project-context.md` — house rules and current state.
-3. `CLAUDE.md` at the vault root — standing rules.
+1. `projects/timeline-extractor/docs/timeline-v2-contract.md` — **the shared contract with Pregonero, which is being built in a parallel session right now.** Read this first. It fixes the envelope, the rounding rule, and a golden fixture you must produce exactly. Do not invent your own shape; if something there is wrong or insufficient, stop and raise it with Jorge rather than diverging.
+2. `projects/timeline-extractor/docs/bombista-product-backlog.md` — **the spec.** §2 (architecture and timing model) is the part that matters most; §4 is the item list.
+3. `projects/timeline-extractor/CLAUDE.md` and `project-context.md` — house rules and current state.
+4. `CLAUDE.md` at the vault root — standing rules.
 
 Primary repo: `projects/timeline-extractor` (its own repo, a submodule of the vault).
 **One item (B13) writes to the `songs` submodule** — a different repo. Treat that boundary carefully.
@@ -23,6 +24,8 @@ Primary repo: `projects/timeline-extractor` (its own repo, a submodule of the va
 3. **Bombista is never told whether to apply the lead-in.** It always measures, always normalises, always records. Applying it is a playback decision made downstream.
 4. **Tests green before every commit.** One commit per work item, with the item ID in the message.
 5. **B13 is last and is gated** — see the gate note on it.
+6. **Test against the golden fixture in the contract, not against the real song files.** `songs/*.json` are still v1 on disk and stay that way until the migration runs.
+7. **Do not bump the vault-root submodule pointer.** Pregonero is being built in parallel; two sessions committing at the umbrella repo will collide. Commit and push inside `projects/timeline-extractor` only — Jorge bumps the umbrella once, at the end.
 
 ## Work items, in this order
 
@@ -80,6 +83,4 @@ B6, B7, B8, B9, B10, B11 from the backlog — later.
 3. Before B13: confirm P3 has landed.
 
 ## Finishing
-Commit inside `projects/timeline-extractor` and push. Then from the vault root bump the pointer:
-`git add projects/timeline-extractor && git commit -m "Update timeline-extractor (Bombista v2)" && git push`
-If B13 ran, do the same for `songs`.
+Commit inside `projects/timeline-extractor` and push. **Stop there** — do not touch the vault root or the `songs` submodule. Jorge bumps the umbrella pointer himself once both parallel streams are merged.

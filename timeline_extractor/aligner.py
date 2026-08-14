@@ -21,6 +21,13 @@ from typing import Sequence
 
 from .models import Word
 
+DEVICE = "cpu"
+COMPUTE_TYPE = "int8"
+DEVICE_STRING = f"{DEVICE}/{COMPUTE_TYPE}"
+"""Single source of truth for the device faster-whisper runs on. Also
+imported by provenance.py so the recorded provenance can never drift from
+what transcribe_words actually passes to WhisperModel."""
+
 
 def transcribe_words(
     audio_path: Path,
@@ -31,7 +38,7 @@ def transcribe_words(
     """Transcribe *audio_path* end-to-end and return recognized words with timestamps."""
     from faster_whisper import WhisperModel
 
-    model = WhisperModel(model_size, device="cpu", compute_type="int8")
+    model = WhisperModel(model_size, device=DEVICE, compute_type=COMPUTE_TYPE)
     segments, _info = model.transcribe(
         str(audio_path),
         language=language,

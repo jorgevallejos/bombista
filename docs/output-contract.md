@@ -1,5 +1,13 @@
 # Output Contract — Timeline Extractor → Live Lyric Translator
 
+> ⚠ **SUPERSEDED 2026-08-13 by [`timeline-v2-contract.md`](timeline-v2-contract.md).**
+> This file describes the **v1** interchange format: a bare `{"timeline": [...]}` envelope in
+> the audio's own clock, with zero-length `{0,0}` section-marker entries. Both of those are
+> gone. v2 emits `{timelineVersion, leadIn, timeline}` with entry 0 at `0.00` and the offset
+> banked in `leadIn` (items B12/B3), and lyrics arrays carry sung lines only. Kept for the
+> type derivation and the `videoCueLookup` / `media.offset` background, which still hold.
+> **Read `timeline-v2-contract.md` for what the tool actually produces.**
+
 _Frozen 2026-06-24. Source of truth: `projects/live-lyric-translator-dev/src/songState.ts`
 and `projects/live-lyric-translator-dev/src/videoCueLookup.ts`. Do not modify this file
 without also updating the translator side._

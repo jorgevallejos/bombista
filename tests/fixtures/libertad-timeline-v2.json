@@ -1,0 +1,26 @@
+{
+  "timelineVersion": 2,
+  "leadIn": { "durationSec": 7.26, "source": "measured", "confidence": "low", "apply": false },
+  "timeline": [
+    { "start": 0.00,  "end": 5.84 },
+    { "start": 5.84,  "end": 9.64 },
+    { "start": 9.64,  "end": 13.32 },
+    { "start": 13.32, "end": 17.00 },
+    { "start": 17.00, "end": 20.72 },
+    { "start": 20.72, "end": 24.66 },
+    { "start": 24.66, "end": 28.22 },
+    { "start": 28.22, "end": 32.88 },
+    { "start": 32.88, "end": 37.50 },
+    { "start": 37.50, "end": 39.58 },
+    { "start": 39.58, "end": 44.00 },
+    { "start": 44.00, "end": 48.62 },
+    { "start": 48.62, "end": 52.26 },
+    { "start": 52.26, "end": 56.12 },
+    { "start": 56.12, "end": 59.82 },
+    { "start": 59.82, "end": 63.62 },
+    { "start": 63.62, "end": 67.26 },
+    { "start": 67.26, "end": 72.66 },
+    { "start": 72.66, "end": 76.64 },
+    { "start": 76.64, "end": 98.84 }
+  ]
+}

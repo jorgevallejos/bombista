@@ -58,21 +58,50 @@ _TABLE_HEADER = (
 )
 
 
+def _format_duration(duration_sec: float | None) -> str:
+    """`durationSec` is null-but-present when the audio container couldn't
+    be read (see provenance.py) — render that as an explicit "unknown",
+    never a bare Python "None" that reads like a bug."""
+    if duration_sec is None:
+        return "unknown"
+    return f"{duration_sec:.2f} s"
+
+
 def render_qa_report(
     *,
     anchors: Sequence[LineAnchor],
     lines: Sequence[str],
     line_entries: Sequence[TimelineEntry],
+    lead_in: float,
     song_title: str,
     song_path: Path,
     audio_path: Path,
     model_size: str,
     lang: str,
     staging_dir: Path,
+    provenance: dict,
     generated_at: datetime | None = None,
+    stripped_lines: Sequence[dict] | None = None,
 ) -> str:
     """Render the QA markdown. `anchors`, `lines` and `line_entries` are
-    parallel, lyric lines only (markers carry no QA content)."""
+    parallel, one per lyric line. `line_entries` and every time in this
+    report are in **raw audio-clock seconds** — the same clock `--anchor
+    LINE=SECONDS` overrides are given in — even though the emitted timeline
+    (timeline v2) is normalised relative to `lead_in`. That divergence is
+    intentional; see `lead_in`.
+
+    `provenance` is the dict built by `provenance.build_provenance` for
+    this run — this is the surface a human actually reads, so its audio
+    identity (path + sha256), duration, model, device, lang, extractedAt
+    and toolVersion are all shown in the header. It is never written into
+    the native timeline v2 envelope (serializer.py).
+
+    `stripped_lines` (B5) is the plain-text reader's `_bombista.
+    strippedLines` — blank/`[Bracketed]` lines removed from a plain-text
+    input before it became lyric lines. When present it's rendered as a
+    short "Stripped lines" section so the removal is visible rather than
+    silent; the section is omitted entirely when nothing was stripped
+    (including the CP-JSON path, which never strips anything)."""
     generated_at = generated_at or datetime.now()
     counts = band_counts(anchors)
     words_path = staging_dir / "asr-words.jsonl"
@@ -86,12 +115,20 @@ def render_qa_report(
         "",
         f"- Song file: `{song_path}`",
         f"- Audio file: `{audio_path}`",
-        f"- Model: faster-whisper `{model_size}` (lang `{lang}`)",
+        f"- Audio sha256: `{provenance['sha256']}`",
+        f"- Audio duration: {_format_duration(provenance['durationSec'])}",
+        f"- Model: `{provenance['model']}` (lang `{provenance['lang']}`, "
+        f"device `{provenance['device']}`)",
+        f"- Extracted at: {provenance['extractedAt']}",
+        f"- Tool version: {provenance['toolVersion']}",
         f"- Generated: {generated_at.isoformat(timespec='seconds')}",
         f"- Re-run (skips transcription): `{rerun}`",
         f"- Bands: HIGH {counts['HIGH']} / REVIEW {counts['REVIEW']} / FAIL {counts['FAIL']}",
+        f"- Measured lead-in: {lead_in:.2f} s (subtracted from the emitted timeline)",
         "",
-        f"> {AUDIO_CLOCK_RULE}",
+        f"> {AUDIO_CLOCK_RULE} All times in this report are raw audio-clock "
+        f"seconds (before the {lead_in:.2f} s lead-in is subtracted) — "
+        f"`--anchor` overrides are given in this same clock.",
         "",
     ]
 
@@ -124,5 +161,16 @@ def render_qa_report(
     for anchor in anchors:
         parts.append(_row(anchor, lines[anchor.line_index], line_entries[anchor.line_index]))
     parts.append("")
+
+    if stripped_lines:
+        parts.append("## Stripped lines")
+        parts.append("")
+        parts.append("| line | text | reason |")
+        parts.append("|------|------|--------|")
+        for item in stripped_lines:
+            parts.append(
+                f"| {item['line']} | {_cell(item['text'])} | {item['reason']} |"
+            )
+        parts.append("")
 
     return "\n".join(parts)

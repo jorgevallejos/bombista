@@ -1,12 +1,13 @@
 """
-Tests for the pure timeline-building stage (slice S3).
+Tests for the pure timeline-building stage.
 
-build_timeline turns per-line anchors + the word stream + the song's full
-item list into one TimelineEntry per item, per docs/output-contract.md:
-markers get {0,0}; a lyric line runs from its anchor's start to the NEXT
-lyric line's anchor start (display-card continuity — markers between
-lyric lines don't break the chain); the last lyric line ends at the last
-transcribed word's end + LAST_LINE_PAD.
+build_timeline turns per-line anchors + the word stream + the song's item
+list into one TimelineEntry per item, per docs/output-contract.md. Every
+item must be a lyric line (a dict carrying the chosen language key) —
+section markers and meta entries are no longer supported and raise
+ValueError naming the offending index. A lyric line runs from its anchor's
+start to the NEXT lyric line's anchor start; the last lyric line ends at
+the last transcribed word's end + LAST_LINE_PAD.
 """
 import pytest
 
@@ -17,6 +18,7 @@ from timeline_extractor.pipeline import (
     build_timeline,
     is_lyric_item,
     lyric_lines,
+    normalize_to_lead_in,
 )
 from timeline_extractor.serializer import validate_timeline
 
@@ -39,17 +41,31 @@ def test_is_lyric_item_requires_dict_with_chosen_language_key():
     assert is_lyric_item({"es": "hola mundo"}, "es") is True
     assert is_lyric_item({"en": "hello world"}, "es") is False  # wrong language
     assert is_lyric_item({"type": "section", "label": "Verse 1"}, "es") is False
-    assert is_lyric_item("Chorus", "es") is False  # bare-string marker
+    assert is_lyric_item("Chorus", "es") is False  # bare string
 
 
-def test_lyric_lines_extracts_chosen_language_in_order_skipping_markers():
+def test_lyric_lines_extracts_chosen_language_in_order():
     items = [
-        {"type": "section", "label": "Verse 1"},
         {"es": "hola mundo", "en": "hello world"},
-        "Chorus",
         {"es": "adios ya"},
     ]
     assert lyric_lines(items, "es") == ["hola mundo", "adios ya"]
+
+
+def test_lyric_lines_raises_on_non_lyric_entry_naming_its_index():
+    items = [
+        {"es": "hola mundo"},
+        {"type": "section", "label": "Bridge"},
+        {"es": "adios ya"},
+    ]
+    with pytest.raises(ValueError, match=r"lyrics\[1\]"):
+        lyric_lines(items, "es")
+
+
+def test_lyric_lines_raises_on_bare_string_entry_naming_its_index():
+    items = [{"es": "hola mundo"}, "Chorus"]
+    with pytest.raises(ValueError, match=r"lyrics\[1\]"):
+        lyric_lines(items, "es")
 
 
 # ---------------------------------------------------------------------------
@@ -57,36 +73,29 @@ def test_lyric_lines_extracts_chosen_language_in_order_skipping_markers():
 # ---------------------------------------------------------------------------
 
 
-def test_markers_get_zero_length_placeholders():
-    items = [
-        {"type": "section", "label": "Verse 1"},
-        {"es": "hola mundo"},
-        "Chorus",
-        {"es": "adios ya"},
-    ]
+def test_build_timeline_entries_are_one_to_one_with_items():
+    items = [{"es": "hola mundo"}, {"es": "adios ya"}]
     anchors = [_anchor(0, 10.0), _anchor(1, 20.0)]
     words = _words_ending_at(22.0)
 
     entries = build_timeline(anchors, words, items, lang="es")
 
     assert len(entries) == len(items)
-    assert entries[0] == TimelineEntry(0.0, 0.0)
-    assert entries[2] == TimelineEntry(0.0, 0.0)
+    assert entries[0].start == 10.0
+    assert entries[0].end == entries[1].start == 20.0
 
 
-def test_end_is_next_lyric_start_across_interleaved_marker():
+def test_build_timeline_raises_on_non_lyric_entry_naming_its_index():
     items = [
         {"es": "hola mundo"},
         {"type": "section", "label": "Bridge"},
         {"es": "adios ya"},
     ]
-    anchors = [_anchor(0, 10.0), _anchor(1, 20.0)]
-    words = _words_ending_at(22.0)
+    anchors = [_anchor(0, 10.0), _anchor(1, 20.0), _anchor(2, 25.0)]
+    words = _words_ending_at(30.0)
 
-    entries = build_timeline(anchors, words, items, lang="es")
-
-    # the marker between the two lyric lines does not break the chain
-    assert entries[0].end == entries[2].start == 20.0
+    with pytest.raises(ValueError, match=r"lyrics\[1\]"):
+        build_timeline(anchors, words, items, lang="es")
 
 
 def test_last_line_end_is_last_word_end_plus_pad():
@@ -136,21 +145,6 @@ def test_leading_fail_anchor_stays_monotonic():
     validate_timeline(entries)
 
 
-def test_output_passes_validate_timeline_with_mid_song_marker():
-    items = [
-        {"type": "section", "label": "Verse"},
-        {"es": "uno"},
-        {"type": "section", "label": "Chorus"},
-        {"es": "dos"},
-    ]
-    anchors = [_anchor(0, 5.0), _anchor(1, 9.0)]
-    words = _words_ending_at(12.0)
-
-    entries = build_timeline(anchors, words, items, lang="es")
-
-    validate_timeline(entries)  # must not raise despite the {0,0} at index 2
-
-
 def test_embedded_newline_line_is_one_entry():
     items = [{"es": "gracias por venir\ny quedarse"}, {"es": "adios ya"}]
     anchors = [_anchor(0, 5.0), _anchor(1, 12.0)]
@@ -179,3 +173,57 @@ def test_anchor_count_mismatch_raises():
 
     with pytest.raises(ValueError):
         build_timeline(anchors, _words_ending_at(12.0), items, lang="es")
+
+
+# ---------------------------------------------------------------------------
+# normalize_to_lead_in (timeline v2, B12)
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_to_lead_in_rebases_entry_zero_to_zero():
+    raw = [TimelineEntry(7.26, 13.1), TimelineEntry(13.1, 16.9)]
+
+    lead_in, normalized = normalize_to_lead_in(raw)
+
+    assert lead_in == 7.26
+    assert normalized[0].start == 0.0
+    assert normalized[0].end == pytest.approx(5.84)
+    assert normalized[1].start == pytest.approx(5.84)
+    assert normalized[1].end == pytest.approx(9.64)
+
+
+def test_normalize_to_lead_in_rounds_to_two_decimals():
+    raw = [TimelineEntry(10.333333, 20.666666)]
+
+    lead_in, normalized = normalize_to_lead_in(raw)
+
+    assert lead_in == 10.33
+    assert normalized[0] == TimelineEntry(0.0, round(20.666666 - 10.33, 2))
+
+
+def test_normalize_to_lead_in_is_lossless_within_tolerance():
+    """Re-adding lead_in to a normalised entry reproduces the raw value —
+    within the contract's documented tolerance, not exact equality, since
+    e.g. 13.1 - 7.26 == 5.840000000000001 in IEEE floats."""
+    raw = [TimelineEntry(7.26, 13.1), TimelineEntry(13.1, 16.9)]
+
+    lead_in, normalized = normalize_to_lead_in(raw)
+
+    for raw_entry, norm_entry in zip(raw, normalized):
+        assert abs((norm_entry.start + lead_in) - raw_entry.start) < 0.005
+        assert abs((norm_entry.end + lead_in) - raw_entry.end) < 0.005
+
+
+def test_normalize_to_lead_in_does_not_mutate_input():
+    raw = [TimelineEntry(7.26, 13.1)]
+
+    normalize_to_lead_in(raw)
+
+    assert raw == [TimelineEntry(7.26, 13.1)]
+
+
+def test_normalize_to_lead_in_empty_returns_zero_and_empty():
+    lead_in, normalized = normalize_to_lead_in([])
+
+    assert lead_in == 0.0
+    assert normalized == []

@@ -3,9 +3,20 @@ Tests for the aligner — full-file ASR transcription with word timestamps.
 
 Unit tests cover the JSONL save/load round-trip (no model, no audio).
 The integration test runs the real faster-whisper `tiny` model against a
-committed 12s audio fixture cut from the Tragedia master recording, to
-prove the wiring against a real model without paying for `medium`'s
-download/runtime cost in the default test run.
+committed 12s audio fixture, to prove the wiring against a real model
+without paying for `medium`'s download/runtime cost in the default test
+run.
+
+The fixture is **synthesised speech** (macOS `say`, es_ES, reading the
+invented lines in FIXTURE_TEXT below), not a real recording — the repo is
+public and carries no master audio. Worth knowing what that costs: clean
+TTS is easier for Whisper than sung audio over a band, so this test is a
+weaker proxy for the real domain than an excerpt of a real song would be.
+It is still a *wiring* test — real model, real decode, real word
+timestamps — and the recognition assertion below keeps its original
+shape: at least 3 transcribed words must match the known text. `tiny`
+still mishears several words here, which is what keeps that assertion
+from being trivially true.
 """
 import json
 import re
@@ -25,13 +36,35 @@ from bombista.aligner import (
 from bombista.models import Word
 
 
-FIXTURE_AUDIO = Path(__file__).parent / "fixtures" / "tragedia-opening-12s.wav"
+FIXTURE_AUDIO = Path(__file__).parent / "fixtures" / "synthetic-es-12s.wav"
 
-# First lines of the sung lyric, used only to check for *some* overlap with
-# the tiny model's output — not an exact-transcription assertion.
-EXPECTED_OPENING_WORDS = {
-    "me", "acuestan", "en", "la", "cama", "de", "plata", "brillante",
-    "me", "ungen", "con", "hierbas", "manteca", "ajo", "y", "sal",
+# The invented text the fixture was synthesised from. Regenerate the fixture
+# with:
+#
+#   say -v "Mónica" -r 155 -o tts.aiff "<FIXTURE_TEXT>"
+#   ffmpeg -i tts.aiff -af apad -t 12 -ar 16000 -ac 1 -c:a pcm_s16le \
+#       tests/fixtures/synthetic-es-12s.wav
+#
+# `apad -t 12` pins the duration to exactly 12.000 s, which is what
+# test_provenance.py's duration assertion reads.
+FIXTURE_TEXT = (
+    "Camino por la orilla del río dormido. "
+    "La luna se derrama sobre el muelle vacío. "
+    "El viento me devuelve tu nombre perdido, "
+    "mientras cuento las piedras del sendero. "
+    "Una lámpara sigue encendida en la ventana del puerto viejo."
+)
+
+# Used only to check for *some* overlap with the tiny model's output — not an
+# exact-transcription assertion. `tiny` reliably mangles a few of these
+# ("muelhe", "cendero", "derra más"), so the overlap floor is a real bar.
+EXPECTED_FIXTURE_WORDS = {
+    "camino", "por", "la", "orilla", "del", "rio", "dormido",
+    "luna", "se", "derrama", "sobre", "el", "muelle", "vacio",
+    "viento", "me", "devuelve", "tu", "nombre", "perdido",
+    "mientras", "cuento", "las", "piedras", "sendero",
+    "una", "lampara", "sigue", "encendida", "en", "ventana",
+    "puerto", "viejo",
 }
 
 
@@ -130,8 +163,8 @@ def test_transcribe_words_on_fixture_with_tiny_model():
     assert out_of_order == 0
 
     normalized = {_normalize(w.text) for w in words}
-    overlap = normalized & EXPECTED_OPENING_WORDS
+    overlap = normalized & EXPECTED_FIXTURE_WORDS
     assert len(overlap) >= 3, (
-        f"expected at least 3 recognized words to overlap with the opening "
-        f"lyric, got {sorted(overlap)} from transcription {[w.text for w in words]}"
+        f"expected at least 3 recognized words to overlap with the fixture "
+        f"text, got {sorted(overlap)} from transcription {[w.text for w in words]}"
     )

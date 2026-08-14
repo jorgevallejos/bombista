@@ -3,10 +3,10 @@ Tests for the provenance block builder — B1.
 
 `build_provenance` is called once per `extract` run and records which
 audio file a timeline was derived from (see docs/bombista-product-backlog.md
-B1: the shipped Tragedia timeline was ~17s wrong for weeks because nothing
-recorded this). Fast: no whisper model. sha256/duration are exercised
-against small real files (the committed 12s wav fixture, and tmp_path
-files), never anything requiring the network or the ASR model.
+B1: a shipped timeline was ~17s wrong for weeks because nothing recorded
+this). Fast: no whisper model. sha256/duration are exercised against small
+real files (the committed 12s wav fixture, and tmp_path files), never
+anything requiring the network or the ASR model.
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ import pytest
 from bombista.aligner import DEVICE_STRING
 from bombista.provenance import build_provenance, compute_lines_hash
 
-FIXTURE_AUDIO = Path(__file__).parent / "fixtures" / "tragedia-opening-12s.wav"
+FIXTURE_AUDIO = Path(__file__).parent / "fixtures" / "synthetic-es-12s.wav"
 
 
 def test_build_provenance_returns_all_expected_keys(tmp_path):

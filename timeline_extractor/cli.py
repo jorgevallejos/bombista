@@ -33,13 +33,14 @@ from .serializer import to_dict, validate_v2_envelope, write_timeline
 from .writers import (
     build_bombista_block,
     merge_envelope,
+    write_html_review,
     write_lrc,
     write_report_json,
     write_songjson,
     write_srt,
 )
 
-_EMIT_CHOICES = ("timeline", "songjson", "report-json", "srt", "lrc")
+_EMIT_CHOICES = ("timeline", "songjson", "report-json", "srt", "lrc", "html")
 _ENVELOPE_KEYS = ("timelineVersion", "leadIn", "timeline")
 
 _FALLBACK_LANG = "es"
@@ -157,8 +158,10 @@ def extract(
     Writes asr-words.jsonl and <song>-qa-report.md into the staging
     directory unconditionally — those are part of the workflow, not an
     --emit output. --emit (repeatable) picks which of timeline / songjson
-    / report-json / srt / lrc also get written there; default is
-    `timeline` alone, matching today's behaviour. Never writes to the song
+    / report-json / srt / lrc / html also get written there; default is
+    `timeline` alone, matching today's behaviour. `html` is the offline
+    review page (B16) — the QA report with a per-line play button that
+    seeks the audio, so a REVIEW line can be judged by ear. Never writes to the song
     JSON — review the QA report, then apply with `timeline-extractor
     promote` (accepts either a bare timeline or an emitted songjson).
 
@@ -248,6 +251,24 @@ def extract(
     if "lrc" in emit_set:
         lrc_paths = write_lrc(song, envelope, stem, staging_dir)
         produced.append("lrc: " + ", ".join(str(p) for p in lrc_paths))
+
+    if "html" in emit_set:
+        html_out = staging_dir / f"{stem}-review.html"
+        write_html_review(
+            song_title=song.get("title", stem),
+            song_path=song_json,
+            audio_path=audio,
+            staging_dir=staging_dir,
+            words_path=words_out,
+            lang=lang,
+            provenance=provenance,
+            lead_in=lead_in,
+            anchors=anchors,
+            lines=lines,
+            line_entries=entries,  # raw audio-clock — the <audio> element's clock
+            out_path=html_out,
+        )
+        produced.append(f"html: {html_out}")
 
     report_out = staging_dir / f"{stem}-qa-report.md"
     report = render_qa_report(

@@ -627,6 +627,7 @@ def test_extract_default_emit_only_writes_timeline_not_other_outputs(workspace):
     assert not (staging / "cancion-de-prueba-report.json").exists()
     assert not list(staging.glob("*.srt"))
     assert not list(staging.glob("*.lrc"))
+    assert not list(staging.glob("*.html"))
 
 
 def test_extract_emit_replaces_default_set_not_adds_to_it(workspace):
@@ -772,6 +773,61 @@ def test_extract_emit_report_json_produces_expected_shape(workspace):
     assert data["summary"] == {"high": 3, "review": 0, "fail": 0}
     assert len(data["lines"]) == 3
     assert data["linesHash"].startswith("sha256:")
+
+
+# ---------------------------------------------------------------------------
+# --emit html — B16, the self-contained review page
+# ---------------------------------------------------------------------------
+
+
+def test_extract_emit_html_writes_the_review_page(workspace):
+    result = run_extract(workspace, "--emit", "html")
+
+    assert result.exit_code == 0, result.output
+    page = workspace["staging"] / "cancion-de-prueba-review.html"
+    assert page.exists()
+    assert "html:" in result.output
+    assert str(page) in result.output
+
+
+def test_extract_emit_html_page_is_offline_and_points_at_the_audio_relatively(workspace):
+    """The audio sits outside staging; the page has to reach it by a
+    relative path, and must pull nothing off the network to render."""
+    result = run_extract(workspace, "--emit", "html")
+
+    assert result.exit_code == 0, result.output
+    html = (workspace["staging"] / "cancion-de-prueba-review.html").read_text(encoding="utf-8")
+    assert "../cancion.wav" in html
+    for forbidden in ("http://", "https://", "@import", "fetch(", "<link"):
+        assert forbidden not in html
+
+
+def test_extract_emit_html_replaces_the_default_set(workspace):
+    result = run_extract(workspace, "--emit", "html")
+
+    assert result.exit_code == 0, result.output
+    assert not (workspace["staging"] / "cancion-de-prueba-timeline.json").exists()
+
+
+def test_extract_emit_html_seeks_in_raw_audio_clock_seconds(workspace):
+    """The page's play buttons drive the audio element, so their times are
+    raw audio-clock — the same clock as the QA report, not the emitted
+    timeline's cue-relative one."""
+    result = run_extract(workspace, "--emit", "html")
+
+    assert result.exit_code == 0, result.output
+    staging = workspace["staging"]
+    html = (staging / "cancion-de-prueba-review.html").read_text(encoding="utf-8")
+    report = (staging / "cancion-de-prueba-qa-report.md").read_text(encoding="utf-8")
+
+    # line 0's raw onset, as the markdown report states it
+    row = next(
+        line
+        for line in report.split("## All lines")[1].splitlines()
+        if line.startswith("| 0 |")
+    )
+    raw_start = row.split("|")[5].strip()
+    assert f'data-start="{raw_start}"' in html
 
 
 # ---------------------------------------------------------------------------

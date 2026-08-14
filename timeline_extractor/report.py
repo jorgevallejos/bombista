@@ -58,7 +58,7 @@ _TABLE_HEADER = (
 )
 
 
-def _format_duration(duration_sec: float | None) -> str:
+def format_duration(duration_sec: float | None) -> str:
     """`durationSec` is null-but-present when the audio container couldn't
     be read (see provenance.py) — render that as an explicit "unknown",
     never a bare Python "None" that reads like a bug."""
@@ -116,7 +116,7 @@ def render_qa_report(
         f"- Song file: `{song_path}`",
         f"- Audio file: `{audio_path}`",
         f"- Audio sha256: `{provenance['sha256']}`",
-        f"- Audio duration: {_format_duration(provenance['durationSec'])}",
+        f"- Audio duration: {format_duration(provenance['durationSec'])}",
         f"- Model: `{provenance['model']}` (lang `{provenance['lang']}`, "
         f"device `{provenance['device']}`)",
         f"- Extracted at: {provenance['extractedAt']}",

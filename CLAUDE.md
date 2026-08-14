@@ -30,7 +30,7 @@ timeline-extractor --help   # CLI entry point
 # The workflow (extract stages, promote applies):
 timeline-extractor extract <audio.wav> <song.json|lyrics.txt> -o <staging-dir> \
     [--model-size medium] [--lang es] [--anchor LINE=SECONDS] [--words <staging>/asr-words.jsonl] \
-    [--emit timeline|songjson|report-json|srt|lrc]
+    [--emit timeline|songjson|report-json|srt|lrc|html]
 timeline-extractor promote <staging>/<song>-timeline.json <song.json>
 
 # One-off, for songs timed before timeline v2 (B13) — not part of the loop:
@@ -43,7 +43,10 @@ song dict at the boundary before the pipeline runs — see `readers.py`.
 
 `extract` always writes `asr-words.jsonl` and `<song>-qa-report.md` into staging and **never
 touches the song JSON**. `--emit` (repeatable, default `timeline`) picks which outputs join
-them; passing it **replaces** the default set rather than adding to it. Review the QA report;
+them; passing it **replaces** the default set rather than adding to it. `--emit html` (B16)
+writes `<song>-review.html` — the QA report as a self-contained offline page with a play
+button per line that seeks the audio to that line's onset, so a REVIEW line can be judged by
+ear instead of by scrubbing the m4a in another app. Review the QA report;
 hand-fix REVIEW/FAIL lines by re-running with `--anchor <line>=<seconds>` (add `--words` to
 skip re-transcription — it's near-instant). `promote` validates the candidate against the
 timeline v2 contract, backs up the song JSON next to itself, and writes only
@@ -82,12 +85,14 @@ timeline_extractor/
   report.py      — markdown QA report (per-line band, ASR context, signals, fix hints)
   serializer.py  — the frozen timeline v2 envelope, and nothing else
   writers.py     — everything downstream of the canonical CP form: songjson, report-json,
-                   srt, lrc — plus merge_envelope, THE one merge path (shared with promote)
+                   srt, lrc, html — plus merge_envelope, THE one merge path (shared with
+                   promote). The html writer (B16) is the offline review page: inline CSS/JS
+                   only, audio by relative path, play buttons in RAW audio-clock seconds
   migrate.py     — B13: rebase a stored v1 timeline onto the v2 start cue. Adds no rules
                    of its own (it composes normalize_to_lead_in / to_dict / merge_envelope)
                    — what it owns is the refusal set. Idempotent by refusal, not no-op.
   cli.py         — click CLI: extract / promote / migrate
-tests/           — 234 tests; all fast except one tiny-model integration test on a
+tests/           — 251 tests; all fast except one tiny-model integration test on a
                    committed 12 s fixture (tests/fixtures/)
 docs/
   timeline-v2-contract.md           — THE live contract with the translator (Pregonero).

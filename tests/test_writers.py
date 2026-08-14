@@ -7,6 +7,9 @@ synthetic inputs (no whisper model, no audio decoding) so they stay fast.
 from __future__ import annotations
 
 import json
+import re
+import shlex
+from html import unescape
 from pathlib import Path
 
 import pytest
@@ -16,6 +19,7 @@ from timeline_extractor.models import TimelineEntry
 from timeline_extractor.writers import (
     build_bombista_block,
     merge_envelope,
+    write_html_review,
     write_lrc,
     write_report_json,
     write_songjson,
@@ -370,3 +374,224 @@ def test_write_lrc_omits_tags_when_song_has_no_title_or_artist(tmp_path):
     content = paths[0].read_text(encoding="utf-8")
     assert "[ti:" not in content
     assert "[ar:" not in content
+
+
+# ---------------------------------------------------------------------------
+# write_html_review — B16, the self-contained review page
+# ---------------------------------------------------------------------------
+
+HTML_ANCHORS = [
+    LineAnchor(0, 10.0, "HIGH", ("clean-anchor",), "hola mundo bonito", 0),
+    LineAnchor(1, 55.88, "REVIEW", ("ambiguous",), "fui mas impulso que voz", 0),
+    LineAnchor(2, None, "FAIL", ("no-anchor",), "", None),
+]
+HTML_LINES = ["hola mundo", "fui mas impulso que voz", "no encontrado"]
+HTML_ENTRIES = [
+    TimelineEntry(10.0, 20.0),
+    TimelineEntry(55.88, 59.52),
+    TimelineEntry(59.52, 60.52),
+]
+
+
+def render_html(tmp_path, **overrides):
+    """Render a review page into a staging dir with the audio sitting in a
+    sibling directory — the real layout, where the relative path has to
+    climb out of staging."""
+    staging = overrides.pop("staging_dir", None) or tmp_path / "staging"
+    staging.mkdir(parents=True, exist_ok=True)
+    audio_dir = tmp_path / "audio"
+    audio_dir.mkdir(exist_ok=True)
+    audio = overrides.pop("audio_path", None) or audio_dir / "Song Libertad.m4a"
+    audio.write_bytes(b"")
+    out = staging / "cancion-review.html"
+
+    kwargs = {
+        "song_title": "Libertad",
+        "song_path": tmp_path / "libertad.json",
+        "audio_path": audio,
+        "staging_dir": staging,
+        "words_path": staging / "asr-words.jsonl",
+        "lang": "es",
+        "provenance": PROVENANCE,
+        "lead_in": 10.0,
+        "anchors": HTML_ANCHORS,
+        "lines": HTML_LINES,
+        "line_entries": HTML_ENTRIES,
+        "out_path": out,
+    }
+    kwargs.update(overrides)
+    write_html_review(**kwargs)
+    return out.read_text(encoding="utf-8")
+
+
+def test_write_html_review_renders_title_and_every_line(tmp_path):
+    html = render_html(tmp_path)
+
+    assert "Libertad" in html
+    for line in HTML_LINES:
+        assert line in html
+
+
+def test_write_html_review_makes_no_network_requests(tmp_path):
+    """Bombista running fully offline is a stated product property
+    (backlog §1). A single external reference silently breaks it, and it
+    breaks *quietly* — the page still renders, just unstyled or inert. No
+    CDN, no webfont, no XHR: this assertion is the guard."""
+    html = render_html(tmp_path)
+
+    for forbidden in (
+        "http://",
+        "https://",
+        'src="//',
+        "@import",
+        "fetch(",
+        "XMLHttpRequest",
+        "<link",
+        "cdn.",
+    ):
+        assert forbidden not in html, f"external reference in the page: {forbidden!r}"
+
+
+def test_write_html_review_references_audio_by_relative_url_encoded_path(tmp_path):
+    """The page lives beside the run's other output, so the audio is
+    reachable relatively — and must stay reachable when the staging dir is
+    moved or copied. Spaces in the filename have to be percent-encoded or
+    the browser will not resolve the href."""
+    html = render_html(tmp_path)
+    audio = tmp_path / "audio" / "Song Libertad.m4a"
+
+    assert 'src="../audio/Song%20Libertad.m4a"' in html
+    assert f'src="{audio}"' not in html  # the media reference is never absolute
+
+
+def test_write_html_review_play_controls_carry_raw_audio_clock_starts(tmp_path):
+    """The play button seeks the AUDIO, so its time must be the raw
+    audio-clock second — the same clock as the QA report and `--anchor`,
+    NOT the lead-in-normalised clock of the emitted timeline. Line 0 here
+    starts at 10.00 s of audio, not 0.00."""
+    html = render_html(tmp_path)
+
+    assert 'data-start="10.00"' in html
+    assert 'data-start="55.88"' in html
+    assert 'data-start="59.52"' in html
+
+
+def test_write_html_review_puts_flagged_lines_in_a_needs_attention_section(tmp_path):
+    """A triage view, not a table dump: REVIEW and FAIL lines are lifted
+    out where they cannot be scrolled past."""
+    html = render_html(tmp_path)
+
+    assert 'id="needs-attention"' in html
+    section = html.split('id="needs-attention"', 1)[1].split("</section>", 1)[0]
+    assert "fui mas impulso que voz" in section  # REVIEW
+    assert "no encontrado" in section  # FAIL
+    assert "hola mundo" not in section  # HIGH stays in the full table
+
+
+def test_write_html_review_says_so_when_nothing_is_flagged(tmp_path):
+    html = render_html(
+        tmp_path,
+        anchors=[LineAnchor(0, 10.0, "HIGH", ("clean-anchor",), "hola", 0)],
+        lines=["hola mundo"],
+        line_entries=[TimelineEntry(10.0, 20.0)],
+    )
+
+    section = html.split('id="needs-attention"', 1)[1].split("</section>", 1)[0]
+    assert "None" in section
+
+
+def test_write_html_review_pre_writes_the_anchor_rerun_command_per_flagged_line(tmp_path):
+    html = render_html(tmp_path)
+
+    assert "--anchor 1=" in html
+    assert "--anchor 2=" in html
+    assert "--words" in html
+    assert "--lang es" in html
+    assert "--anchor 0=" not in html  # line 0 anchored HIGH
+
+
+def test_write_html_review_header_carries_the_provenance_block(tmp_path):
+    """A review page that does not say what it reviewed is how the 17 s
+    Tragedia error stayed invisible (B1)."""
+    html = render_html(tmp_path)
+
+    assert PROVENANCE["sha256"] in html
+    assert PROVENANCE["model"] in html
+    assert PROVENANCE["extractedAt"] in html
+    assert PROVENANCE["toolVersion"] in html
+    assert "120.00 s" in html  # durationSec, rendered
+
+
+def test_write_html_review_renders_unknown_duration_when_the_container_was_unreadable(tmp_path):
+    html = render_html(tmp_path, provenance={**PROVENANCE, "durationSec": None})
+
+    assert "unknown" in html
+    assert "None" not in html.split('id="needs-attention"')[0]
+
+
+def test_write_html_review_escapes_lyric_text(tmp_path):
+    """Lyrics are arbitrary text and go straight into the markup."""
+    html = render_html(
+        tmp_path,
+        anchors=[LineAnchor(0, 1.0, "HIGH", ("clean-anchor",), "", 0)],
+        lines=['<script>alert("x")</script> & co'],
+        line_entries=[TimelineEntry(1.0, 2.0)],
+    )
+
+    assert "<script>alert" not in html
+    assert "&lt;script&gt;" in html
+    assert "&amp; co" in html
+
+
+def test_write_html_review_shows_band_signals_and_durations(tmp_path):
+    html = render_html(tmp_path)
+
+    assert "clean-anchor" in html
+    assert "ambiguous" in html
+    assert "no-anchor" in html
+    assert "REVIEW" in html
+    assert "FAIL" in html
+
+
+def test_write_html_review_returns_the_path_it_wrote(tmp_path):
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"")
+    out = staging / "cancion-review.html"
+
+    result = write_html_review(
+        song_title="T",
+        song_path=tmp_path / "t.json",
+        audio_path=audio,
+        staging_dir=staging,
+        words_path=staging / "asr-words.jsonl",
+        lang="es",
+        provenance=PROVENANCE,
+        lead_in=0.0,
+        anchors=[LineAnchor(0, 0.0, "HIGH", ("clean-anchor",), "x", 0)],
+        lines=["x"],
+        line_entries=[TimelineEntry(0.0, 1.0)],
+        out_path=out,
+    )
+
+    assert result == out
+    assert out.exists()
+
+
+def test_write_html_review_shell_quotes_paths_in_the_anchor_command(tmp_path):
+    """Click-to-copy is only worth having if the pasted command actually
+    runs. Real audio filenames have spaces in them — "Song Libertad.m4a" —
+    and an unquoted path silently becomes two arguments."""
+    page = render_html(tmp_path)
+    audio = tmp_path / "audio" / "Song Libertad.m4a"
+
+    # what click-to-copy puts on the clipboard is the element's textContent,
+    # i.e. the markup-unescaped command
+    raw = re.search(r'<code class="cmd">(.*?)</code>', page, re.S).group(1)
+    command = unescape(raw)
+
+    argv = shlex.split(command)
+    assert str(audio) in argv  # one argument, not two
+    assert argv[:2] == ["timeline-extractor", "extract"]
+    assert "--anchor" in argv

@@ -23,12 +23,17 @@ implementation in the repo.
 from __future__ import annotations
 
 import json
+import os
+import shlex
+from datetime import datetime
+from html import escape as html_escape
 from pathlib import Path
 from typing import Sequence
+from urllib.parse import quote
 
 from .anchoring import LineAnchor
 from .models import TimelineEntry
-from .report import band_counts
+from .report import AUDIO_CLOCK_RULE, band_counts, format_duration
 
 __all__ = [
     "ENVELOPE_KEYS",
@@ -38,6 +43,7 @@ __all__ = [
     "write_report_json",
     "write_srt",
     "write_lrc",
+    "write_html_review",
 ]
 
 ENVELOPE_KEYS = ("timelineVersion", "leadIn", "timeline")
@@ -287,3 +293,353 @@ def write_lrc(song: dict, envelope: dict, stem: str, out_dir: Path) -> list[Path
         path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
         paths.append(path)
     return paths
+
+
+# ---------------------------------------------------------------------------
+# write_html_review — B16
+# ---------------------------------------------------------------------------
+
+_HTML_CSS = """\
+:root {
+  color-scheme: light dark;
+  --bg: #fbfaf8; --fg: #1c1b19; --muted: #6b6862; --rule: #e2ded7;
+  --card: #ffffff; --high: #2f7d4f; --review: #a86a00; --fail: #b3261e;
+  --tint-review: #fdf4e3; --tint-fail: #fdeceb; --current: #fff6cc;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17161a; --fg: #eceae6; --muted: #a09b93; --rule: #322f36;
+    --card: #201e24; --high: #6cc08b; --review: #e0a437; --fail: #f2857c;
+    --tint-review: #2c2418; --tint-fail: #2e1c1a; --current: #3a3320;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 0 1.5rem 4rem;
+  background: var(--bg); color: var(--fg);
+  font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.wrap { max-width: 62rem; margin: 0 auto; }
+h1 { font-size: 1.5rem; margin: 1.75rem 0 .35rem; }
+h2 { font-size: 1.1rem; margin: 2.25rem 0 .75rem; }
+.meta { list-style: none; margin: .75rem 0; padding: 0; font-size: .82rem; color: var(--muted); }
+.meta li { margin: .15rem 0; }
+.meta b { color: var(--fg); font-weight: 600; }
+code, .cmd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .8rem; }
+.note { font-size: .82rem; color: var(--muted); border-left: 3px solid var(--rule);
+        padding: .4rem 0 .4rem .8rem; margin: 1rem 0; }
+.player { position: sticky; top: 0; z-index: 5; background: var(--bg);
+          padding: .75rem 0; border-bottom: 1px solid var(--rule); }
+.player audio { width: 100%; }
+.counts { display: flex; gap: .5rem; flex-wrap: wrap; margin: .5rem 0 0; }
+.chip { font-size: .75rem; font-weight: 600; padding: .12rem .5rem; border-radius: 999px;
+        border: 1px solid currentColor; }
+.band-HIGH { color: var(--high); }
+.band-REVIEW { color: var(--review); }
+.band-FAIL { color: var(--fail); }
+.flag { background: var(--card); border: 1px solid var(--rule); border-left: 5px solid currentColor;
+        border-radius: 6px; padding: .8rem 1rem; margin: .7rem 0; }
+.flag.band-REVIEW { background: var(--tint-review); }
+.flag.band-FAIL { background: var(--tint-fail); }
+.flag-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.idx { font-size: .78rem; color: var(--muted); }
+.signals { font-size: .78rem; color: var(--muted); }
+.text { color: var(--fg); margin: .5rem 0 .3rem; white-space: pre-wrap; font-size: 1rem; }
+.asr { margin: .1rem 0; font-size: .82rem; color: var(--muted); white-space: pre-wrap; }
+.fix { display: flex; align-items: center; gap: .5rem; margin-top: .6rem; flex-wrap: wrap; }
+.fix .cmd { background: var(--bg); border: 1px solid var(--rule); border-radius: 4px;
+            padding: .35rem .5rem; overflow-x: auto; white-space: pre; flex: 1 1 20rem; }
+button { font: inherit; cursor: pointer; border-radius: 5px; border: 1px solid var(--rule);
+         background: var(--card); color: var(--fg); padding: .25rem .6rem; }
+button:hover { border-color: var(--muted); }
+.play { font-variant-numeric: tabular-nums; white-space: nowrap; }
+table { border-collapse: collapse; width: 100%; font-size: .85rem; }
+th, td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid var(--rule);
+         vertical-align: top; }
+th { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.band-REVIEW td { background: var(--tint-review); }
+tr.band-FAIL td { background: var(--tint-fail); }
+.current, tr.current td { background: var(--current) !important; }
+"""
+
+_HTML_JS = """\
+(function () {
+  var audio = document.getElementById("audio");
+  var marks = Array.prototype.slice.call(document.querySelectorAll("[data-line]"));
+
+  document.addEventListener("click", function (ev) {
+    var el = ev.target;
+    if (!el || !el.closest) { return; }
+    var play = el.closest(".play");
+    if (play) {
+      var t = parseFloat(play.getAttribute("data-start"));
+      if (!isNaN(t)) { audio.currentTime = t; audio.play(); }
+      return;
+    }
+    var copy = el.closest(".copy");
+    if (copy) {
+      var cmd = copy.parentNode.querySelector(".cmd");
+      if (cmd) { copyText(cmd.textContent, copy); }
+    }
+  });
+
+  function flash(btn) {
+    var was = btn.textContent;
+    btn.textContent = "Copied";
+    setTimeout(function () { btn.textContent = was; }, 1200);
+  }
+
+  function copyText(text, btn) {
+    // navigator.clipboard is unavailable on file:// in some browsers
+    // (not a secure context), so the selection fallback is not optional.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { flash(btn); },
+        function () { legacyCopy(text, btn); }
+      );
+      return;
+    }
+    legacyCopy(text, btn);
+  }
+
+  function legacyCopy(text, btn) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); flash(btn); } catch (err) { /* nothing else to try */ }
+    document.body.removeChild(ta);
+  }
+
+  audio.addEventListener("timeupdate", function () {
+    var t = audio.currentTime;
+    for (var i = 0; i < marks.length; i++) {
+      var m = marks[i];
+      var s = parseFloat(m.getAttribute("data-start"));
+      var e = parseFloat(m.getAttribute("data-end"));
+      if (t >= s && t < e) { m.classList.add("current"); }
+      else { m.classList.remove("current"); }
+    }
+  });
+})();
+"""
+
+
+def _audio_href(audio_path: Path, staging_dir: Path) -> str:
+    """The page is written into the staging directory and the audio lives
+    outside it, so the reference is relative — the whole staging dir stays
+    portable (copy it elsewhere and the page still plays). Percent-encoded
+    because real filenames have spaces in them ("Song Libertad.m4a").
+
+    Falls back to the absolute path only when no relative route exists
+    (different volume) — a page that plays beats a page that is portable.
+    """
+    try:
+        rel = os.path.relpath(audio_path, staging_dir)
+    except ValueError:
+        rel = str(audio_path)
+    return quote(Path(rel).as_posix())
+
+
+def _anchor_command(
+    line_index: int,
+    *,
+    audio_path: Path,
+    song_path: Path,
+    staging_dir: Path,
+    words_path: Path,
+    lang: str,
+) -> str:
+    """The re-run that hand-fixes one line, ready to paste. `<seconds>` is
+    left as a placeholder — the number is what the human is here to
+    decide. `--words` is what makes the correction loop instant.
+
+    Paths are shell-quoted: this command exists to be copied and pasted,
+    and real audio filenames have spaces in them ("Song Libertad.m4a"),
+    which would otherwise split into two arguments at the prompt.
+    """
+    quoted = " ".join(
+        shlex.quote(str(p)) for p in (audio_path, song_path)
+    )
+    return (
+        f"timeline-extractor extract {quoted} -o {shlex.quote(str(staging_dir))} "
+        f"--words {shlex.quote(str(words_path))} --lang {shlex.quote(lang)} "
+        f"--anchor {line_index}=<seconds>"
+    )
+
+
+def _play_button(entry: TimelineEntry, label: str) -> str:
+    return (
+        f'<button type="button" class="play" data-start="{entry.start:.2f}" '
+        f'data-end="{entry.end:.2f}">{label}</button>'
+    )
+
+
+def write_html_review(
+    *,
+    song_title: str,
+    song_path: Path,
+    audio_path: Path,
+    staging_dir: Path,
+    words_path: Path,
+    lang: str,
+    provenance: dict,
+    lead_in: float,
+    anchors: Sequence[LineAnchor],
+    lines: Sequence[str],
+    line_entries: Sequence[TimelineEntry],
+    out_path: Path,
+    generated_at: datetime | None = None,
+) -> Path:
+    """The B16 review page: one self-contained HTML file that lets a human
+    *hear* the line they are judging instead of reading a timestamp and
+    scrubbing an m4a in another app.
+
+    **Fully offline, by construction.** CSS and JS are inlined and nothing
+    is fetched from anywhere — Bombista running with no network is a stated
+    product property (backlog §1), and an external stylesheet or CDN script
+    would break it quietly, leaving a page that still renders. The audio is
+    referenced by a relative path rather than base64-embedded: the file
+    lives next to the audio, so embedding would bloat it for nothing.
+
+    **Times here are raw audio-clock seconds**, like the markdown QA report
+    and `--anchor LINE=SECONDS` — never the emitted timeline's cue-relative
+    clock. The play buttons drive an `<audio>` element, whose clock *is*
+    the audio file's; seeding them with normalised times would seek every
+    line short by the lead-in. `anchors`, `lines` and `line_entries` are
+    parallel, one per lyric line (same convention as
+    `report.render_qa_report`).
+
+    Returns the path written.
+    """
+    generated_at = generated_at or datetime.now()
+    counts = band_counts(anchors)
+    href = _audio_href(audio_path, staging_dir)
+    esc = html_escape
+
+    head = [
+        "<!doctype html>",
+        '<html lang="en">',
+        "<head>",
+        '<meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width, initial-scale=1">',
+        f"<title>QA review — {esc(song_title)}</title>",
+        f"<style>\n{_HTML_CSS}</style>",
+        "</head>",
+        "<body>",
+        '<div class="wrap">',
+        f"<h1>QA review — {esc(song_title)}</h1>",
+        '<ul class="meta">',
+        f"<li><b>Song file</b> <code>{esc(str(song_path))}</code></li>",
+        f"<li><b>Audio file</b> <code>{esc(str(provenance['audio']))}</code></li>",
+        f"<li><b>Audio sha256</b> <code>{esc(str(provenance['sha256']))}</code></li>",
+        f"<li><b>Audio duration</b> {esc(format_duration(provenance['durationSec']))}</li>",
+        f"<li><b>Model</b> <code>{esc(str(provenance['model']))}</code> "
+        f"(lang <code>{esc(str(provenance['lang']))}</code>, "
+        f"device <code>{esc(str(provenance['device']))}</code>)</li>",
+        f"<li><b>Extracted at</b> {esc(str(provenance['extractedAt']))}</li>",
+        f"<li><b>Tool version</b> {esc(str(provenance['toolVersion']))}</li>",
+        f"<li><b>Generated</b> {esc(generated_at.isoformat(timespec='seconds'))}</li>",
+        f"<li><b>Measured lead-in</b> {lead_in:.2f} s "
+        "(subtracted from the emitted timeline, not from the times below)</li>",
+        "</ul>",
+        '<div class="counts">',
+        f'<span class="chip band-HIGH">HIGH {counts["HIGH"]}</span>',
+        f'<span class="chip band-REVIEW">REVIEW {counts["REVIEW"]}</span>',
+        f'<span class="chip band-FAIL">FAIL {counts["FAIL"]}</span>',
+        "</div>",
+        f'<p class="note">{esc(AUDIO_CLOCK_RULE)} All times on this page are raw '
+        f"audio-clock seconds (before the {lead_in:.2f} s lead-in is subtracted) — "
+        "the play buttons and <code>--anchor</code> use this same clock.</p>",
+        '<div class="player">',
+        f'<audio id="audio" controls preload="metadata" src="{href}"></audio>',
+        "</div>",
+    ]
+
+    flagged = [a for a in anchors if a.band != "HIGH"]
+    body = ['<section id="needs-attention">', "<h2>Needs attention</h2>"]
+    if flagged:
+        for anchor in flagged:
+            i = anchor.line_index
+            entry = line_entries[i]
+            command = _anchor_command(
+                i,
+                audio_path=audio_path,
+                song_path=song_path,
+                staging_dir=staging_dir,
+                words_path=words_path,
+                lang=lang,
+            )
+            hint = (
+                f"candidate start was {anchor.start:.2f} s"
+                if anchor.start is not None
+                else "no anchor found — listen for the line and time its onset"
+            )
+            body.extend(
+                [
+                    f'<article class="flag band-{anchor.band}" data-line="{i}" '
+                    f'data-start="{entry.start:.2f}" data-end="{entry.end:.2f}">',
+                    '<div class="flag-head">',
+                    _play_button(entry, f"▶ {entry.start:.2f} s"),
+                    f'<span class="idx">line {i}</span>',
+                    f'<span class="chip band-{anchor.band}">{anchor.band}</span>',
+                    f'<span class="signals">{esc(", ".join(anchor.signals))}</span>',
+                    "</div>",
+                    f'<p class="text">{esc(lines[i])}</p>',
+                ]
+            )
+            if anchor.asr_context:
+                body.append(f'<p class="asr">ASR heard: {esc(anchor.asr_context)}</p>')
+            body.extend(
+                [
+                    f'<p class="asr">{esc(hint)}</p>',
+                    '<div class="fix">',
+                    f'<code class="cmd">{esc(command)}</code>',
+                    '<button type="button" class="copy">Copy</button>',
+                    "</div>",
+                    "</article>",
+                ]
+            )
+    else:
+        body.append("<p>None — every line anchored HIGH.</p>")
+    body.append("</section>")
+
+    body.extend(
+        [
+            '<section id="all-lines">',
+            "<h2>All lines</h2>",
+            "<table>",
+            "<thead><tr><th>line</th><th></th><th>canonical text</th><th>start</th>"
+            "<th>end</th><th>dur</th><th>band</th><th>signals</th></tr></thead>",
+            "<tbody>",
+        ]
+    )
+    for anchor in anchors:
+        i = anchor.line_index
+        entry = line_entries[i]
+        body.extend(
+            [
+                f'<tr class="band-{anchor.band}" data-line="{i}" '
+                f'data-start="{entry.start:.2f}" data-end="{entry.end:.2f}">',
+                f"<td>{i}</td>",
+                f"<td>{_play_button(entry, '▶')}</td>",
+                f'<td class="text">{esc(lines[i])}</td>',
+                f'<td class="num">{entry.start:.2f}</td>',
+                f'<td class="num">{entry.end:.2f}</td>',
+                f'<td class="num">{entry.end - entry.start:.2f}</td>',
+                f'<td><span class="band-{anchor.band}">{anchor.band}</span></td>',
+                f'<td class="signals">{esc(", ".join(anchor.signals))}</td>',
+                "</tr>",
+            ]
+        )
+    body.extend(["</tbody>", "</table>", "</section>"])
+
+    tail = ["</div>", f"<script>\n{_HTML_JS}</script>", "</body>", "</html>", ""]
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text("\n".join(head + body + tail), encoding="utf-8")
+    return out_path

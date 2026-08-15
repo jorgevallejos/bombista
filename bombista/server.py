@@ -72,6 +72,7 @@ __all__ = [
     "session_payload",
     "build_sp_json",
     "emit_sp_json",
+    "lead_in_source",
 ]
 
 LOOPBACK_HOST = "127.0.0.1"
@@ -303,20 +304,16 @@ def _overrides_from_body(session: Session, body: dict) -> dict[int, float]:
     if not isinstance(raw, dict):
         raise ValueError('"overrides" must be an object of line -> seconds')
 
-    overrides = parse_anchor_overrides(
+    # Line 0 goes through here like every other line (§8.6, settled
+    # 2026-08-16). This function used to refuse it, on the argument that a
+    # stepper on line 0 silently breaks the v2 contract. It does not:
+    # `normalize_to_lead_in` runs on emit no matter how the value got
+    # there, banks line 0's onset into `leadIn.durationSec` and writes
+    # entry 0 as `0.00`. Invariant 3 is enforced by the normaliser, and
+    # refusing the edit was defending it at the wrong layer.
+    return parse_anchor_overrides(
         [f"{line}={seconds}" for line, seconds in raw.items()], len(session.lines)
     )
-
-    if 0 in overrides:
-        # Invariant 3: line 0 is always 0.00 in a v2 timeline and its
-        # offset lives in `leadIn`. A stepper on line 0 would silently
-        # break the contract — local error and global drift are different
-        # problems and get different controls (§3).
-        raise ValueError(
-            "line 0 cannot be moved — it is the start cue. Timeline v2 "
-            "normalises it to 0.00 and banks the offset in leadIn"
-        )
-    return overrides
 
 
 def _anchor(session: Session, overrides: dict[int, float]) -> dict[str, Any]:
@@ -330,7 +327,25 @@ def _anchor(session: Session, overrides: dict[int, float]) -> dict[str, Any]:
         "entries": entries,
         "lead_in": lead_in,
         "normalized": normalized,
+        "lead_in_source": lead_in_source(overrides),
     }
+
+
+def lead_in_source(overrides: dict[int, float]) -> str:
+    """`measured` | `manual` — the timeline v2 contract's own two words for
+    where `leadIn.durationSec` came from.
+
+    Line 0's onset *is* the lead-in (the normaliser banks it), and since
+    §8.6 line 0 can be hand-set. So the lead-in is `manual` exactly when
+    line 0 carries an override and `measured` otherwise. A correction
+    anywhere else is not a claim about where the song starts.
+
+    Note the word: the mockup and this repo's prose both say *hand-set*,
+    and the interchange format does not carry it —
+    `docs/timeline-v2-contract.md` takes `measured` | `manual` | `none`,
+    is frozen, and Pregonero validates against exactly those three.
+    """
+    return "manual" if 0 in overrides else "measured"
 
 
 def session_payload(session: Session, overrides: dict[int, float] | None = None) -> dict:
@@ -369,7 +384,12 @@ def session_payload(session: Session, overrides: dict[int, float] | None = None)
             line["asrContext"] = anchor.asr_context
         lines.append(line)
 
-    envelope = to_dict(result["lead_in"], result["normalized"], session.song)
+    envelope = to_dict(
+        result["lead_in"],
+        result["normalized"],
+        session.song,
+        source=result["lead_in_source"],
+    )
     counts = band_counts(anchors)
 
     return {
@@ -451,7 +471,12 @@ def build_sp_json(
     """
     overrides = session.overrides if overrides is None else overrides
     result = _anchor(session, overrides)
-    envelope = to_dict(result["lead_in"], result["normalized"], session.song)
+    envelope = to_dict(
+        result["lead_in"],
+        result["normalized"],
+        session.song,
+        source=result["lead_in_source"],
+    )
 
     merged = merge_envelope(session.song, envelope)
     merged = _place_owned_keys(

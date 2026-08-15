@@ -321,25 +321,109 @@ def test_reanchor_rejects_an_out_of_range_line(client):
 
 
 # ---------------------------------------------------------------------------
-# invariant 3 — line 0 is the lead-in, and it is not a line you can move
+# line 0 is not special (§8.6, settled 2026-08-16)
+#
+# These tests read the opposite way round from the ones this file shipped
+# with. §3 used to argue that a stepper on line 0 "silently breaks the v2
+# contract"; it does not. The normaliser runs on emit no matter how the
+# value got there — it banks line 0's onset into `leadIn.durationSec` and
+# writes entry 0 as `0.00`. **Invariant 3 is enforced by the normaliser,
+# not by refusing the edit**, and refusing it was defending the invariant
+# at the wrong layer.
+#
+# Jorge, 2026-08-16: line timestamps change independently, line 0 included.
+# The lead-in is a performance concept and belongs to Pregonero, at
+# performance time. A timeline extractor that grows a lead-in control is
+# answering a question that was not asked of it.
 # ---------------------------------------------------------------------------
 
-
-def test_line_0_cannot_be_moved_through_the_reanchor_route(client):
-    status, payload = client.post("/api/reanchor", {"overrides": {"0": 4.0}})
-
-    assert status == 400
-    assert "leadIn" in payload["error"]
+MOVED_LINE_0 = 10.40
+"""Line 0, forward by 0.40 s — the synthetic twin of the mockup's
+8.92 → 9.32 (§8.6). Far enough that every cue-relative value has to move
+and no raw one may."""
 
 
-def test_line_0_cannot_be_moved_through_the_emit_route(client, tmp_path):
-    status, payload = client.post(
-        "/api/emit", {"overrides": {"0": 4.0}, "out": str(tmp_path / "out.sp.json")}
+def test_line_0_moves_like_any_other_line(client):
+    status, payload = client.post("/api/reanchor", {"overrides": {"0": MOVED_LINE_0}})
+
+    assert status == 200
+    assert payload["lines"][0]["start"] == MOVED_LINE_0
+    assert payload["lines"][0]["handSet"] is True
+    assert payload["lines"][0]["machineStart"] == MACHINE_STARTS[0]
+
+
+def test_moving_line_0_leaves_every_raw_onset_below_it_where_it_was(client):
+    """§8.6, and it is the part that looks like two things at once: line
+    0's own word is where it always was, so the forward scan reaches line
+    1 exactly as before. Nothing below is re-derived differently."""
+    _, before = client.get("/api/session")
+    _, after = client.post("/api/reanchor", {"overrides": {"0": MOVED_LINE_0}})
+
+    assert [line["start"] for line in after["lines"]][1:] == MACHINE_STARTS[1:]
+    assert [line["band"] for line in after["lines"]] == [
+        line["band"] for line in before["lines"]
+    ]
+    assert after["bands"] == before["bands"]
+
+
+def test_moving_line_0_is_the_global_shift_and_entry_0_stays_zero(client, tmp_path):
+    """The mockup's demonstration, reproduced: the raw onsets below do not
+    move, `leadIn.durationSec` takes line 0's new value, entry 0 is still
+    `0.00`, and every cue-relative value shifts by exactly the amount line
+    0 moved. So moving line 0 *is* B6's global nudge, obtained for free
+    from the same control as everything else — no second widget, no
+    special case."""
+    machine_out = tmp_path / "machine.sp.json"
+    moved_out = tmp_path / "moved.sp.json"
+    client.post("/api/emit", {"overrides": {}, "out": str(machine_out)})
+    _, payload = client.post(
+        "/api/emit", {"overrides": {"0": MOVED_LINE_0}, "out": str(moved_out)}
     )
 
-    assert status == 400
-    assert "leadIn" in payload["error"]
-    assert not (tmp_path / "out.sp.json").exists()
+    machine = json.loads(machine_out.read_text(encoding="utf-8"))
+    moved = json.loads(moved_out.read_text(encoding="utf-8"))
+    shift = MOVED_LINE_0 - MACHINE_STARTS[0]
+
+    assert moved["leadIn"]["durationSec"] == MOVED_LINE_0
+    assert moved["timeline"][0]["start"] == 0.00
+    assert [
+        round(new["start"] - old["start"], 2)
+        for new, old in zip(moved["timeline"][1:], machine["timeline"][1:])
+    ] == [round(-shift, 2)] * (len(machine["timeline"]) - 1)
+    assert payload["handSet"] == [
+        {
+            "line": 0,
+            "machineStart": MACHINE_STARTS[0],
+            "start": MOVED_LINE_0,
+            "setAt": payload["timelineSignedOff"],
+        }
+    ]
+
+
+def test_a_hand_set_lead_in_says_so_in_the_contracts_own_word(client, tmp_path):
+    """`leadIn.source` is `"measured"` when Bombista computed it and
+    `"manual"` when a human overrode it — the timeline v2 contract's own
+    two words, and the only two it accepts besides `"none"`. The mockup
+    writes `"hand-set"`, which the contract does not carry; the fact it
+    records is right and the spelling is not (docs/timeline-v2-contract.md).
+    """
+    machine_out = tmp_path / "machine.sp.json"
+    moved_out = tmp_path / "moved.sp.json"
+
+    client.post("/api/emit", {"overrides": {}, "out": str(machine_out)})
+    client.post("/api/emit", {"overrides": {"0": MOVED_LINE_0}, "out": str(moved_out)})
+
+    assert json.loads(machine_out.read_text())["leadIn"]["source"] == "measured"
+    assert json.loads(moved_out.read_text())["leadIn"]["source"] == "manual"
+
+
+def test_moving_a_line_that_is_not_line_0_leaves_the_lead_in_measured(client, tmp_path):
+    """Only line 0 sets the lead-in. A correction anywhere else is not a
+    claim about where the song starts."""
+    out = tmp_path / "out.sp.json"
+    client.post("/api/emit", {"overrides": {"1": CORRECTED_LINE_1}, "out": str(out)})
+
+    assert json.loads(out.read_text())["leadIn"]["source"] == "measured"
 
 
 def test_the_lead_offset_lands_in_lead_in_and_entry_0_is_zero(client, tmp_path):

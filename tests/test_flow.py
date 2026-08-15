@@ -324,6 +324,35 @@ def test_a_run_reports_its_phases_while_it_works(serve_client, libertad):
         wait_for(client, "done")
 
 
+def test_a_run_is_transcribing_only_once_transcription_has_begun(serve_client, libertad):
+    """§12.3, and the invariant asserted on the payload rather than read
+    off the source: `state == "transcribing"` implies
+    `phases[0].state == "running"`. They are one fact with one writer.
+    A run claiming transcription while its phase list says nothing has
+    started is §9.4's state degraded into a spinner with extra rows, and
+    the window was only ever a few milliseconds wide — so this samples
+    from the very first payload there is, the one `POST /api/run` hands
+    back before the caller can ask for another."""
+    client = serve_client(None)
+    gate = {"released": False}
+
+    def slow(*args, **kwargs):
+        while not gate["released"]:
+            time.sleep(0.01)
+        return words_for(libertad["lines"])
+
+    with mock.patch.object(server, "transcribe_words", side_effect=slow):
+        _, first, _ = _start(client, libertad)
+        seen = [first] + [client.get("/api/run")[1] for _ in range(50)]
+        gate["released"] = True
+        wait_for(client, "done")
+
+    assert any(payload["state"] == "transcribing" for payload in seen)
+    for payload in seen:
+        if payload["state"] == "transcribing":
+            assert payload["phases"][0]["state"] == "running", payload
+
+
 def test_cancel_stops_the_run_and_installs_no_session(serve_client, libertad):
     client = serve_client(None)
     gate = {"released": False}

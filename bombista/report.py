@@ -83,6 +83,7 @@ def render_qa_report(
     provenance: dict,
     generated_at: datetime | None = None,
     stripped_lines: Sequence[dict] | None = None,
+    hand_set: Sequence[dict] | None = None,
 ) -> str:
     """Render the QA markdown. `anchors`, `lines` and `line_entries` are
     parallel, one per lyric line. `line_entries` and every time in this
@@ -179,6 +180,24 @@ def render_qa_report(
     for anchor in anchors:
         parts.append(_row(anchor, lines[anchor.line_index], line_entries[anchor.line_index]))
     parts.append("")
+
+    if hand_set:
+        # B20 §10.2: the per-line hand-set record lives here and not in the
+        # song file. A song file is a song; this is the audit document, and
+        # it is the only place that can say a machine value was overruled,
+        # by what, and when.
+        parts.append("## Hand-set lines")
+        parts.append("")
+        parts.append("| line | machine | hand-set | set at |")
+        parts.append("|------|---------|----------|--------|")
+        for item in hand_set:
+            machine = item.get("machineStart")
+            parts.append(
+                f"| {item['line']} | "
+                f"{'—' if machine is None else f'{machine:.2f}'} | "
+                f"{item['start']:.2f} | {item.get('setAt') or '—'} |"
+            )
+        parts.append("")
 
     if stripped_lines:
         parts.append("## Stripped lines")

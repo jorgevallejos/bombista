@@ -37,8 +37,9 @@ bombista align <audio.wav> <song.json|lyrics.txt> -o <staging-dir> \
     [--emit timeline|songjson|report-json|srt|lrc|html]
 bombista promote <staging>/<song>-timeline.json <song.json>
 
-# Review a staged run in a browser, on this machine only (B20):
-bombista serve <staging-dir> <song.json|lyrics.txt> [--lang es] [--port 0]
+# The three-step interface in a browser, on this machine only (B20):
+bombista serve                                        # start at step 1
+bombista serve <staging-dir> <song.json|lyrics.txt>   # boot into the review
 
 # One-off, for songs timed before timeline v2 (B13) — not part of the loop:
 bombista migrate <song.json> [--dry-run]
@@ -109,7 +110,14 @@ bombista/
                    write. Raises ValueError; `note` is a callback so a warning is
                    delivered before any refusal that follows it. B20 §2: `serve` must
                    promote what `promote` promotes, so there is one flow, not two
-  server.py      — B20: `serve`'s process and the JSON routes page 2 talks to.
+  pages.py       — B20: the HTML `serve` returns — pages 1 (input), 1.5 (processing)
+                   and 3 (output), the masthead and the step bar. String composition,
+                   stdlib only, inline CSS/JS, no build step, NO WEBFONT. STYLESHEET is
+                   the whole of §10.3's skin and is defined ONCE — page 2 inherits it
+                   rather than being retrofitted. §10.1's vocabulary is enforced by
+                   tests: no "align"/"alignment"/"emit"/"CP JSON" in a user-facing
+                   string, the masthead's own tagline excepted
+  server.py      — B20: `serve`'s process, the pages, and the JSON routes.
                    ThreadingHTTPServer on 127.0.0.1 ONLY (invariant 7 — the host is
                    an explicit argument that refuses every other value). Holds one
                    Session (lines, words, QA state of a previous `align`) and answers
@@ -117,12 +125,16 @@ bombista/
                    NOTHING from cli.py (invariant 1): it calls the same extracted
                    anchoring/pipeline/merge the CLI calls, so the two cannot drift.
                    An override RE-ANCHORS — there is no code here that adds an offset
-                   to anything. Page 2's HTML is not here; `/` is a 404 until it lands
+                   to anything. Also owns the run (transcribe -> anchor, cancellable),
+                   the loopback file-browse route (the server needs a real path; a
+                   browser File object has none), and the three downloads, which hand
+                   over bytes and write nothing. Page 2 is the one page not here —
+                   `/review` is a 404 until it lands
   cli.py         — click CLI: align / promote / migrate / serve, and nothing else. Wiring only:
                    options, help text, and translating ValueError into ClickException /
                    BadParameter. `extract` is a registered alias of `align` (B11) — the
                    same Command object, so the two cannot drift
-tests/           — 304 tests; all fast except one tiny-model integration test on a
+tests/           — 389 tests; all fast except one tiny-model integration test on a
                    committed 12 s fixture (tests/fixtures/)
 docs/
   timeline-v2-contract.md           — THE live contract with the translator (Pregonero).

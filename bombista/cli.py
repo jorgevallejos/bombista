@@ -322,7 +322,9 @@ def promote(timeline_json: Path, song_json: Path) -> None:
 
 @main.command()
 @click.argument(
-    "staging_dir", type=click.Path(exists=True, file_okay=False, path_type=Path)
+    "staging_dir",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
 )
 @click.argument(
     "lyrics",
@@ -337,32 +339,39 @@ def promote(timeline_json: Path, song_json: Path) -> None:
     show_default="an ephemeral port, printed on start",
     help=f"Port to bind on {LOOPBACK_HOST}.",
 )
-def serve(staging_dir: Path, lyrics: Path | None, lang: str, port: int) -> None:
-    """Review a staged alignment in a browser, on this machine only.
+def serve(staging_dir: Path | None, lyrics: Path | None, lang: str, port: int) -> None:
+    """Open the three-step interface in a browser, on this machine only.
 
-    STAGING_DIR is the output of a previous `align` — it supplies the word
-    stream and the QA state. The lyrics argument supplies the lines;
-    `align` never copies its lyrics input into staging, so pass the same
-    song JSON (or lyrics text) you aligned against. It is optional only
-    when the staging directory holds an `--emit songjson` output to fall
-    back on.
+    With no arguments it starts at step 1, where the song and its media
+    source are chosen and the run is started.
+
+    With STAGING_DIR it boots straight into the review of a previous
+    `align`. The staging directory supplies the word stream and the QA
+    state; the lyrics argument supplies the lines, because `align` never
+    copies its lyrics input into staging — pass the same song JSON (or
+    lyrics text) you aligned against. It may be omitted only when the
+    staging directory holds an `--emit songjson` output to fall back on.
 
     Binds 127.0.0.1 and nothing else. The audio, the transcription and the
     anchoring all stay in this process on this machine — nothing is
     uploaded, and there is no configuration that would change that.
     """
-    if lyrics is None:
-        fallback = next(iter(sorted(staging_dir.glob("*-song.json"))), None)
-        if fallback is None:
-            raise click.ClickException(
-                f"{staging_dir}: no lyrics argument, and no <stem>-song.json in "
-                "the staging directory to fall back on. Pass the song JSON or "
-                "lyrics text this run was aligned against."
-            )
-        lyrics = fallback
+    session = None
+    if staging_dir is not None:
+        if lyrics is None:
+            lyrics = next(iter(sorted(staging_dir.glob("*-song.json"))), None)
+            if lyrics is None:
+                raise click.ClickException(
+                    f"{staging_dir}: no lyrics argument, and no <stem>-song.json in "
+                    "the staging directory to fall back on. Pass the song JSON or "
+                    "lyrics text this run was aligned against."
+                )
+        try:
+            session = load_session(staging_dir, lyrics, lang=lang)
+        except ValueError as exc:
+            raise click.ClickException(str(exc))
 
     try:
-        session = load_session(staging_dir, lyrics, lang=lang)
         httpd = create_server(session, port=port)
     except ValueError as exc:
         raise click.ClickException(str(exc))

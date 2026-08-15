@@ -21,6 +21,7 @@ What remains is §7's acceptance run, not code. Jorge's design, 2026-08-14. Supe
 | **9** | **the chrome and the other three pages.** 9.1 masthead · 9.2 step bar · 9.3 page 1 Input · 9.4 page 1.5 Processing · 9.5 page 3 Output · 9.6 open |
 | **10** | **vocabulary, format, skin.** 10.1 names · 10.2 the SP JSON is the song JSON · **10.2.1 the two shapes** · 10.3 the skin |
 | **11** | **what building it found.** 11.1 corrected in place · 11.2 the lyrics argument · **11.3 the fixture** · 11.4 smaller · 11.5–11.10 what PR 4 found · **11.11 what page 2 found** · **11.12 how the docs nearly lost half of themselves** · **11.13 what the cleanup found** |
+| **12** | **what *using* it found.** 12.1 the stepper does not scale to a large error · 12.2 the downloaded file and the vault file do not meet |
 
 ---
 
@@ -1386,3 +1387,99 @@ left as a comment where each used to be.
 
 The general rule, now three for three: **a decision is not landed until the mockup agrees with
 it.** §11.11 found `hand-set`, the line-0 instruction, and now these.
+
+---
+
+## 12. What *using* it found
+
+§11 is what building B20 found. This is what the first real sessions found — a different and more
+valuable class, because the spec cannot anticipate it. Both entries are Jorge's, 2026-08-16, on the
+Luz y Sal import and the pimiento acceptance run.
+
+**The acceptance run passed.** Line 3 of pimiento was fixed through `serve`, the fifteen lines below
+it did not move, and `v1.0.0`'s gate (§7) is met. Everything below is the next thing, not a defect
+in what shipped.
+
+### 12.1 The stepper does not scale to a large error
+
+**Reported: a line in Luz y Sal sat at ~60 s and belonged at ~13 s.** Once it was moved, every other
+line re-corrected perfectly — the mechanism is right. But the move itself is ~47 seconds of timeline
+at 0.05 s a press: **roughly 940 presses, or about 42 seconds of continuous hold** at §8.4's 45 ms
+auto-repeat. Jorge's words: *"doing this with the arrows was a pain you know where."*
+
+**The design was calibrated on the wrong number.** §8.4 justifies press-and-hold with pimiento's
+line 3 — **1.22 s, 24 presses, a held second crosses it** — and that is a one-word ASR slip. A 47 s
+error is a different failure class: the machine did not mishear a word, it anchored a line to
+somewhere else entirely. Nothing in §6, §8.8 or the synthetic fixture contains a case of that size,
+so nothing in the design was ever tested against one. **The fixture measured the error Bombista
+makes often; the interface also has to survive the error it makes rarely.**
+
+**Jorge's proposal:** drop the arrows, accept a typed number, and correct the typed value to fit the
+valid intervals.
+
+**The counter-case, recorded because it pulls the other way.** Finding the onset is done *by ear*
+with the player (§8.4: *"play, listen, click, hold, listen again"*), and by-ear work is
+nudge-and-listen — a text field cannot be nudged, it has to be retyped in full each pass. Pimiento's
+1.22 s case is exactly that, and it is the §7 gate. So **removing the stepper would fix the rare
+error by making the common one worse.** The shape that serves both is *type to arrive, nudge to
+land*: a typed field for the jump and the stepper for the last half-second.
+
+⚠ **Needs Jorge's decision — it is the one visible control on the page.** Drop the arrows as he
+proposed, or keep both.
+
+**What "correct the numbers to fit the right intervals" has to mean**, either way:
+
+1. **Clamp to the neighbouring lines**, as §8.4 already does for the stepper.
+2. **Round to the grid** — never coarser than 0.07 s (B19's surviving constraint); the stepper's
+   own increment is 0.05 s.
+3. **And here is the consequence §8.4 will not like:** the stepper clamps *silently*, on the
+   reasoning that a stated bound is one more sentence on a page that should have almost none. That
+   works because you *feel* a stepper stop. **You do not feel a text field clamp.** Type 13, get
+   30.2, and nothing on screen explains it. A typed control needs the bound made visible — which is
+   the first thing on page 2 to earn its own sentence since the design closed.
+
+### 12.2 The downloaded file and the vault file do not meet
+
+**Reported: two `.sp.json` files downloaded, and `songs/` holds `.json` files.** Nothing in the
+product says how one becomes the other. Two separate problems sit underneath, and only the second
+is serious.
+
+**The naming.** `serve` writes `<stem>.sp.json` (`server.py`, the download route). The vault stores
+`luz-y-sal.json`. §10.2's third-pass correction settled that **the SP JSON *is* the `songs/*.json`
+format** — there is no new schema, only a name for the one that exists. A distinct *file extension*
+quietly reintroduces the distinction that correction removed, and it is the reason the two files
+look unrelated on disk. **Suggestion: `SP JSON` stays the name of the format in the vocabulary
+(§10.1) and the extension goes** — the download is `luz-y-sal.json`, because that is what it is.
+
+**The key loss, which is the real problem.** `bombista promote` exists and does the reconciliation —
+it validates against the v2 contract, checks `linesHash`, backs the target up beside itself, merges,
+and prints a diff:
+
+```
+bombista promote ~/Downloads/luz-y-sal.json songs/luz-y-sal.json
+```
+
+But `ENVELOPE_KEYS` is `("timelineVersion", "leadIn", "timeline")` — **three keys.** §10.2 gives
+Bombista **five**. So `linesHash` and `timelineSignedOff` do not survive the trip into the vault,
+and `songs/pimiento.json` confirms it: it carries the three and neither of the other two.
+
+**`timelineSignedOff` exists for exactly the journey that drops it.** §10.2's reason for it is that
+a reviewed timeline stays distinguishable from a machine one *after the file leaves the folder its
+report is in* — and the promote path is that departure. A sign-off that cannot cross it records
+nothing. `linesHash` is the same shape of loss: `promote` reads it as a **guard** and then does not
+write it, so the file it produces cannot guard the next promotion.
+
+**Suggestion, in order of size.** Copying the download over the vault file by hand works for the
+pass-through branch, and it is what Jorge did — but it bypasses the backup, the contract validation
+and the `linesHash` check, so it is a workaround and not the answer.
+
+1. **Small:** `promote` grows a second key set — the three envelope keys stay a unit written or not
+   at all, and `linesHash` / `timelineSignedOff` are written *when the candidate carries them*.
+   They are review facts rather than translator requirements, so they must not join `ENVELOPE_KEYS`
+   and inherit its refusal.
+2. **Right:** **page 3 should not hand you a file to reconcile by hand at all.** `serve` was given
+   the song file; it knows where the timeline belongs. The loop that §1 says closes in the page
+   currently stops one step short — it ends at the Downloads folder, and the last step is a shell
+   command the page never mentions. **A promote from page 3, with the diff shown before it writes,
+   is the honest end of the flow.** Downloading stays, for the cases where the song file is not the
+   destination.

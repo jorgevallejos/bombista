@@ -21,6 +21,9 @@ Output` — and the JSON routes behind it:
     GET    /api/browse    a directory listing, because the server needs a
                           real path and a browser File object has none (§9.6)
     GET    /api/download  the three downloads, as bytes — song, timeline, report
+    GET    /review        page 2 — the list of lines, and the one control
+    GET    /review/rows   that list again, as markup, after a re-anchor
+    GET    /api/audio     the take, as bytes, so the page needs no relative src
 
 **It re-anchors; it never shifts.** `anchoring.py` is forward-only: an
 override advances the scan to the first word after the corrected time, so
@@ -44,6 +47,7 @@ it, because the link is the navigation and the page is what fills it.
 from __future__ import annotations
 
 import json
+import mimetypes
 import threading
 import time
 from dataclasses import dataclass, field
@@ -97,11 +101,12 @@ _JSON = "application/json; charset=utf-8"
 class Session:
     """One `serve` run's immutable inputs, plus the machine's own answer.
 
-    `machine_starts` is what `anchor_lines` gives with no overrides at
-    all. It is computed once, at load, and never recomputed: it is the
-    "before" a hand-set line is recorded against, and re-deriving it from
-    a run that already carries overrides would quietly turn the human's
-    correction into the machine's value.
+    `machine_starts` and `machine_bands` are what `anchor_lines` gives
+    with no overrides at all. They are computed once, at load, and never
+    recomputed: they are the "before" a hand-set line is recorded against
+    — and the before/after §8.5 puts on the row — and re-deriving them
+    from a run that already carries overrides would quietly turn the
+    human's correction into the machine's value.
     """
 
     staging_dir: Path
@@ -113,6 +118,7 @@ class Session:
     lines_hash: str
     provenance: dict | None
     machine_starts: list[float | None]
+    machine_bands: list[str]
     input_paths: frozenset[Path]
     audio_path: Path | None = None
     model_size: str = "medium"
@@ -282,6 +288,7 @@ def load_session(
         lines_hash=compute_lines_hash(lines),
         provenance=_find_provenance(staging_dir, lyrics_path.stem),
         machine_starts=[anchor.start for anchor in machine],
+        machine_bands=[anchor.band for anchor in machine],
         input_paths=_input_paths(staging_dir, lyrics_path, lyrics_path.stem),
     )
 
@@ -378,6 +385,7 @@ def session_payload(session: Session, overrides: dict[int, float] | None = None)
                 if SIGNAL_GLOSSES.get(signal)
             },
             "machineStart": session.machine_starts[i],
+            "machineBand": session.machine_bands[i],
             "handSet": i in overrides,
         }
         if anchor.asr_context:
@@ -830,6 +838,40 @@ def describe_lyrics(lyrics_path: Path, *, lang: str = "es") -> dict:
     }
 
 
+def audio_path_for(session: Session) -> Path:
+    """The take this session's timings were measured against (§8.9).
+
+    `serve` knows the path — from step 1, or from the run's own provenance
+    when the session was booted straight into a review — so the bytes come
+    off a loopback route rather than a relative `src`. B16's page needs a
+    relative path because it is a loose file that must still work from a
+    USB stick; a running process does not, and a relative `src` would be a
+    second answer to where the audio is.
+
+    **The audio-clock rule is why this is fussy** (CLAUDE.md): a timeline
+    is only meaningful against the take it was measured from, so the wrong
+    file is worse than no file. The provenance path is stored as `align`
+    received it, which may be relative to the directory that run happened
+    in, so it is tried against the plausible roots and then given up on —
+    never swapped for some other audio that happens to be nearby.
+    """
+    if session.audio_path and session.audio_path.is_file():
+        return session.audio_path
+
+    recorded = (session.provenance or {}).get("audio")
+    if isinstance(recorded, str) and recorded:
+        for root in (Path.cwd(), session.staging_dir, session.staging_dir.parent):
+            candidate = (root / recorded).resolve()
+            if candidate.is_file():
+                return candidate
+
+    raise ValueError(
+        "no audio for this run — the media source is not where the run "
+        f"recorded it ({recorded or 'unrecorded'}). Start again at step 1 "
+        "and choose it, or the player has nothing to play."
+    )
+
+
 def browse(path: Path) -> dict:
     """§9.6, resolved: a loopback listing rather than `<input type="file">`.
 
@@ -892,11 +934,11 @@ class _Handler(BaseHTTPRequestHandler):
             elif route == "/output":
                 self._output_page()
             elif route == "/review":
-                self._error(
-                    404,
-                    "the review page is the next item — these routes are ready for "
-                    "it: GET /api/session, POST /api/reanchor, POST /api/emit",
-                )
+                self._review_page()
+            elif route == "/review/rows":
+                self._review_rows()
+            elif route == "/api/audio":
+                self._audio()
             elif route == "/api/session":
                 self._respond(200, session_payload(self._session()))
             elif route == "/api/run":
@@ -983,6 +1025,61 @@ class _Handler(BaseHTTPRequestHandler):
             "model": run.request["model"],
             "lang": run.request["lang"],
         }
+
+    def _review_page(self) -> None:
+        """Page 2, and the reason `/review` used to 404: it was the one page
+        not built, and a stub could have been mistaken for it."""
+        session = self.holder.session
+        if session is None:
+            self._redirect("/input")
+            return
+        self._html(pages.render_review(session_payload(session, session.overrides)))
+
+    def _review_rows(self) -> None:
+        """The list of lines, as markup, for the page to swap in after a
+        re-anchor.
+
+        The rows are rendered by `pages.render_rows` rather than by the
+        page's JavaScript so there is ONE template rather than two that can
+        disagree about what a row says — the same reason `serve` imports
+        the CLI's modules instead of copying them (invariant 1's spirit).
+        It answers off `session.overrides`, which `/api/reanchor` has just
+        set, so the markup and the JSON describe the same state.
+        """
+        session = self._session()
+        payload = session_payload(session, session.overrides)
+        self._send(200, pages.render_rows(payload).encode("utf-8"), "text/html; charset=utf-8")
+
+    def _audio(self) -> None:
+        """The take, as bytes, over loopback (§8.9).
+
+        Ranges are honoured because the transport seeks: a player that can
+        only start from zero cannot be used to judge a line by ear, and
+        judging by ear is the whole of §6's acceptance case.
+        """
+        try:
+            path = audio_path_for(self._session())
+        except ValueError as exc:
+            self._error(404, str(exc))
+            return
+        size = path.stat().st_size
+        content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        start, end = _range_header(self.headers.get("Range"), size)
+
+        with path.open("rb") as handle:
+            handle.seek(start)
+            payload = handle.read(end - start + 1)
+
+        partial = (start, end) != (0, size - 1)
+        self._send(
+            206 if partial else 200,
+            payload,
+            content_type,
+            extra={
+                "Accept-Ranges": "bytes",
+                **({"Content-Range": f"bytes {start}-{end}/{size}"} if partial else {}),
+            },
+        )
 
     def _output_page(self) -> None:
         session = self.holder.session
@@ -1094,6 +1191,24 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: Any) -> None:
         """Silence the default stderr access log — one user, one page, one
         socket. The CLI prints the URL and nothing else."""
+
+
+def _range_header(value: str | None, size: int) -> tuple[int, int]:
+    """`bytes=START-END` -> the closed interval to send, clamped to the
+    file. Anything this does not understand is answered whole rather than
+    refused: a player that cannot seek is a degradation, and a 416 is a
+    player that cannot play."""
+    if not value or not value.startswith("bytes=") or "," in value:
+        return 0, size - 1
+    first, _, last = value[len("bytes="):].partition("-")
+    try:
+        start = int(first) if first else 0
+        end = int(last) if last else size - 1
+    except ValueError:
+        return 0, size - 1
+    start = max(0, min(start, size - 1))
+    end = max(start, min(end, size - 1))
+    return start, end
 
 
 class _NoSession(Exception):

@@ -32,4 +32,5 @@ packages = ["bombista"]
 testpaths = ["tests"]
 markers = [
     "integration: exercises real external dependencies (e.g. the faster-whisper model); slower but runs by default",
+    "canary: the pimiento acceptance run (B20 §7). Opt-in — it reads the private vault through BOMBISTA_CANARY_SONG and BOMBISTA_CANARY_STAGING, and skips with those names in the message when they are unset. No song lyrics, no real ASR stream and no audio are committed here (§11.3)",
 ]

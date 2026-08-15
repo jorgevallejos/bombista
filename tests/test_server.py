@@ -114,7 +114,7 @@ class Client:
     def __init__(self, base: str) -> None:
         self.base = base
 
-    def request(self, method: str, path: str, body: dict | None = None):
+    def request(self, method: str, path: str, body: dict | None = None, *, html=False):
         data = json.dumps(body).encode("utf-8") if body is not None else None
         req = urllib.request.Request(
             self.base + path,
@@ -122,14 +122,15 @@ class Client:
             method=method,
             headers={"Content-Type": "application/json"} if data else {},
         )
+        decode = (lambda raw: raw) if html else json.loads
         try:
             with urllib.request.urlopen(req) as response:
-                return response.status, json.loads(response.read().decode("utf-8"))
+                return response.status, decode(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            return exc.code, json.loads(exc.read().decode("utf-8"))
+            return exc.code, decode(exc.read().decode("utf-8"))
 
-    def get(self, path):
-        return self.request("GET", path)
+    def get(self, path, **kw):
+        return self.request("GET", path, **kw)
 
     def post(self, path, body):
         return self.request("POST", path, body)
@@ -302,6 +303,21 @@ def test_a_re_anchor_reports_which_lines_were_hand_set_and_their_machine_values(
     assert lines[2]["machineStart"] == MACHINE_STARTS[2], (
         "machineStart must stay the value the machine gave, not the re-anchored one"
     )
+
+
+def test_the_machines_own_band_travels_with_every_line(client):
+    """§8.5: a band that changed shows its BEFORE and its after, on the
+    row. The "before" is what the machine said with no overrides at all —
+    computed once at load, never re-derived from a run that already
+    carries corrections, or the human's answer would quietly become the
+    machine's."""
+    _, before = client.get("/api/session")
+    _, after = client.post("/api/reanchor", {"overrides": {"1": CORRECTED_LINE_1}})
+
+    assert [line["machineBand"] for line in after["lines"]] == [
+        line["band"] for line in before["lines"]
+    ]
+    assert after["lines"][2]["machineBand"] != after["lines"][2]["band"]
 
 
 def test_a_re_anchor_re_bands_the_lines_below_it(client):
@@ -598,17 +614,18 @@ def test_emit_refuses_an_input_path_reached_by_another_route(client, staging, tm
 
 
 # ---------------------------------------------------------------------------
-# routes that do not exist yet
+# the routes page 2 turned out to need
 # ---------------------------------------------------------------------------
 
 
-def test_page_2_is_not_served_here(client):
-    """PR 3 builds page 2's HTML against these routes. Until then `/` is
-    honest about being empty rather than serving a stub someone might
-    mistake for the page."""
-    status, _ = client.get("/")
+def test_the_entry_point_is_the_review_when_a_session_was_booted(client):
+    """`serve <staging> <lyrics>` drops the user at step 2. This asserted a
+    404 until page 2 landed: `/review` was deliberately a hole rather than
+    a stub that could be mistaken for the page."""
+    status, body = client.get("/review", html=True)
 
-    assert status == 404
+    assert status == 200
+    assert body.startswith("<!doctype html>")
 
 
 def test_load_session_says_what_is_missing(tmp_path):

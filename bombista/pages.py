@@ -34,6 +34,8 @@ __all__ = [
     "STEPS",
     "render_input",
     "render_processing",
+    "render_review",
+    "render_rows",
     "render_output",
 ]
 
@@ -220,6 +222,98 @@ pre.json { background: var(--surface); border: 1px solid var(--line-2);
 .band-HIGH { color: var(--high); }
 .band-REVIEW { color: var(--review); }
 .band-FAIL { color: var(--fail); }
+
+/* ---------- page 2 — provenance: open by default, quiet enough to be (§8.2) ---------- */
+details.prov { margin: 1.2rem 0 0; font-size: .8rem;
+               border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+details.prov > summary { cursor: pointer; padding: .5rem 0; list-style: none;
+                         font: 400 .72rem/1.45 var(--mono); color: var(--dim);
+                         text-transform: uppercase; letter-spacing: .11em; }
+details.prov > summary::-webkit-details-marker { display: none; }
+details.prov > summary:hover { color: var(--paper); }
+details.prov ul { list-style: none; margin: 0; padding: 0 0 .7rem;
+                  font: 400 .72rem/1.7 var(--mono); color: var(--dimmer);
+                  columns: 2; column-gap: 2.5rem; }
+details.prov li { break-inside: avoid; overflow-wrap: anywhere; }
+details.prov li b { color: var(--dim); font-weight: 400; display: inline-block;
+                    min-width: 8.5rem; }
+
+/* ---------- page 2 — the sticky player, and nothing else is pinned ---------- */
+.sticky { position: sticky; top: 0; z-index: 20; background: var(--bg);
+          padding: .6rem 0 .5rem; border-bottom: 1px solid var(--line-2); }
+/* the native transport refuses the palette; invert it back down to the ground
+   rather than leave a light slab as the brightest object on the page */
+.sticky audio { width: 100%; height: 34px; filter: invert(.92) hue-rotate(180deg);
+                opacity: .72; }
+.sticky audio:hover { opacity: 1; }
+.barrow { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; margin-top: .5rem; }
+.playhead { font: 400 .72rem/1 var(--mono); color: var(--dimmer); }
+.playhead b { color: var(--dim); font-weight: 400; }
+
+/* ---------- page 2 — the list of lines IS the interface ---------- */
+.tablehint { margin: 1.3rem 0 .4rem; max-width: none; color: var(--dim); }
+.tablehint b { color: var(--paper); }
+table { border-collapse: collapse; width: 100%; font-size: .85rem; margin-top: 0;
+        border-top: 1px solid var(--line-2); }
+th { font: 400 .64rem/1 var(--mono); text-transform: uppercase; letter-spacing: .13em;
+     color: var(--dimmer); border-bottom: 1px solid var(--line-2); padding: .5rem;
+     text-align: left; }
+td { padding: .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+tr.band-REVIEW td { background: var(--tint-review); }
+tr.band-FAIL td { background: var(--tint-fail); }
+tr.editing td { background: var(--surface-2); }
+tr.current td { box-shadow: inset 3px 0 0 var(--dim); }
+tr.band-REVIEW .chip.band-REVIEW, tr.band-FAIL .chip.band-FAIL { font-weight: 700; }
+td.rail { width: 1rem; padding-left: .1rem; padding-right: .1rem; }
+.rail i { display: block; width: 2px; height: 100%; min-height: 1.5rem; }
+.rail.above i { background: var(--line-2); }
+.rail.below i { background: repeating-linear-gradient(to bottom,
+                var(--clay-dim) 0 3px, transparent 3px 8px); }
+td.idx { white-space: nowrap; font: 400 .68rem/1.35 var(--mono);
+         letter-spacing: .04em; color: var(--dimmer); }
+td.text { white-space: pre-wrap; min-width: 16rem; color: var(--paper); }
+tr.band-HIGH td.text { color: #cdc6b9; }
+.play { padding: .24rem .38rem; font-size: .66rem; color: var(--dimmer); }
+.why { font: 400 .73rem/1.45 var(--mono); color: var(--dim); }
+.why .tok { color: var(--paper); }
+tr.band-HIGH .why .tok { color: var(--dimmer); }
+tr.divider td { background: var(--bg); border-bottom: none;
+                border-top: 1px dashed var(--clay-dim); padding: .45rem .5rem .1rem;
+                font: 400 .66rem/1.4 var(--mono); text-transform: uppercase;
+                letter-spacing: .11em; color: var(--clay-dim); }
+
+/* the start time IS the control (§8.4) */
+.tbtn { font: 400 .9rem/1 var(--mono); text-transform: none; letter-spacing: 0;
+        font-variant-numeric: tabular-nums; background: transparent; color: var(--paper);
+        border: 1px solid transparent; border-bottom-color: var(--line-2);
+        padding: .14rem .3rem; }
+.tbtn:hover { background: var(--surface-2); border-color: var(--line-2); color: var(--paper); }
+.tbtn:active { background: var(--surface-2); }
+.tbtn.open { background: var(--clay); color: #1a100d; border-color: var(--clay); }
+/* the line is RESERVED whether or not there is a previous value in it: without
+   it the row grows mid-press and the button moves out from under the cursor */
+.was { display: block; font: 400 .68rem/1.2 var(--mono); min-height: 1.2em;
+       color: var(--dimmer); text-decoration: line-through; padding-right: .3rem; }
+.was:empty { text-decoration: none; }
+.arrow { color: var(--dim); }
+.badge { display: inline-block; font: 400 .6rem/1 var(--mono); letter-spacing: .1em;
+         padding: .24rem .32rem; margin-left: .3rem; border: 1px solid var(--clay-dim);
+         color: var(--clay); }
+.badge.changed { border-color: var(--line-2); color: var(--dim); }
+.badge.handset { border-color: var(--clay-dim); color: var(--clay); }
+
+/* the popup is the loudest object on the page, and that is correct: it appears
+   only when the hand is already there, and it is the only place a value changes */
+.pop { position: absolute; z-index: 60; background: var(--surface-2);
+       border: 1px solid var(--clay); box-shadow: 0 8px 26px rgba(0,0,0,.65);
+       padding: .45rem; display: flex; align-items: center; gap: .4rem; }
+.pop .val { font: 400 1.4rem/1 var(--mono); font-variant-numeric: tabular-nums;
+            min-width: 5.6rem; text-align: right; color: var(--paper); }
+.pop .unit { font: 400 .76rem/1 var(--mono); color: var(--dim); margin-right: .2rem; }
+.pop button.step { min-width: 3.2rem; color: var(--paper); border-color: var(--line-2); }
+.pop button.step:hover { border-color: var(--clay); color: var(--clay); }
+.confirm { margin: 1.7rem 0 0; }
 """
 
 _PICKER_JS = """\
@@ -522,6 +616,424 @@ def _shell(*, title: str, current: str, body: str, script: str = "") -> str:
         + scripts
         + "\n</body>\n</html>\n"
     )
+
+
+_REVIEW_JS = """\
+(function () {
+  "use strict";
+
+  var STEP = 0.05;         /* invariant 2 — the correction loop is 0.07 s, so
+                              neither this nor any serialisation may be coarser */
+  var DEBOUNCE = 250;      /* re-anchor once the stepping stops, not per press */
+  var HOLD_DELAY = 380;    /* press and hold before the auto-repeat starts */
+  var HOLD_RATE = 45;      /* and how fast it then repeats */
+
+  /* One stepper and nothing else (§8.4). No bounds text, no delta readout,
+     no explanation, no buttons — and no caption, because line 0 is not
+     special (§8.6). A stated bound is one more sentence on a page that
+     should have almost none; the bounds clamp silently instead. */
+  var POPUP = '<button class="step" data-step="-0.05">− 0.05</button>' +
+              '<span class="val" id="popval"></span><span class="unit">s</span>' +
+              '<button class="step" data-step="0.05">+ 0.05</button>';
+
+  var tbody = document.getElementById("tbody");
+  var audio = document.getElementById("audio");
+  var overrides = {};
+  var pop = null, open = null, value = null;
+  var holdTimer = null, repeatTimer = null, settle = null, pending = null;
+
+  function round2(x) { return Math.round(x * 100) / 100; }
+  function rows() { return tbody.querySelectorAll("tr[data-line]"); }
+  function startOf(row) { return parseFloat(row.getAttribute("data-start")); }
+
+  /* The bounds are the neighbouring lines, recomputed live off the rows —
+     that is the real allowed interval, and a fixed range is not. Line 0's
+     floor is the start of the audio because it has no line above it; that
+     is arithmetic, not a special case. */
+  function boundsFor(i) {
+    var all = rows();
+    var lo = (i === 0) ? 0 : startOf(all[i - 1]);
+    var hi = (i + 1 < all.length)
+      ? startOf(all[i + 1])
+      : parseFloat(all[i].getAttribute("data-end"));
+    return { lo: lo, hi: hi };
+  }
+
+  function openPopup(i) {
+    closePopup();
+    open = i;
+    value = startOf(rows()[i]);
+    pop = document.createElement("div");
+    pop.className = "pop";
+    pop.innerHTML = POPUP;
+    document.body.appendChild(pop);
+    document.getElementById("popval").textContent = value.toFixed(2);
+    mark();
+    placePopup();
+  }
+
+  /* Never while a button is held: the row would move out from under the
+     cursor mid-press, which is the same finding as the reserved line. */
+  function placePopup() {
+    if (!pop || holdTimer || repeatTimer) { return; }
+    var anchor = tbody.querySelector('.tbtn[data-open="' + open + '"]');
+    if (!anchor) { closePopup(); return; }
+    var box = anchor.getBoundingClientRect();
+    pop.style.top = (window.scrollY + box.bottom + 6) + "px";
+    pop.style.left = Math.max(8, window.scrollX + box.right - pop.offsetWidth) + "px";
+  }
+
+  function closePopup() {
+    if (pop) { pop.parentNode.removeChild(pop); pop = null; }
+    open = null;
+    value = null;
+    mark();
+  }
+
+  function mark() {
+    var all = rows();
+    for (var i = 0; i < all.length; i++) {
+      all[i].classList.toggle("editing", i === open);
+      var btn = all[i].querySelector(".tbtn");
+      if (btn) { btn.classList.toggle("open", i === open); }
+    }
+  }
+
+  function nudge(d) {
+    if (open === null) { return; }
+    var i = open, b = boundsFor(i), v = round2(value + d);
+    if (v <= b.lo) { v = round2(b.lo + 0.01); }
+    if (v >= b.hi) { v = round2(b.hi - 0.01); }
+    value = v;
+    var el = document.getElementById("popval");
+    if (el) { el.textContent = v.toFixed(2); }
+    schedule(i, v);
+  }
+
+  /* 250 ms after the last press — and never DURING one.
+     HOLD_DELAY is 380 ms and DEBOUNCE is 250 ms, so a plain debounce fires
+     in the gap between the first press and the start of the auto-repeat.
+     Committing there swaps the whole list out from under a cursor that is
+     still holding the button down: the same failure as an unreserved line
+     or a repositioned popup (§8.5), one layer further in, and one the
+     mockup could not meet because it re-rendered locally and instantly.
+     So the timer waits out the hold rather than racing it. */
+  function schedule(i, v) {
+    pending = { i: i, v: v };
+    clearTimeout(settle);
+    settle = setTimeout(fire, DEBOUNCE);
+  }
+
+  function fire() {
+    if (holdTimer || repeatTimer) { settle = setTimeout(fire, DEBOUNCE); return; }
+    if (pending) { commit(pending.i, pending.v); pending = null; }
+  }
+
+  /* The server re-anchors and the server renders the rows. There is no
+     arithmetic on this page: a correction re-derives every line below it
+     against the word stream, and a blanket delta would displace exactly the
+     rows the report exists to certify (§3, invariant 5). */
+  function commit(i, v) {
+    overrides[String(i)] = v;
+    fetch("/api/reanchor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ overrides: overrides })
+    }).then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) { return; }
+        counts(data.bands);
+        return fetch("/review/rows").then(function (r) { return r.text(); })
+          .then(function (html) { tbody.innerHTML = html; mark(); placePopup(); });
+      });
+  }
+
+  /* The whole-song announcement, and there is no banner: 18/1/0 -> 19/0/0 in
+     the sticky bar is the confirmation that the recompute ran and helped. */
+  function counts(bands) {
+    ["HIGH", "REVIEW", "FAIL"].forEach(function (band) {
+      document.getElementById("c" + band).textContent = band + " " + bands[band];
+    });
+  }
+
+  function startHold(d) {
+    nudge(d);
+    holdTimer = setTimeout(function () {
+      repeatTimer = setInterval(function () { nudge(d); }, HOLD_RATE);
+    }, HOLD_DELAY);
+  }
+
+  function endHold() {
+    clearTimeout(holdTimer);
+    clearInterval(repeatTimer);
+    holdTimer = repeatTimer = null;
+  }
+
+  document.addEventListener("mousedown", function (ev) {
+    var step = ev.target.closest && ev.target.closest("[data-step]");
+    if (step) { ev.preventDefault(); startHold(parseFloat(step.getAttribute("data-step"))); }
+  });
+  document.addEventListener("mouseup", endHold);
+  window.addEventListener("blur", endHold);
+
+  document.addEventListener("click", function (ev) {
+    var el = ev.target, hit;
+    if (!el || !el.closest) { return; }
+    if (el.closest("[data-step]")) { return; }
+    if ((hit = el.closest(".play"))) {
+      audio.currentTime = parseFloat(hit.getAttribute("data-start"));
+      audio.play();
+      return;
+    }
+    if ((hit = el.closest("[data-open]"))) {
+      var i = parseInt(hit.getAttribute("data-open"), 10);
+      if (open === i) { closePopup(); } else { openPopup(i); }
+      return;
+    }
+    if (!el.closest(".pop") && open !== null) { closePopup(); }
+  });
+
+  document.addEventListener("keydown", function (ev) {
+    if (ev.target && /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName)) { return; }
+    if (ev.key === " ") {
+      ev.preventDefault();
+      if (audio.paused) { audio.play(); } else { audio.pause(); }
+      return;
+    }
+    if (open === null) { return; }
+    if (ev.key === "Escape") { closePopup(); return; }
+    if (ev.key === "ArrowLeft") { ev.preventDefault(); nudge(-STEP); return; }
+    if (ev.key === "ArrowRight") { ev.preventDefault(); nudge(STEP); return; }
+  });
+
+  window.addEventListener("scroll", placePopup);
+  window.addEventListener("resize", placePopup);
+
+  /* Judging is the player's job (§8.4). The row under the playhead is
+     marked so the ear and the eye are on the same line. */
+  audio.addEventListener("timeupdate", function () {
+    var t = audio.currentTime;
+    document.getElementById("ph").textContent = t.toFixed(2);
+    var all = rows();
+    for (var i = 0; i < all.length; i++) {
+      var s = startOf(all[i]), e = parseFloat(all[i].getAttribute("data-end"));
+      all[i].classList.toggle("current", t >= s && t < e);
+    }
+  });
+
+  document.getElementById("confirm").addEventListener("click", function () {
+    location.href = "/output";
+  });
+})();
+"""
+
+
+def _f2(value: float | None) -> str:
+    return "" if value is None else f"{value:.2f}"
+
+
+def _why_cell(line: dict) -> str:
+    """§8.3. `clean-anchor` is not printed: eighteen rows repeating the word
+    for "nothing to see" is chrome wearing the costume of information, and
+    the dim HIGH chip already says it. So the only text in this column
+    belongs to the line that needs you.
+
+    The markdown report still prints every signal — it is an audit document
+    and has different duties. The asymmetry is deliberate.
+
+    A signal that is printed is spelled out underneath in plain language,
+    from `anchoring.SIGNAL_GLOSSES`, so this page, the report and B16's page
+    say the same words."""
+    shown = [signal for signal in line["signals"] if signal != "clean-anchor"]
+    if not shown:
+        return ""
+    cell = ", ".join(f'<span class="tok">{html_escape(s)}</span>' for s in shown)
+    gloss = (line.get("signalGlosses") or {}).get(shown[0])
+    if line["band"] != "HIGH" and gloss:
+        cell += "<br>" + html_escape(gloss)
+    return cell
+
+
+def _band_cell(line: dict) -> str:
+    """§8.5: a band that changed shows its BEFORE and its after, on the row
+    — old chip faded, arrow, new chip, `RE-ANCHORED`. Not a silent repaint,
+    because what an edit did to the rows that were *not* flagged is the most
+    useful thing on the page."""
+    band, was = line["band"], line.get("machineBand")
+    if was and was != band:
+        cell = (
+            f'<span class="chip band-{was}" style="opacity:.4">{was}</span> '
+            '<span class="arrow">→</span> '
+            f'<span class="chip band-{band}">{band}</span>'
+        )
+        if not line["handSet"]:
+            cell += '<span class="badge changed">RE-ANCHORED</span>'
+    else:
+        cell = f'<span class="chip band-{band}">{band}</span>'
+    if line["handSet"]:
+        cell += '<span class="badge handset">HAND-SET</span>'
+    return cell
+
+
+def _row(line: dict, *, pivot: int | None, machine_duration: float | None) -> str:
+    """One lyric line, and every fact about it that §8.3 asks for.
+
+    **The index never appears alone.** §6 makes that a UI requirement: the
+    CLI never said whether `LINE` was 0- or 1-indexed and no user-facing
+    string in the repo does either, so a row shows `line 3` *and* the line's
+    own words, and ▶ confirms it by ear. A page that shows a bare index has
+    failed in exactly the way the CLI failed — it just fails in a browser.
+
+    **Times are raw audio-clock seconds**, the clock the QA report, `--anchor`
+    and the player all use. The cue-relative conversion happens on emit and
+    is never shown: two clocks on one page is a real risk, and only one of
+    them is ever visible.
+    """
+    i, start, end = line["i"], line["start"], line["end"]
+    machine = line.get("machineStart")
+    was_start = None if machine is None or round(machine, 2) == start else round(machine, 2)
+    duration = round(end - start, 2)
+    was_duration = (
+        None
+        if machine_duration is None or round(machine_duration, 2) == duration
+        else round(machine_duration, 2)
+    )
+
+    rail = "rail" if pivot is None else ("rail above" if i <= pivot else "rail below")
+    row = (
+        f'<tr class="band-{line["band"]}" data-line="{i}" '
+        f'data-start="{start:.2f}" data-end="{end:.2f}">'
+        f'<td class="{rail}"><i></i></td>'
+        f'<td><button class="play" data-start="{start:.2f}">▶</button></td>'
+        f'<td class="idx">line {i}</td>'
+        f'<td class="text">{html_escape(line["text"])}</td>'
+        f'<td class="num"><span class="was mono">{_f2(was_start)}</span>'
+        f'<button class="tbtn" data-open="{i}">{start:.2f}</button></td>'
+        f'<td class="num"><span class="was mono">{_f2(was_duration)}</span>'
+        f'<span class="mono">{duration:.2f}</span></td>'
+        f'<td>{_band_cell(line)}</td>'
+        f'<td class="why">{_why_cell(line)}</td>'
+        "</tr>"
+    )
+    if pivot is not None and i == pivot:
+        # The rail alone is undiscoverable; one line of text is the floor.
+        row += (
+            '<tr class="divider"><td colspan="8">'
+            "below here, re-derived against the audio — above, unchanged</td></tr>"
+        )
+    return row
+
+
+def render_rows(payload: dict) -> str:
+    """The `<tbody>` of the list of lines — the whole of it, always.
+
+    Never filtered to the flagged rows: filtering would hide the thing the
+    page exists to show, which is what an edit did to the rows that were
+    *not* flagged (§8.2).
+
+    The rows are rendered here rather than in the page's JavaScript so that
+    there is one template, in one language, that a test can read — and the
+    page fetches this same markup back after a re-anchor rather than
+    building a second copy of it.
+
+    The rail and the divider key off the EARLIEST hand-set line, which is
+    §8.9's open question answered: `anchor_lines` takes a mapping and the
+    routes accept one, so more than one correction is allowed, and
+    everything below the earliest of them is what was re-derived.
+    """
+    lines = payload["lines"]
+    hand_set = [line["i"] for line in lines if line["handSet"]]
+    pivot = min(hand_set) if hand_set else None
+
+    machine = [line.get("machineStart") for line in lines]
+    rows = []
+    for k, line in enumerate(lines):
+        nxt, here = (machine[k + 1] if k + 1 < len(machine) else None), machine[k]
+        duration = None if nxt is None or here is None else nxt - here
+        rows.append(_row(line, pivot=pivot, machine_duration=duration))
+    return "".join(rows)
+
+
+def _provenance(payload: dict) -> str:
+    """§8.2, item 1: open by default, in two quiet columns of dim mono.
+
+    Collapsed, its summary line was a run-on that *"is not understandable"*.
+    The first pass hid it because it was loud; the answer was to make it
+    recede. **Quiet, not hidden** — a block that recedes can stay open, and
+    open it is legible at a glance.
+    """
+    source = payload.get("provenance") or {}
+    duration = source.get("durationSec")
+    items = [
+        ("Song", payload.get("title") or "—"),
+        ("Media source", source.get("audio") or "—"),
+        ("Media sha256", source.get("sha256") or "—"),
+        ("Media duration", "—" if duration is None else f"{duration:.2f} s"),
+        ("Model", f'{source.get("model") or "—"} · {source.get("device") or "—"}'),
+        ("Language", payload.get("lang") or "—"),
+        ("Transcribed at", source.get("extractedAt") or "—"),
+        ("Tool version", source.get("toolVersion") or "—"),
+        ("Lines hash", payload.get("linesHash") or "—"),
+        ("Measured lead-in", f'{payload["leadIn"]["durationSec"]:.2f} s'),
+    ]
+    body = "".join(
+        f"<li><b>{label}</b> <span>{html_escape(str(value))}</span></li>"
+        for label, value in items
+    )
+    return (
+        '<details class="prov" open><summary>Provenance — this run</summary>'
+        f"<ul>{body}</ul></details>"
+    )
+
+
+def render_review(payload: dict) -> str:
+    """Page 2 — Review (§8). The heart of B20, and B19 absorbed.
+
+    **The list of lines is the interface** (Jorge, 2026-08-15). A first pass
+    put a lead-in panel, a *needs attention* card, an editor pane, a
+    re-anchor banner and a JSON preview around it; all five are cut. The
+    user judges the timeline by reading the lines and their times and
+    hearing the audio, and anything that explains, repeats or restates that
+    is weight. What survives is the player, the list, one popup and one
+    button — and that is the design, not an unfinished state.
+
+    **Line 0 is an ordinary row** (§8.6, settled 2026-08-16): same stepper,
+    no special colour, no `lead-in` label, no popup caption, and no lead-in
+    widget anywhere on this page. Moving it *is* the global shift, because
+    the normaliser banks its onset into `leadIn` at emit; the distinction
+    between a lead-in and line 0 belongs to Pregonero, at performance time.
+    """
+    counts = payload["bands"]
+    body = f"""
+<h1>Review</h1>
+<p class="lede">{len(payload["lines"])} lines · raw audio-clock seconds</p>
+
+{_provenance(payload)}
+
+<div class="sticky">
+  <audio id="audio" controls preload="metadata" src="/api/audio"></audio>
+  <div class="barrow">
+    <span class="chip band-HIGH" id="cHIGH">HIGH {counts["HIGH"]}</span>
+    <span class="chip band-REVIEW" id="cREVIEW">REVIEW {counts["REVIEW"]}</span>
+    <span class="chip band-FAIL" id="cFAIL">FAIL {counts["FAIL"]}</span>
+    <span class="playhead">playhead <b class="mono" id="ph">0.00</b> s</span>
+  </div>
+</div>
+
+<p class="hint tablehint">Click a <b>START</b> time to adjust it. Press and hold to move
+  fast — a whole missed word is about a second.</p>
+
+<table>
+  <thead><tr>
+    <th></th><th></th><th>line</th><th>text</th><th class="num">start</th>
+    <th class="num">dur</th><th>band</th><th>why</th>
+  </tr></thead>
+  <tbody id="tbody">{render_rows(payload)}</tbody>
+</table>
+
+<p class="confirm"><button class="btn1" id="confirm">Confirm timeline →</button></p>
+"""
+    return _shell(title="Review", current="2", body=body, script=_REVIEW_JS)
 
 
 def render_input(*, home: str = "") -> str:

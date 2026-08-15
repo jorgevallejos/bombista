@@ -6,8 +6,10 @@ is opinionated: four rows and no fifth, no free text but the title, no
 fold on page 3, no external reference anywhere, and none of the retired
 words on a user-facing string.
 
-Page 2 is not built yet (it is the next item), so the step bar is asserted
-to *link* to all three steps rather than to render on four pages.
+Page 2 joined this file when it landed: the chrome, the vocabulary and
+the skin are shared, so its assertions about *those* belong here beside
+the other three. What is page 2's own — the row, the stepper, the popup,
+what an edit shows — is in tests/test_page2.py.
 """
 from __future__ import annotations
 
@@ -44,7 +46,7 @@ def flow_text(html: str) -> str:
     return visible_text(re.sub(r'<header class="mast".*?</header>', " ", html, flags=re.S))
 
 
-ALL_PAGES = ["input", "processing", "output"]
+ALL_PAGES = ["input", "processing", "review", "output"]
 
 
 def render(name: str, **kwargs) -> str:
@@ -64,14 +66,34 @@ def page3(libertad):
     return pages.render_output(server.build_sp_json(session, {})[0], filename="libertad.sp.json")
 
 
+@pytest.fixture
+def page2(synthetic_session):
+    from bombista import server
+
+    return pages.render_review(server.session_payload(synthetic_session))
+
+
+@pytest.fixture
+def rendered(page1, page2, page3):
+    """The four states, by the name `ALL_PAGES` parametrises on. Page 1.5
+    is a state of step 1 (§9.2) and is rendered by `render` on demand;
+    pages 2 and 3 need a session, so they arrive as fixtures."""
+    return {
+        "input": page1,
+        "processing": pages.render_processing(),
+        "review": page2,
+        "output": page3,
+    }
+
+
 # ---------------------------------------------------------------------------
 # the masthead and the step bar — on every page (§9.1, §9.2)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("name", ALL_PAGES)
-def test_every_page_carries_the_masthead(name, libertad, page3):
-    html = page3 if name == "output" else render(name)
+def test_every_page_carries_the_masthead(name, rendered):
+    html = rendered[name]
 
     assert "Bombista" in html
     assert "Forced-alignment triage" in html
@@ -80,8 +102,8 @@ def test_every_page_carries_the_masthead(name, libertad, page3):
 
 
 @pytest.mark.parametrize("name", ALL_PAGES)
-def test_every_page_carries_the_step_bar_and_reaches_every_step(name, page3):
-    html = page3 if name == "output" else render(name)
+def test_every_page_carries_the_step_bar_and_reaches_every_step(name, rendered):
+    html = rendered[name]
     bar = re.search(r'<nav class="steps".*?</nav>', html, re.S)
 
     assert bar, "no step bar"
@@ -102,8 +124,8 @@ def test_page_1_5_is_a_state_of_step_1_not_a_fourth_step():
 
 
 @pytest.mark.parametrize("name", ALL_PAGES)
-def test_the_current_step_is_marked(name, page3):
-    html = page3 if name == "output" else render(name)
+def test_the_current_step_is_marked(name, rendered):
+    html = rendered[name]
     bar = re.search(r'<nav class="steps".*?</nav>', html, re.S).group(0)
 
     assert len(re.findall(r'class="on"', bar)) == 1
@@ -293,8 +315,8 @@ def test_page_3_links_back_to_review(page3):
 
 
 @pytest.mark.parametrize("name", ALL_PAGES)
-def test_no_page_uses_a_retired_word(name, page3):
-    html = page3 if name == "output" else render(name)
+def test_no_page_uses_a_retired_word(name, rendered):
+    html = rendered[name]
     text = flow_text(html).lower()
 
     for retired in ("emit", "align", "alignment", "cp json", "cp song"):
@@ -311,16 +333,16 @@ def test_the_masthead_keeps_the_products_own_tagline():
 
 
 @pytest.mark.parametrize("name", ALL_PAGES)
-def test_the_steps_are_named_input_review_output(name, page3):
-    html = page3 if name == "output" else render(name)
+def test_the_steps_are_named_input_review_output(name, rendered):
+    html = rendered[name]
     bar = re.search(r'<nav class="steps".*?</nav>', html, re.S).group(0)
 
     assert "Set up" not in bar and "Correct" not in bar and "Emit" not in bar
 
 
 @pytest.mark.parametrize("name", ALL_PAGES)
-def test_the_audio_row_is_called_media_source(name, page3):
-    html = page3 if name == "output" else render(name)
+def test_the_audio_row_is_called_media_source(name, rendered):
+    html = rendered[name]
 
     assert not re.search(r'<label class="flabel">Audio</label>', html)
 
@@ -331,14 +353,14 @@ def test_the_audio_row_is_called_media_source(name, page3):
 
 
 @pytest.mark.parametrize("name", ALL_PAGES)
-def test_no_page_references_anything_external(name, page3):
+def test_no_page_references_anything_external(name, rendered):
     """Narrower than B16's assertion, which forbids `fetch` too: these
     pages talk to their own process over loopback, and must. What they
     must not do is LOAD anything off the machine — no font CDN, no CSS
     host, no remote image. A hyperlink the reader may click is not a
     resource the page fetches, which is what lets §9.3's *See an example*
     point at the repo until the format has a canonical home (§9.6)."""
-    html = page3 if name == "output" else render(name)
+    html = rendered[name]
 
     resources = re.findall(r'<(?:link|script|img|iframe)\b[^>]*(?:src|href)="([^"]+)"', html)
     resources += re.findall(r"url\(\s*['\"]?([^)'\"]+)", pages.STYLESHEET)
@@ -350,9 +372,9 @@ def test_no_page_references_anything_external(name, page3):
 
 
 @pytest.mark.parametrize("name", ALL_PAGES)
-def test_every_page_is_self_contained(name, page3):
+def test_every_page_is_self_contained(name, rendered):
     """§8.1's stack: one page, inline CSS and JS, no build step."""
-    html = page3 if name == "output" else render(name)
+    html = rendered[name]
 
     assert "<style>" in html
     assert not re.search(r"<link[^>]+stylesheet", html)
@@ -393,10 +415,18 @@ def test_the_skin_has_one_palette_no_radius_and_no_blue():
     assert "--edit" not in css
 
 
-def test_the_shared_stylesheet_is_shared():
-    """One skin, defined once. Page 2 inherits it rather than being
-    retrofitted with it (the reason this item runs before page 2)."""
-    rendered = [pages.render_input(), pages.render_processing()]
+@pytest.mark.parametrize("name", ALL_PAGES)
+def test_the_shared_stylesheet_is_shared(name, rendered):
+    """One skin, defined once. Page 2 INHERITED it rather than being
+    retrofitted with it — the reason PR 4 ran before this one."""
+    assert pages.STYLESHEET in rendered[name]
 
-    for html in rendered:
-        assert pages.STYLESHEET in html
+
+def test_the_step_bar_renders_on_all_four_states(rendered):
+    """§9.2, and the last of PR 4's four findings closed: the bar rendered
+    on three states while `/review` 404ed. It renders on four now, and
+    every step is reachable from every other."""
+    for name in ALL_PAGES:
+        bar = re.search(r'<nav class="steps".*?</nav>', rendered[name], re.S)
+        assert bar, name
+        assert re.findall(r'href="([^"]+)"', bar.group(0)) == ["/input", "/review", "/output"]

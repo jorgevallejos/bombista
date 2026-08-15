@@ -80,6 +80,72 @@ def test_the_pages_are_served_as_html(serve_client, path):
     assert body.startswith("<!doctype html>")
 
 
+def test_the_review_is_served_as_html_once_there_is_something_to_review(client):
+    """`/review` answered 404 until page 2 landed — deliberately, rather
+    than a stub that could be mistaken for the page (§11.7). It is the
+    fourth state now."""
+    status, body, headers = client.get("/review")
+
+    assert status == 200
+    assert headers["Content-Type"].startswith("text/html")
+    assert body.startswith("<!doctype html>")
+
+
+def test_the_review_sends_you_to_step_1_when_no_song_is_loaded(serve_client):
+    """The same answer `/output` gives: there is nothing to review, and a
+    page that says so is a page with a dead end on it."""
+    status, _, headers = serve_client(None).get("/review")
+
+    assert status in (302, 303)
+    assert headers["Location"] == "/input"
+
+
+@pytest.fixture
+def audio_client(serve_client, libertad):
+    """A session that knows its take. `serve <staging> <lyrics>` does not
+    take an audio argument, so a session booted that way finds the file
+    through the run's own provenance instead — see `audio_path_for`."""
+    session = server.load_session(
+        libertad["staging"], libertad["song_path"], lang="es",
+        audio_path=libertad["audio"],
+    )
+    return serve_client(session)
+
+
+def test_the_audio_is_served_over_loopback_with_ranges(audio_client, libertad):
+    """§8.9: `serve` knows the path from step 1, so the bytes come off a
+    route rather than a relative `src`. Ranges because the transport seeks
+    — a player that can only start at zero cannot judge a line by ear,
+    which is the whole of §6's acceptance case."""
+    size = libertad["audio"].stat().st_size
+    status, body, headers = audio_client.get("/api/audio", binary=True)
+
+    assert status == 200
+    assert headers["Accept-Ranges"] == "bytes"
+    assert body == libertad["audio"].read_bytes()
+
+    status, body, headers = audio_client.get(
+        "/api/audio", binary=True, headers={"Range": "bytes=8-15"}
+    )
+
+    assert status == 206
+    assert headers["Content-Range"] == f"bytes 8-15/{size}"
+    assert body == libertad["audio"].read_bytes()[8:16]
+
+
+def test_the_audio_route_serves_nothing_when_the_take_cannot_be_found(serve_client, session):
+    """Timeline times are only meaningful against the audio they were
+    measured from (CLAUDE.md's audio-clock rule). A missing take is said
+    plainly rather than answered with some other file."""
+    session.audio_path = None
+    session.provenance = None
+
+    status, payload, _ = serve_client(session).get("/api/audio")
+
+    assert status == 404
+    assert "audio" in payload["error"]
+
+
 def test_step_3_is_not_reachable_before_there_is_anything_to_output(serve_client):
     client = serve_client(None)
 

@@ -1,0 +1,97 @@
+{
+  "title": "Synthetic Nineteen",
+  "artist": "Chango Pepper",
+  "notes": "A fixture, not a song. Nineteen invented lines on pimiento's timing skeleton.",
+  "title_translations": {
+    "es": "Synthetic Nineteen",
+    "en": "Synthetic Nineteen"
+  },
+  "tempo": {
+    "bpm": 66.67,
+    "numerator": 6,
+    "denominator": 8,
+    "countInBars": 1
+  },
+  "intro": {
+    "es": "nada",
+    "en": "nothing"
+  },
+  "lyrics": [
+    {
+      "es": "rulig totuz mibid novij",
+      "en": "rulig totuz mibid novij"
+    },
+    {
+      "es": "jodep sajas zejoz nizol tapav",
+      "en": "jodep sajas zejoz nizol tapav"
+    },
+    {
+      "es": "selob doluv jizer votam",
+      "en": "selob doluv jizer votam"
+    },
+    {
+      "es": "pamen soriv suzaf juzub binod",
+      "en": "pamen soriv suzaf juzub binod"
+    },
+    {
+      "es": "puboz bapib zubob nitug",
+      "en": "puboz bapib zubob nitug"
+    },
+    {
+      "es": "gebaj dadav sugeb bogon",
+      "en": "gebaj dadav sugeb bogon"
+    },
+    {
+      "es": "porem sumoj tafes simub ketas",
+      "en": "porem sumoj tafes simub ketas"
+    },
+    {
+      "es": "nobip nesoj retaf zunag",
+      "en": "nobip nesoj retaf zunag"
+    },
+    {
+      "es": "gupip muzel lasig datil",
+      "en": "gupip muzel lasig datil"
+    },
+    {
+      "es": "bezez dibub sofid ponul biros",
+      "en": "bezez dibub sofid ponul biros"
+    },
+    {
+      "es": "bajej jujef vegez jepik",
+      "en": "bajej jujef vegez jepik"
+    },
+    {
+      "es": "kilor bofev kebos gugof",
+      "en": "kilor bofev kebos gugof"
+    },
+    {
+      "es": "pebiv patab gutij kolot najon",
+      "en": "pebiv patab gutij kolot najon"
+    },
+    {
+      "es": "davod ninej jemas mesup",
+      "en": "davod ninej jemas mesup"
+    },
+    {
+      "es": "sutul janug fupus fabof",
+      "en": "sutul janug fupus fabof"
+    },
+    {
+      "es": "jegut zutis lopir soget vuvir",
+      "en": "jegut zutis lopir soget vuvir"
+    },
+    {
+      "es": "jogad dolib reler toteb",
+      "en": "jogad dolib reler toteb"
+    },
+    {
+      "es": "kezob lirer boduk lupom",
+      "en": "kezob lirer boduk lupom"
+    },
+    {
+      "es": "filud fukuk gejin fepek sofam",
+      "en": "filud fukuk gejin fepek sofam"
+    }
+  ]
+}

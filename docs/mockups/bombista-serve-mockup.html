@@ -1,0 +1,1000 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bombista serve — Pimiento</title>
+<style>
+/* ==========================================================================
+   bombista serve — brutalist, ink ground, quiet register
+   Contrast is a budget. It is spent on the one flagged line and the control
+   the hand is going to. Navigation, provenance, structure and the 18 rows
+   that are fine all sit below the fold of attention on purpose.
+   Rules are hairlines, not slabs. Clay is the only accent and marks the
+   active thing. HIGH is deliberately dim — it is the boring answer.
+   No webfont: a local-first tool does not phone a font CDN.
+   ========================================================================== */
+:root {
+  color-scheme: dark;
+  --bg: #121211;
+  --surface: #1a1a18;
+  --surface-2: #232320;
+  --paper: #e6dfd1;
+  --dim: #8b8478;
+  --dimmer: #635d54;
+  --line: #2c2a26;
+  --line-2: #423e37;
+  --clay: #d98b7a;
+  --clay-dim: #8f5a4e;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  /* HIGH is muted on purpose — 18 of 19 rows are HIGH and none of them need you */
+  --high: #4f7d63;
+  --review: #e0a437;
+  --fail: #ef7a70;
+  --tint-review: #241d11;
+  --tint-fail: #251715;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0; padding: 0 clamp(16px, 4vw, 40px) 6rem;
+  background: var(--bg); color: var(--paper);
+  font: 15px/1.55 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 66rem; margin: 0 auto; }
+
+h1 { font-size: clamp(1.35rem, 2.2vw, 1.7rem); font-weight: 800; text-transform: uppercase;
+     letter-spacing: .01em; line-height: 1.1; margin: 1.6rem 0 .3rem; }
+.lede { font: 400 .78rem/1.5 var(--mono); color: var(--dim); margin: 0 0 1.2rem; }
+.hint { font: 400 .76rem/1.55 var(--mono); color: var(--dim); margin: .45rem 0 0; max-width: 46rem; }
+.hint b { color: var(--paper); font-weight: 400; }
+.hint code { color: #b0a898; }
+code { font-family: var(--mono); font-size: .88em; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+a { color: var(--paper); text-decoration: none; border-bottom: 1px solid var(--clay-dim); }
+a:hover { border-bottom-color: var(--clay); color: var(--clay); }
+
+/* ---------- masthead ---------- */
+.mast { display: flex; align-items: flex-end; justify-content: space-between; gap: 1.5rem;
+        flex-wrap: wrap; padding: 1.4rem 0 .9rem; border-bottom: 1px solid var(--line-2); }
+.mast .wordmark { display: block; font-weight: 800; text-transform: uppercase;
+                  letter-spacing: -.01em; line-height: 1; font-size: 1.35rem; }
+.mast .tagline { display: block; margin-top: .35rem;
+                 font: 400 .7rem/1 var(--mono); text-transform: uppercase;
+                 letter-spacing: .14em; color: var(--dimmer); }
+.mast .by { text-align: right; font: 400 .68rem/1.7 var(--mono); text-transform: uppercase;
+            letter-spacing: .11em; color: var(--dimmer); }
+.mast .by b { color: var(--dim); font-weight: 400; }
+.mast .by .tramoya { color: var(--clay-dim); }
+
+/* ---------- buttons ---------- */
+button { font: 400 .76rem/1 var(--mono); text-transform: uppercase; letter-spacing: .1em;
+         cursor: pointer; border: 1px solid var(--line-2); border-radius: 0;
+         background: transparent; color: var(--dim); padding: .5rem .75rem;
+         box-shadow: none; transition: none; }
+button:hover:not(:disabled) { color: var(--paper); border-color: var(--paper); }
+button:active:not(:disabled) { background: var(--surface-2); }
+button:disabled { opacity: .35; cursor: default; }
+button:focus-visible { outline: 2px solid var(--clay); outline-offset: 2px; }
+
+.btn1 { background: var(--clay); border-color: var(--clay); color: #1a100d;
+        font-weight: 700; font-size: .82rem; padding: .62rem 1rem; }
+.btn1:hover:not(:disabled) { background: #e79b8a; border-color: #e79b8a; color: #1a100d; }
+.btn1:active:not(:disabled) { background: var(--clay); }
+.btn1:disabled { background: var(--clay); color: #1a100d; }
+
+.go { margin: 1.5rem 0 0; }
+.confirm { margin: 1.7rem 0 0; }
+
+/* ---------- mock-only chrome ---------- */
+.mockbar { background: var(--surface); color: var(--dimmer);
+           font: 400 .68rem/1.6 var(--mono); letter-spacing: .04em;
+           padding: .5rem clamp(16px, 4vw, 40px);
+           margin: 0 calc(-1 * clamp(16px, 4vw, 40px));
+           border-bottom: 1px solid var(--line); }
+.mockbar b, .mockbar code { color: var(--dim); }
+.mockbar input { font: inherit; }
+
+/* ---------- step bar — navigation, not an announcement ---------- */
+.steps { display: flex; align-items: stretch; margin: 1.1rem 0 0;
+         border: 1px solid var(--line-2); width: max-content; max-width: 100%; }
+.steps a { display: flex; align-items: center; gap: .5rem; text-decoration: none;
+           color: var(--dim); border-bottom: none;
+           font: 400 .72rem/1 var(--mono); text-transform: uppercase; letter-spacing: .12em;
+           padding: .55rem .85rem; border-right: 1px solid var(--line-2); }
+.steps a:last-child { border-right: none; }
+.steps a:hover { color: var(--paper); background: var(--surface); border-bottom: none; }
+.steps a.on { color: var(--clay); background: var(--surface-2); }
+.steps a.on:hover { color: var(--clay); background: var(--surface-2); }
+.steps a .n { font-variant-numeric: tabular-nums; color: var(--dimmer); }
+.steps a.on .n { color: var(--clay); }
+.steps a.done { color: var(--dim); }
+.steps a.done .n { color: var(--dimmer); }
+.steps .sep { display: none; }
+
+/* ---------- provenance — open by default, and quiet enough to be ---------- */
+details.prov { margin: 1.2rem 0 0; font-size: .8rem;
+               border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+details.prov > summary { cursor: pointer; padding: .5rem 0; list-style: none;
+                         font: 400 .72rem/1.45 var(--mono); color: var(--dim);
+                         text-transform: uppercase; letter-spacing: .11em; }
+details.prov > summary::-webkit-details-marker { display: none; }
+details.prov > summary:hover { color: var(--paper); }
+details.prov ul { list-style: none; margin: 0; padding: 0 0 .7rem;
+                  font: 400 .72rem/1.7 var(--mono); color: var(--dimmer);
+                  columns: 2; column-gap: 2.5rem; }
+details.prov li { break-inside: avoid; }
+details.prov li b { color: var(--dim); font-weight: 400; display: inline-block; min-width: 8.5rem; }
+
+/* ---------- sticky player ---------- */
+.sticky { position: sticky; top: 0; z-index: 20; background: var(--bg);
+          padding: .6rem 0 .5rem; border-bottom: 1px solid var(--line-2); }
+/* the native transport refuses the palette; invert it back down to the ground
+   rather than leave a light slab as the brightest object on the page */
+.sticky audio { width: 100%; height: 34px; filter: invert(.92) hue-rotate(180deg); opacity: .72; }
+.sticky audio:hover { opacity: 1; }
+.barrow { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; margin-top: .5rem; }
+.chip { display: inline-block; font: 400 .68rem/1 var(--mono); text-transform: uppercase;
+        letter-spacing: .09em; padding: .26rem .4rem; border: 1px solid currentColor;
+        white-space: nowrap; }
+.band-HIGH { color: var(--high); }
+.band-REVIEW { color: var(--review); }
+.band-FAIL { color: var(--fail); }
+tr.band-REVIEW .chip.band-REVIEW, tr.band-FAIL .chip.band-FAIL { font-weight: 700; }
+.playhead { font: 400 .72rem/1 var(--mono); color: var(--dimmer); }
+.playhead b { color: var(--dim); font-weight: 400; }
+
+/* ---------- the list of lines ---------- */
+.tablehint { margin: 1.3rem 0 .4rem; max-width: none; color: var(--dim); }
+.tablehint b { color: var(--paper); }
+table { border-collapse: collapse; width: 100%; font-size: .85rem; margin-top: 0;
+        border-top: 1px solid var(--line-2); }
+th { font: 400 .64rem/1 var(--mono); text-transform: uppercase; letter-spacing: .13em;
+     color: var(--dimmer); border-bottom: 1px solid var(--line-2); padding: .5rem;
+     text-align: left; }
+td { padding: .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+tr.band-REVIEW td { background: var(--tint-review); }
+tr.band-FAIL td { background: var(--tint-fail); }
+tr.editing td { background: var(--surface-2); }
+tr.current td { box-shadow: inset 3px 0 0 var(--dim); }
+td.rail { width: 1rem; padding-left: .1rem; padding-right: .1rem; }
+.rail i { display: block; width: 2px; height: 100%; min-height: 1.5rem; }
+.rail.above i { background: var(--line-2); }
+.rail.below i { background: repeating-linear-gradient(to bottom, var(--clay-dim) 0 3px, transparent 3px 8px); }
+td.idx { white-space: nowrap; font: 400 .68rem/1.35 var(--mono);
+         letter-spacing: .04em; color: var(--dimmer); }
+td.text { white-space: pre-wrap; min-width: 16rem; color: var(--paper); }
+tr.band-HIGH td.text { color: #cdc6b9; }
+
+/* the start time is the control */
+.tbtn { font: 400 .9rem/1 var(--mono); text-transform: none; letter-spacing: 0;
+        font-variant-numeric: tabular-nums; background: transparent; color: var(--paper);
+        border: 1px solid transparent; border-bottom-color: var(--line-2);
+        padding: .14rem .3rem; }
+.tbtn:hover { background: var(--surface-2); border-color: var(--line-2); color: var(--paper); }
+.tbtn:active { background: var(--surface-2); }
+.tbtn.open { background: var(--clay); color: #1a100d; border-color: var(--clay); }
+.tbtn.lead { border-bottom-color: var(--clay-dim); }
+.tbtn.lead.open { background: var(--clay); }
+
+.was { display: block; font: 400 .68rem/1.2 var(--mono); min-height: 1.2em; color: var(--dimmer);
+       text-decoration: line-through; padding-right: .3rem; }
+.was:empty { text-decoration: none; }
+.arrow { color: var(--dim); }
+.badge { display: inline-block; font: 400 .6rem/1 var(--mono); letter-spacing: .1em;
+         padding: .24rem .32rem; margin-left: .3rem; border: 1px solid var(--clay-dim);
+         color: var(--clay); }
+.badge.changed { border-color: var(--line-2); color: var(--dim); }
+.badge.handset { border-color: var(--clay-dim); color: var(--clay); }
+.why { font: 400 .73rem/1.45 var(--mono); color: var(--dim); }
+.why .tok { color: var(--paper); }
+tr.band-HIGH .why .tok { color: var(--dimmer); }
+.play { padding: .24rem .38rem; font-size: .66rem; color: var(--dimmer); }
+tr.divider td { background: var(--bg) !important; border-bottom: none;
+                border-top: 1px dashed var(--clay-dim); padding: .45rem .5rem .1rem;
+                font: 400 .66rem/1.4 var(--mono); text-transform: uppercase;
+                letter-spacing: .11em; color: var(--clay-dim); }
+
+/* the popup — the loudest thing on the page, because it is where the hand is */
+.pop { position: absolute; z-index: 60; background: var(--surface-2); border: 1px solid var(--clay);
+       box-shadow: 0 8px 26px rgba(0,0,0,.65); padding: .45rem; display: flex; align-items: center;
+       gap: .4rem; }
+.pop .val { font: 400 1.4rem/1 var(--mono); font-variant-numeric: tabular-nums;
+            min-width: 5.6rem; text-align: right; color: var(--paper); }
+.pop .unit { font: 400 .76rem/1 var(--mono); color: var(--dim); margin-right: .2rem; }
+.pop button.step { min-width: 3.2rem; color: var(--paper); border-color: var(--line-2); }
+.pop button.step:hover { border-color: var(--clay); color: var(--clay); }
+.pop .cap { position: absolute; top: -1.6rem; left: 0; color: var(--clay);
+            font: 400 .64rem/1 var(--mono); text-transform: uppercase; letter-spacing: .11em;
+            white-space: nowrap; }
+
+/* ---------- page 1 — the form ---------- */
+.form { margin: 1.3rem 0 0; border-top: 1px solid var(--line-2); }
+#txtbranch .form { margin-top: 0; border-top: none; }
+.frow { padding: .85rem 0; border-bottom: 1px solid var(--line); }
+.frow .flabel { display: block; font: 400 .7rem/1 var(--mono); text-transform: uppercase;
+                letter-spacing: .14em; margin: 0 0 .5rem; color: var(--dim); }
+.frow .ctl { display: flex; align-items: center; gap: .65rem; flex-wrap: wrap; }
+.fname { font: 400 .86rem/1 var(--mono); color: var(--paper);
+         border-bottom: 1px solid var(--line-2); padding: .3rem .1rem; }
+select { font: 400 .84rem/1 var(--mono); padding: .45rem .5rem; border: 1px solid var(--line-2);
+         border-radius: 0; background: var(--surface); color: var(--paper); }
+select:hover { border-color: var(--dim); }
+select:focus-visible { outline: 2px solid var(--clay); outline-offset: 2px; }
+input[type="text"] { font: 400 .86rem/1 var(--mono); padding: .42rem .5rem;
+                     border: 1px solid var(--line-2); border-radius: 0;
+                     background: var(--surface); color: var(--paper); }
+.warnbox { border-left: 2px solid var(--review); background: transparent; padding: .1rem 0 .1rem .8rem;
+           margin: 1rem 0 0; font: 400 .78rem/1.55 var(--mono); color: var(--dim); max-width: 46rem; }
+.warnbox b { display: block; font-weight: 400; text-transform: uppercase;
+             letter-spacing: .11em; margin-bottom: .3rem; color: var(--review); font-size: .72rem; }
+
+/* ---------- page 1.5 — the run ---------- */
+.phase { display: flex; align-items: center; gap: .8rem; padding: .8rem 0;
+         border-bottom: 1px solid var(--line);
+         font: 400 .8rem/1 var(--mono); text-transform: uppercase; letter-spacing: .1em;
+         color: var(--dim); }
+.phase:first-child { border-top: 1px solid var(--line-2); }
+.phase.run { color: var(--paper); }
+.phase .dot { width: .55rem; height: .55rem; border: 1px solid var(--line-2); background: transparent;
+              flex: none; }
+.phase.run .dot { background: var(--clay); border-color: var(--clay);
+                  animation: blink .8s steps(2, jump-none) infinite; }
+.phase.ok .dot { background: var(--high); border-color: var(--high); }
+@keyframes blink { 0%, 49% { opacity: 1 } 50%, 100% { opacity: .2 } }
+.phase .t { margin-left: auto; color: var(--dimmer); font-variant-numeric: tabular-nums; }
+
+/* ---------- page 3 — output ---------- */
+.jsonhead { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+            flex-wrap: wrap; margin: 1.2rem 0 .45rem; }
+.jsonhead .fn { font: 400 .78rem/1 var(--mono); color: var(--dim); letter-spacing: .05em; }
+pre.json { background: var(--surface); border: 1px solid var(--line-2);
+           padding: .85rem .95rem; font: 400 .73rem/1.6 var(--mono); overflow: auto;
+           max-height: 30rem; margin: 0; white-space: pre; color: #cdc6b9; }
+.dlrow { display: flex; gap: 1.6rem; flex-wrap: wrap; align-items: flex-start; margin: 1.7rem 0 0; }
+.dl { display: flex; flex-direction: column; gap: .45rem; max-width: 16rem; }
+.dl .hint { margin: 0; }
+.signoff { display: inline-block; margin: 1.5rem 0 0; border-left: 2px solid var(--high);
+           padding: .1rem 0 .1rem .7rem; color: var(--dim);
+           font: 400 .74rem/1.5 var(--mono); letter-spacing: .04em; }
+
+.pageoff { display: none; }
+</style>
+</head>
+<body>
+<div class="mockbar" id="mockbar">
+  <b>Mockup</b> — bombista <code>serve</code>, the three-step flow on the real pimiento fixture.
+  Every band is what <code>anchoring.py</code> actually returns for that value. Steps are clickable.
+  On step 1, <b>Choose file</b> swaps between the <code>.sp.json</code> and <code>.txt</code> fixtures.
+</div>
+<div class="wrap">
+<header class="mast">
+  <div>
+    <span class="wordmark">Bombista</span>
+    <span class="tagline">Forced-alignment triage</span>
+  </div>
+  <div class="by">
+    <div>v0.9.0</div>
+    <div>A <span class="tramoya">Tramoya</span> tool</div>
+    <div>by <b>Chango Pepper</b></div>
+  </div>
+</header>
+
+<nav class="steps" id="steps">
+  <a href="#1" data-step="1"><span class="n">1</span> Input</a>
+  <a href="#2" data-step="2"><span class="n">2</span> Review</a>
+  <a href="#3" data-step="3"><span class="n">3</span> Output</a>
+</nav>
+
+<!-- ============================ PAGE 1 ============================ -->
+<section id="page1" class="pageoff">
+  <h1>Input song</h1>
+  <p class="lede">Two files. Two defaults. Nothing typed.</p>
+
+  <div class="form">
+    <div class="frow">
+      <label class="flabel">Lyrics</label>
+      <div class="ctl">
+        <button id="pickLyrics">Choose file</button>
+        <span class="fname" id="lyricsVal">pimiento.sp.json</span>
+      </div>
+      <p class="hint" id="lyricsHint">Plain text (<code>.txt</code>), or a <b>Song Performance
+        JSON</b> (<code>.sp.json</code>) — the format Tramoya promotes.
+        <a href="#" class="lnk">See an example</a></p>
+    </div>
+
+    <div class="frow">
+      <label class="flabel">Media source</label>
+      <div class="ctl">
+        <button>Choose file</button>
+        <span class="fname">pimiento.m4a</span>
+      </div>
+      <p class="hint">MP3 · M4A · WAV · FLAC · MP4 · MOV. The audio track is read from video too.</p>
+    </div>
+
+    <div class="frow">
+      <label class="flabel">Language</label>
+      <div class="ctl">
+        <select id="langSel">
+          <option value="es">es — Spanish</option>
+          <option value="en">en — English</option>
+          <option value="nl">nl — Dutch</option>
+          <option value="fr">fr — French</option>
+        </select>
+      </div>
+      <p class="hint" id="langHint">The language on the recording and the lyrics file.</p>
+    </div>
+
+    <div class="frow">
+      <label class="flabel">Model</label>
+      <div class="ctl">
+        <select>
+          <option>medium — ~50 s per song</option>
+          <option>small — ~20 s per song</option>
+          <option>tiny — ~5 s per song</option>
+        </select>
+      </div>
+      <p class="hint"><b>Runs on your local machine. Nothing is uploaded.</b> A bigger model recognises
+        more of the sung words, so fewer lines come back flagged — and it takes longer. Change it
+        and come back if a run reads badly.</p>
+    </div>
+  </div>
+
+  <div id="txtbranch" class="pageoff">
+    <div class="form">
+      <div class="frow">
+        <label class="flabel">Slug</label>
+        <div class="ctl"><span class="fname">pimiento</span>
+          <span class="playhead">from the filename</span></div>
+      </div>
+      <div class="frow">
+        <label class="flabel">Title</label>
+        <div class="ctl"><input type="text" value="Pimiento"></div>
+        <p class="hint">The one text field in the whole flow. A <code>.txt</code> carries no title.</p>
+      </div>
+      <div class="frow">
+        <label class="flabel">Tempo</label>
+        <div class="ctl">
+          <select id="tempoSel"><option>— not set —</option><option>66.67</option></select>
+          <span class="playhead">BPM · 6/8</span>
+        </div>
+      </div>
+    </div>
+    <div class="warnbox">
+      <b>Tempo is never measured</b>
+      Bombista answers <i>when</i> a line happens, not in which beat. Take the value from the
+      Ableton project that produced this audio, where it is exact. Leave it unset and the key is
+      left out of the file entirely — an invented tempo is worse than a missing one.
+    </div>
+    <p class="hint"><b>3 lines will be removed before processing</b> — 2 blank, 1 section marker
+      (<code>[Estribillo]</code>). 19 lyric lines remain.</p>
+  </div>
+
+  <p class="go"><button class="btn1" id="processbtn">Process song →</button></p>
+</section>
+
+<!-- =========================== PAGE 1.5 =========================== -->
+<section id="page15" class="pageoff">
+  <h1>Processing</h1>
+  <p class="lede">pimiento.m4a · faster-whisper medium · es · on this machine</p>
+  <div style="max-width:34rem">
+    <div class="phase" id="ph1"><span class="dot"></span> Transcribing the audio
+      <span class="t" id="t1">—</span></div>
+    <div class="phase" id="ph2"><span class="dot"></span> Anchoring the lines
+      <span class="t" id="t2">—</span></div>
+  </div>
+  <p class="go"><button id="cancelbtn">Cancel</button></p>
+  <p class="hint">Transcription is the slow part and it is cached. Coming back here from step 2
+    reuses <code>asr-words.jsonl</code> and takes well under a second.</p>
+</section>
+
+<!-- ============================ PAGE 2 ============================ -->
+<section id="page2" class="pageoff">
+<h1>Review</h1>
+<p class="lede">19 lines · raw audio-clock seconds</p>
+
+<details class="prov" open>
+  <summary>Provenance — this run</summary>
+  <ul>
+    <li><b>Song file</b> <code>songs/pimiento.json</code></li>
+    <li><b>Audio file</b> <code>songs/audio/pimiento.m4a</code></li>
+    <li><b>Audio sha256</b> <code>69f116d8dcfc1b74ae618a34483b9fc2bbcb3e46a371b22da498108a90cd0726</code></li>
+    <li><b>Audio duration</b> 173.38 s</li>
+    <li><b>Model</b> <code>faster-whisper:medium</code> · lang <code>es</code> · device <code>cpu/int8</code></li>
+    <li><b>Extracted at</b> 2026-08-14T23:14:08+02:00</li>
+    <li><b>Tool version</b> bombista 0.9.0</li>
+    <li><b>Measured lead-in</b> 8.92 s</li>
+  </ul>
+</details>
+
+<div class="sticky">
+  <audio id="audio" controls preload="metadata" src="../../../../songs/audio/pimiento.m4a"></audio>
+  <div class="barrow">
+    <span class="chip band-HIGH" id="cHIGH">HIGH 18</span>
+    <span class="chip band-REVIEW" id="cREVIEW">REVIEW 1</span>
+    <span class="chip band-FAIL" id="cFAIL">FAIL 0</span>
+    <span class="playhead">playhead <b class="mono" id="ph">0.00</b> s</span>
+  </div>
+</div>
+
+<p class="hint tablehint">Click a <b>START</b> time to adjust it. Press and hold to move fast —
+  a whole missed word is about a second.</p>
+
+<table id="lines">
+  <thead><tr>
+    <th></th><th></th><th>line</th><th>text</th><th class="num">start</th><th class="num">dur</th>
+    <th>band</th><th>why</th>
+  </tr></thead>
+  <tbody id="tbody"></tbody>
+</table>
+
+<p class="confirm"><button class="btn1" id="confirmbtn">Confirm timeline →</button></p>
+</section>
+
+<!-- ============================ PAGE 3 ============================ -->
+<section id="page3" class="pageoff">
+  <h1>Output</h1>
+  <p class="lede">A new file. Nothing you loaded was modified.</p>
+
+  <p class="hint" id="outcap"></p>
+
+  <div class="jsonhead">
+    <span class="fn" id="outname">pimiento.sp.json</span>
+  </div>
+  <pre class="json" id="json"></pre>
+
+  <div class="dlrow">
+    <div class="dl">
+      <button class="btn1" id="dlfull">Download JSON file</button>
+      <p class="hint">The whole file above. This is the one Tramoya reads.</p>
+    </div>
+    <div class="dl">
+      <button id="dltimeline">Download timeline only</button>
+      <p class="hint">The five timing keys only — <code>linesHash</code>,
+        <code>timelineSignedOff</code>, <code>timelineVersion</code>, <code>leadIn</code>,
+        <code>timeline</code> — to paste into a song file you already maintain.</p>
+    </div>
+    <div class="dl">
+      <button id="dlreport">Download report</button>
+      <p class="hint">Bands, signals, provenance and every hand-set line, as markdown. Does not
+        count as sign-off.</p>
+    </div>
+  </div>
+
+  <p><span class="signoff pageoff" id="signoff"></span></p>
+
+  <p class="go"><button onclick="location.hash='#2'">← Back to review</button></p>
+</section>
+
+</div>
+<script>
+var SONG = {"declaredLanguages":["es","en","fr","nl"],"meta":{"title":"Pimiento","artist":"Chango Pepper","notes":"Capo 3, Acordes de DO","title_translations":{"en":"Pepper Tree","fr":"Pimentier","nl":"Peperboom"},"tempo":{"bpm":66.67,"numerator":6,"denominator":8,"countInBars":1},"intro":{"es":"Las cosas esenciales que nos sostienen en la vida.","en":"The essential things that carry us through life.","fr":"Les choses essentielles qui nous portent dans la vie.","nl":"De essentiële dingen die ons door het leven dragen."}},"lyrics":[{"es":"Viejo pimiento,\nhoy vuelvo a visitarte","en":"Old pepper tree,\ntoday I come back to see you,","fr":"Vieux pimentier,\naujourd'hui je reviens te voir,","nl":"Oude peperboom,\nvandaag kom ik je weer bezoeken,"},{"es":"Dicen que sabes tratar\nmales de poetas.","en":"They say you know how to heal\na poet's wounds.","fr":"On dit que tu sais soigner\nles peines des poètes.","nl":"Men zegt dat jij weet hoe je\ndichterswonden heelt."},{"es":"Con el corazón afuera nací,","en":"I was born with my heart outside,","fr":"Je suis né le cœur à l'air,","nl":"Ik werd geboren met mijn hart naar buiten,"},{"es":"desde niño quiere más que latir.","en":"since childhood it wanted more than to beat.","fr":"depuis l'enfance il veut plus que battre.","nl":"al van jongs af wil het meer dan kloppen."},{"es":"No quiere que yo le cuente del mundo,","en":"It won't hear my stories of the world,","fr":"Il ne veut pas que je lui raconte le monde,","nl":"Het wil niet dat ik het de wereld vertel,"},{"es":"por sí mismo él lo quiere sentir.","en":"it wants to feel it by itself.","fr":"il veut le sentir lui-même.","nl":"het wil het zelf voelen."},{"es":"Viejo pimiento, mi refugio y mi lugar.","en":"Old pepper tree, my refuge, my place.","fr":"Vieux pimentier, mon refuge, mon lieu.","nl":"Oude peperboom, mijn toevlucht, mijn plek."},{"es":"Desnudo el corazón,","en":"The heart laid bare,","fr":"Le cœur à nu,","nl":"Het hart ontbloot,"},{"es":"todo lo atraviesa:","en":"everything passes through it:","fr":"tout le traverse :","nl":"alles gaat erdoorheen:"},{"es":"Farol en tormentas,\npero se quiebra con un mirar.","en":"A lantern in storms,\nyet a single glance can break it.","fr":"Lanterne dans la tempête,\nmais un regard suffit à la briser.","nl":"Een lantaarn in stormen,\nmaar één blik kan het breken."},{"es":"Ama rápido,","en":"It loves quickly,","fr":"Il aime vite,","nl":"Het houdt snel lief,"},{"es":"sin medida va.","en":"without measure it goes.","fr":"sans mesure il va.","nl":"zonder maat gaat het."},{"es":"Encuentra belleza en lo sencillo.","en":"It finds beauty in simple things.","fr":"Il trouve la beauté dans le simple.","nl":"Het vindt schoonheid in het eenvoudige."},{"es":"Pero en su sangre carga con penas ajenas,","en":"Yet in its blood it carries others' sorrows,","fr":"Mais dans son sang il porte les peines des autres,","nl":"Maar in zijn bloed draagt het andermans verdriet,"},{"es":"y se funde.","en":"and dissolves in them.","fr":"et s'y dissout.","nl":"en lost daarin op."},{"es":"Si a quedarse afuera insiste,","en":"If it insists on staying outside,","fr":"S'il insiste pour rester dehors,","nl":"Als het buiten wil blijven,"},{"es":"En tu sombra déjalo latir.","en":"let it beat in your shade.","fr":"laisse-le battre dans ton ombre.","nl":"laat het kloppen in jouw schaduw."},{"es":"Viejo pimiento,\nfuiste el juego en mi infancia.","en":"Old pepper tree,\nyou were the playground of my childhood.","fr":"Vieux pimentier,\ntu fus le jeu de mon enfance.","nl":"Oude peperboom,\nje was het spel van mijn jeugd."},{"es":"Me cubro con tus hojas pa volver a nacer.","en":"I wrap myself in your leaves to be born again.","fr":"Je me couvre de tes feuilles pour renaître.","nl":"Ik hul me in je bladeren om opnieuw geboren te worden."}]};
+var DATA = {"song": {"title": "Pimiento", "slug": "pimiento", "songFile": "songs/pimiento.json", "audioFile": "songs/audio/pimiento.m4a", "sha256": "69f116d8dcfc1b74ae618a34483b9fc2bbcb3e46a371b22da498108a90cd0726", "durationSec": 173.38, "model": "faster-whisper:medium", "lang": "es", "device": "cpu/int8", "extractedAt": "2026-08-14T23:14:08+02:00", "toolVersion": "bombista 0.9.0", "leadIn": 8.92, "lastWordEnd": 173.14}, "lines": [{"i": 0, "es": "Viejo pimiento,\nhoy vuelvo a visitarte", "band": "HIGH", "signals": ["clean-anchor"], "start": 8.92, "end": 18.44, "asr": "Viejo pimiento y vuelvo a visitarte Dicen que"}, {"i": 1, "es": "Dicen que sabes tratar\nmales de poetas.", "band": "HIGH", "signals": ["clean-anchor"], "start": 18.44, "end": 29.46, "asr": "Dicen que sabes tratar males de poetas Con"}, {"i": 2, "es": "Con el corazón afuera nací,", "band": "HIGH", "signals": ["clean-anchor"], "start": 29.46, "end": 37.54, "asr": "Con el corazón afuera nací Este niño quiere"}, {"i": 3, "es": "desde niño quiere más que latir.", "band": "REVIEW", "signals": ["lead-fallback"], "start": 37.54, "end": 43.34, "asr": "niño quiere más que latir No quiere que"}, {"i": 4, "es": "No quiere que yo le cuente del mundo,", "band": "HIGH", "signals": ["clean-anchor"], "start": 43.34, "end": 49.9, "asr": "No quiere que yo le cuente del mundo"}, {"i": 5, "es": "por sí mismo él lo quiere sentir.", "band": "HIGH", "signals": ["clean-anchor"], "start": 49.9, "end": 59.0, "asr": "Por sí mismo él lo quiere sentir Viejo"}, {"i": 6, "es": "Viejo pimiento, mi refugio y mi lugar.", "band": "HIGH", "signals": ["clean-anchor"], "start": 59.0, "end": 67.48, "asr": "Viejo pimiento, mi refugio y mi lugar Desnudo"}, {"i": 7, "es": "Desnudo el corazón,", "band": "HIGH", "signals": ["clean-anchor"], "start": 67.48, "end": 74.34, "asr": "Desnudo el corazón, todo lo atraviesa Farol en"}, {"i": 8, "es": "todo lo atraviesa:", "band": "HIGH", "signals": ["clean-anchor"], "start": 74.34, "end": 78.46, "asr": "todo lo atraviesa Farol en tormentas pero se"}, {"i": 9, "es": "Farol en tormentas,\npero se quiebra con un mirar.", "band": "HIGH", "signals": ["clean-anchor"], "start": 78.46, "end": 89.14, "asr": "Farol en tormentas pero se quiebra con un"}, {"i": 10, "es": "Ama rápido,", "band": "HIGH", "signals": ["clean-anchor"], "start": 89.14, "end": 92.66, "asr": "Ama rápido, sin medida va Encuentra belleza en"}, {"i": 11, "es": "sin medida va.", "band": "HIGH", "signals": ["clean-anchor"], "start": 92.66, "end": 96.54, "asr": "sin medida va Encuentra belleza en lo sencillo"}, {"i": 12, "es": "Encuentra belleza en lo sencillo.", "band": "HIGH", "signals": ["clean-anchor"], "start": 96.54, "end": 104.76, "asr": "Encuentra belleza en lo sencillo Pero en su"}, {"i": 13, "es": "Pero en su sangre carga con penas ajenas,", "band": "HIGH", "signals": ["clean-anchor"], "start": 104.76, "end": 114.92, "asr": "Pero en su sangre carga con penas ajenas"}, {"i": 14, "es": "y se funde.", "band": "HIGH", "signals": ["clean-anchor"], "start": 114.92, "end": 131.02, "asr": "Y se funde Si a quedarse afuera insiste"}, {"i": 15, "es": "Si a quedarse afuera insiste,", "band": "HIGH", "signals": ["clean-anchor"], "start": 131.02, "end": 135.82, "asr": "Si a quedarse afuera insiste En tu sombra"}, {"i": 16, "es": "En tu sombra déjalo latir.", "band": "HIGH", "signals": ["clean-anchor"], "start": 135.82, "end": 144.42, "asr": "En tu sombra déjalo latir Viejo pimiento, fuiste"}, {"i": 17, "es": "Viejo pimiento,\nfuiste el juego en mi infancia.", "band": "HIGH", "signals": ["clean-anchor"], "start": 144.42, "end": 154.06, "asr": "Viejo pimiento, fuiste el juego en mi infancia"}, {"i": 18, "es": "Me cubro con tus hojas pa volver a nacer.", "band": "HIGH", "signals": ["clean-anchor"], "start": 154.06, "end": 174.14, "asr": "Me cubro con tus hojas pa volver a"}], "reanchor": {"1": {"lo": 8.92, "hi": 29.46, "regimes": [{"from": 8.93, "below": []}]}, "2": {"lo": 18.44, "hi": 37.54, "regimes": [{"from": 18.45, "below": [{"i": 3, "band": "REVIEW", "signals": ["lead-fallback", "gap-outlier"], "start": 37.54, "end": 43.34, "interp": false, "asr": "niño quiere más que latir No quiere que"}]}, {"from": 20.37, "below": []}, {"from": 33.46, "below": [{"i": 3, "band": "REVIEW", "signals": ["lead-fallback", "gap-outlier"], "start": 37.54, "end": 43.34, "interp": false, "asr": "niño quiere más que latir No quiere que"}]}]}, "3": {"lo": 29.46, "hi": 43.34, "regimes": [{"from": 29.47, "below": []}, {"from": 39.88, "below": [{"i": 4, "band": "REVIEW", "signals": ["gap-outlier"], "start": 43.34, "end": 49.9, "interp": false, "asr": "No quiere que yo le cuente del mundo"}]}]}, "4": {"lo": 37.54, "hi": 49.9, "regimes": [{"from": 37.55, "below": []}, {"from": 46.78, "below": [{"i": 5, "band": "REVIEW", "signals": ["gap-outlier"], "start": 49.9, "end": 59.0, "interp": false, "asr": "Por sí mismo él lo quiere sentir Viejo"}]}]}, "5": {"lo": 43.34, "hi": 59.0, "regimes": [{"from": 43.35, "below": []}, {"from": 55.83, "below": [{"i": 6, "band": "REVIEW", "signals": ["gap-outlier"], "start": 59.0, "end": 67.48, "interp": false, "asr": "Viejo pimiento, mi refugio y mi lugar Desnudo"}]}]}, "6": {"lo": 49.9, "hi": 67.48, "regimes": [{"from": 49.91, "below": []}, {"from": 64.55, "below": [{"i": 7, "band": "REVIEW", "signals": ["gap-outlier"], "start": 67.48, "end": 74.34, "interp": false, "asr": "Desnudo el corazón, todo lo atraviesa Farol en"}]}]}, "7": {"lo": 59.0, "hi": 74.34, "regimes": [{"from": 59.01, "below": []}, {"from": 71.31, "below": [{"i": 8, "band": "REVIEW", "signals": ["gap-outlier"], "start": 74.34, "end": 78.46, "interp": false, "asr": "todo lo atraviesa Farol en tormentas pero se"}]}]}, "8": {"lo": 67.48, "hi": 78.46, "regimes": [{"from": 67.49, "below": []}, {"from": 75.68, "below": [{"i": 9, "band": "REVIEW", "signals": ["gap-outlier"], "start": 78.46, "end": 89.14, "interp": false, "asr": "Farol en tormentas pero se quiebra con un"}]}]}, "9": {"lo": 74.34, "hi": 89.14, "regimes": [{"from": 74.35, "below": []}, {"from": 86.32, "below": [{"i": 10, "band": "REVIEW", "signals": ["gap-outlier"], "start": 89.14, "end": 92.66, "interp": false, "asr": "Ama rápido, sin medida va Encuentra belleza en"}]}]}, "10": {"lo": 78.46, "hi": 92.66, "regimes": [{"from": 78.47, "below": []}, {"from": 89.9, "below": [{"i": 11, "band": "REVIEW", "signals": ["gap-outlier"], "start": 92.66, "end": 96.54, "interp": false, "asr": "sin medida va Encuentra belleza en lo sencillo"}]}]}, "11": {"lo": 89.14, "hi": 96.54, "regimes": [{"from": 89.15, "below": []}, {"from": 93.85, "below": [{"i": 12, "band": "REVIEW", "signals": ["gap-outlier"], "start": 96.54, "end": 104.76, "interp": false, "asr": "Encuentra belleza en lo sencillo Pero en su"}]}]}, "12": {"lo": 92.66, "hi": 104.76, "regimes": [{"from": 92.67, "below": []}, {"from": 102.01, "below": [{"i": 13, "band": "REVIEW", "signals": ["gap-outlier"], "start": 104.76, "end": 114.92, "interp": false, "asr": "Pero en su sangre carga con penas ajenas"}]}]}, "13": {"lo": 96.54, "hi": 114.92, "regimes": [{"from": 96.55, "below": []}, {"from": 112.23, "below": [{"i": 14, "band": "REVIEW", "signals": ["gap-outlier"], "start": 114.92, "end": 131.02, "interp": false, "asr": "Y se funde Si a quedarse afuera insiste"}]}]}, "14": {"lo": 104.76, "hi": 131.02, "regimes": [{"from": 104.77, "below": [{"i": 15, "band": "REVIEW", "signals": ["gap-outlier"], "start": 131.02, "end": 135.82, "interp": false, "asr": "Si a quedarse afuera insiste En tu sombra"}]}, {"from": 108.62, "below": []}, {"from": 128.31, "below": [{"i": 15, "band": "REVIEW", "signals": ["gap-outlier"], "start": 131.02, "end": 135.82, "interp": false, "asr": "Si a quedarse afuera insiste En tu sombra"}]}]}, "15": {"lo": 114.92, "hi": 135.82, "regimes": [{"from": 114.93, "below": []}, {"from": 133.08, "below": [{"i": 16, "band": "REVIEW", "signals": ["gap-outlier"], "start": 135.82, "end": 144.42, "interp": false, "asr": "En tu sombra déjalo latir Viejo pimiento, fuiste"}]}]}, "16": {"lo": 131.02, "hi": 144.42, "regimes": [{"from": 131.03, "below": []}, {"from": 141.64, "below": [{"i": 17, "band": "REVIEW", "signals": ["gap-outlier"], "start": 144.42, "end": 154.06, "interp": false, "asr": "Viejo pimiento, fuiste el juego en mi infancia"}]}]}, "17": {"lo": 135.82, "hi": 154.06, "regimes": [{"from": 135.83, "below": []}, {"from": 151.33, "below": [{"i": 18, "band": "REVIEW", "signals": ["gap-outlier"], "start": 154.06, "end": 174.14, "interp": false, "asr": "Me cubro con tus hojas pa volver a"}]}]}, "18": {"lo": 144.42, "hi": 173.14, "regimes": [{"from": 144.43, "below": []}]}}};
+</script>
+<script>
+(function () {
+"use strict";
+
+var STEP = 0.05;        // §4 invariant 2 — never coarser
+var DEBOUNCE = 250;     // re-anchor once the stepping stops
+var HOLD_DELAY = 380;   // press-and-hold before auto-repeat starts
+var HOLD_RATE = 45;     // and how fast it then repeats
+
+var GLOSS = {
+  "clean-anchor":   "",
+  "lead-fallback":  "the first word was not recognised, so this line was anchored on its second word — the start is usually late by one word",
+  "uncorroborated": "only one word of the opening matched; nothing nearby confirmed it",
+  "ambiguous":      "the same opening words occur again within a few seconds",
+  "gap-outlier":    "the distance from the previous line is far off the song's own rhythm",
+  "no-anchor":      "the opening words were not found; this start is interpolated between its neighbours",
+  "override":       ""
+};
+
+var base = DATA.lines;
+var song = DATA.song;
+
+var state = {
+  edit: null,     // { i, value } — the committed correction (one at a time)
+  open: null,     // which line's popup is open
+  value: null,    // the popup's live value
+  lead: song.leadIn
+};
+
+var audio = document.getElementById("audio");
+var tbody = document.getElementById("tbody");
+
+function round2(x) { return Math.round(x * 100) / 100; }
+function f2(x) { return (x === null || x === undefined) ? "—" : Number(x).toFixed(2); }
+
+function belowFor(i, v) {
+  var r = DATA.reanchor[String(i)];
+  if (!r) { return []; }
+  var chosen = [];
+  for (var k = 0; k < r.regimes.length; k++) {
+    if (v >= r.regimes[k].from - 1e-9) { chosen = r.regimes[k].below; }
+  }
+  return chosen;
+}
+
+function shiftAmt() { return round2(state.lead - song.leadIn); }
+
+/* bounds in the clock the page displays — the neighbouring lines, live */
+function boundsFor(i) {
+  var s = shiftAmt();
+  if (i === 0) { return { lo: 0, hi: round2(base[1].start + s) }; }
+  var lo = (state.edit && state.edit.i === i - 1)
+    ? round2(state.edit.value + s) : round2(base[i - 1].start + s);
+  var hi = i + 1 < base.length ? round2(base[i + 1].start + s) : round2(song.lastWordEnd + s);
+  return { lo: lo, hi: hi };
+}
+
+function compute() {
+  var shift = shiftAmt();
+  var rows = base.map(function (l) {
+    return { i: l.i, es: l.es, band: l.band, signals: l.signals.slice(),
+             start: round2(l.start + shift), end: round2(l.end + shift), asr: l.asr,
+             changed: false, handset: false, wasBand: null, wasStart: null, wasEnd: null,
+             interp: false };
+  });
+
+  if (state.edit) {
+    var i = state.edit.i, v = state.edit.value;
+    rows[i].start = round2(v + shift);
+    rows[i].band = "HIGH";
+    rows[i].signals = ["override"];
+    rows[i].handset = true;
+    rows[i].wasStart = round2(base[i].start + shift);
+    rows[i].wasBand = base[i].band;
+    rows[i].asr = "";
+
+    belowFor(i, v).forEach(function (b) {
+      var r = rows[b.i];
+      r.wasBand = base[b.i].band;
+      r.wasStart = round2(base[b.i].start + shift);
+      r.band = b.band;
+      r.signals = b.signals.slice();
+      r.start = round2(b.start + shift);
+      r.interp = !!b.interp;
+      r.asr = b.asr;
+      r.changed = true;
+    });
+  }
+
+  for (var m = 0; m < rows.length - 1; m++) {
+    var newEnd = rows[m + 1].start;
+    if (newEnd !== rows[m].end) { rows[m].wasEnd = rows[m].end; rows[m].end = newEnd; }
+  }
+  return rows;
+}
+
+function counts(rows) {
+  var c = { HIGH: 0, REVIEW: 0, FAIL: 0 };
+  rows.forEach(function (r) { c[r.band]++; });
+  return c;
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, function (ch) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch];
+  });
+}
+
+/* ---------- render ------------------------------------------------------ */
+
+function render() {
+  var rows = compute();
+  var c = counts(rows);
+  document.getElementById("cHIGH").textContent = "HIGH " + c.HIGH;
+  document.getElementById("cREVIEW").textContent = "REVIEW " + c.REVIEW;
+  document.getElementById("cFAIL").textContent = "FAIL " + c.FAIL;
+
+  var pivot = state.edit ? state.edit.i : null;
+  var html = "";
+
+  for (var k = 0; k < rows.length; k++) {
+    var r = rows[k];
+    var rail = (pivot === null) ? "rail" : (k <= pivot ? "rail above" : "rail below");
+    var cls = ["band-" + r.band];
+    if (state.open === k) { cls.push("editing"); }
+
+    var startCell =
+      '<span class="was mono">' +
+        (r.wasStart !== null && r.wasStart !== r.start ? f2(r.wasStart) : "") + "</span>" +
+      '<button class="tbtn' + (state.open === k ? " open" : "") + (k === 0 ? " lead" : "") +
+        '" data-open="' + k + '" title="' +
+        (k === 0 ? "lead-in — moves the whole song" : "adjust this line's start") +
+        '">' + f2(r.start) + "</button>";
+
+    var bandCell;
+    if (r.wasBand && r.wasBand !== r.band) {
+      bandCell = '<span class="chip band-' + r.wasBand + '" style="opacity:.4">' + r.wasBand + "</span> " +
+                 '<span class="arrow">→</span> ' +
+                 '<span class="chip band-' + r.band + '">' + r.band + "</span>" +
+                 (r.changed ? '<span class="badge changed">RE-ANCHORED</span>' : "");
+    } else {
+      bandCell = '<span class="chip band-' + r.band + '">' + r.band + "</span>";
+    }
+    if (r.handset) { bandCell += '<span class="badge handset">HAND-SET</span>'; }
+
+    /* 18 rows saying "clean-anchor" is chrome, not information — the HIGH chip
+       already carries it. Only signals that mean something get printed. */
+    var shown = r.signals.filter(function (t) { return t !== "clean-anchor"; });
+    var why = shown.map(function (s) { return '<span class="tok">' + s + "</span>"; }).join(", ");
+    if (r.band !== "HIGH" && GLOSS[r.signals[0]]) { why += "<br>" + GLOSS[r.signals[0]]; }
+
+    html += '<tr class="' + cls.join(" ") + '" data-line="' + k + '" data-start="' + r.start +
+            '" data-end="' + r.end + '">' +
+      '<td class="' + rail + '"><i></i></td>' +
+      '<td><button class="play" data-start="' + r.start + '">▶</button></td>' +
+      '<td class="idx">line ' + k + (k === 0 ? "<br>lead-in" : "") + "</td>" +
+      '<td class="text">' + esc(r.es) + "</td>" +
+      '<td class="num">' + startCell + "</td>" +
+      '<td class="num"><span class="mono">' + (r.end - r.start).toFixed(2) + "</span>" +
+        '<span class="was mono">' + (r.wasEnd !== null
+          ? (r.wasEnd - (r.wasStart === null ? r.start : r.wasStart)).toFixed(2) : "") +
+        "</span>" +
+      "</td>" +
+      "<td>" + bandCell + "</td>" +
+      '<td class="why">' + why + "</td>" +
+      "</tr>";
+
+    if (pivot !== null && k === pivot) {
+      html += '<tr class="divider"><td colspan="8">' +
+        "below here, re-derived against the audio — above, unchanged</td></tr>";
+    }
+  }
+  tbody.innerHTML = html;
+  if (state.open !== null) { placePopup(); }
+}
+
+/* ---------- the popup — the only added surface --------------------------- */
+
+var pop = null;
+var holdTimer = null, repeatTimer = null;
+
+function openPopup(i) {
+  closePopup();
+  var rows = compute();
+  state.open = i;
+  state.value = rows[i].start;
+
+  pop = document.createElement("div");
+  pop.className = "pop";
+  pop.innerHTML =
+    (i === 0 ? '<span class="cap">lead-in · moves the whole song</span>' : "") +
+    '<button class="step" data-step="' + (-STEP) + '">− 0.05</button>' +
+    '<span class="val" id="popval">' + f2(state.value) + '</span><span class="unit">s</span>' +
+    '<button class="step" data-step="' + STEP + '">+ 0.05</button>';
+  document.body.appendChild(pop);
+  render();
+  placePopup();
+}
+
+function placePopup() {
+  if (!pop || holdTimer || repeatTimer) { return; }
+  var anchor = tbody.querySelector('.tbtn[data-open="' + state.open + '"]');
+  if (!anchor) { closePopup(); return; }
+  var r = anchor.getBoundingClientRect();
+  pop.style.top = (window.scrollY + r.bottom + 6) + "px";
+  pop.style.left = Math.max(8, window.scrollX + r.right - pop.offsetWidth) + "px";
+}
+
+function closePopup() {
+  if (pop) { pop.parentNode.removeChild(pop); pop = null; }
+  state.open = null;
+  state.value = null;
+}
+
+var timer = null;
+function nudge(d) {
+  if (state.open === null) { return; }
+  var i = state.open;
+  var b = boundsFor(i);
+  var v = round2(state.value + d);
+  if (v <= b.lo) { v = round2(b.lo + 0.01); }
+  if (v >= b.hi) { v = round2(b.hi - 0.01); }
+  state.value = v;
+  var el = document.getElementById("popval");
+  if (el) { el.textContent = f2(v); }
+
+  clearTimeout(timer);
+  var committed = v;
+  timer = setTimeout(function () {
+    if (i === 0) { state.lead = round2(song.leadIn + (committed - base[0].start)); }
+    else { state.edit = { i: i, value: round2(committed - shiftAmt()) }; }
+    render();
+  }, DEBOUNCE);
+}
+
+/* press and hold to cross a whole word — 1.22 s is 24 separate presses otherwise */
+function startHold(d) {
+  nudge(d);
+  holdTimer = setTimeout(function () {
+    repeatTimer = setInterval(function () { nudge(d); }, HOLD_RATE);
+  }, HOLD_DELAY);
+}
+function endHold() {
+  clearTimeout(holdTimer); clearInterval(repeatTimer);
+  holdTimer = repeatTimer = null;
+}
+
+document.addEventListener("mousedown", function (ev) {
+  var s = ev.target.closest && ev.target.closest("[data-step]");
+  if (s) { ev.preventDefault(); startHold(parseFloat(s.getAttribute("data-step"))); }
+});
+document.addEventListener("mouseup", endHold);
+window.addEventListener("blur", endHold);
+
+document.addEventListener("click", function (ev) {
+  var el = ev.target, t;
+  if (!el || !el.closest) { return; }
+  if (el.closest("[data-step]")) { return; }
+  if ((t = el.closest(".play"))) {
+    audio.currentTime = parseFloat(t.getAttribute("data-start")); audio.play(); return;
+  }
+  if ((t = el.closest("[data-open]"))) {
+    var i = parseInt(t.getAttribute("data-open"), 10);
+    if (state.open === i) { closePopup(); render(); } else { openPopup(i); }
+    return;
+  }
+  if (!el.closest(".pop") && state.open !== null) { closePopup(); render(); }
+});
+
+document.getElementById("confirmbtn").addEventListener("click", function () {
+  location.hash = "#3";
+});
+
+document.addEventListener("keydown", function (ev) {
+  if (ev.target && /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName)) { return; }
+  if (ev.key === " ") {
+    ev.preventDefault(); if (audio.paused) { audio.play(); } else { audio.pause(); } return;
+  }
+  if (state.open === null) { return; }
+  if (ev.key === "Escape")     { closePopup(); render(); return; }
+  if (ev.key === "ArrowLeft")  { ev.preventDefault(); nudge(-STEP); return; }
+  if (ev.key === "ArrowRight") { ev.preventDefault(); nudge(STEP); return; }
+});
+
+window.addEventListener("scroll", placePopup);
+window.addEventListener("resize", placePopup);
+
+audio.addEventListener("timeupdate", function () {
+  document.getElementById("ph").textContent = audio.currentTime.toFixed(2);
+  var t = audio.currentTime;
+  var rows = tbody.querySelectorAll("tr[data-line]");
+  for (var i = 0; i < rows.length; i++) {
+    var s = parseFloat(rows[i].getAttribute("data-start"));
+    var e = parseFloat(rows[i].getAttribute("data-end"));
+    if (t >= s && t < e) { rows[i].classList.add("current"); }
+    else { rows[i].classList.remove("current"); }
+  }
+});
+
+/* the audio lives outside this file; try where the mockup is likely to sit */
+var AUDIO_CANDIDATES = [
+  "../../../../songs/audio/pimiento.m4a",
+  "../../../songs/audio/pimiento.m4a",
+  "../../songs/audio/pimiento.m4a",
+  "../songs/audio/pimiento.m4a",
+  "songs/audio/pimiento.m4a",
+  "pimiento.m4a"
+];
+var candidate = 0;
+audio.addEventListener("error", function () {
+  candidate += 1;
+  if (candidate < AUDIO_CANDIDATES.length) { audio.src = AUDIO_CANDIDATES[candidate]; return; }
+  var bar = document.getElementById("mockbar");
+  if (bar.querySelector("input")) { return; }
+  bar.insertAdjacentHTML("beforeend",
+    ' — audio not found beside this file: <input type="file" id="apick" accept="audio/*">');
+  document.getElementById("apick").addEventListener("change", function (ev) {
+    var f = ev.target.files && ev.target.files[0];
+    if (f) { candidate = AUDIO_CANDIDATES.length; audio.src = URL.createObjectURL(f); }
+  });
+});
+
+
+/* ---------- the three-step flow ----------------------------------------- */
+
+var PAGES = { "1": "page1", "1.5": "page15", "2": "page2", "3": "page3" };
+var STEPOF = { "1": 1, "1.5": 1, "2": 2, "3": 3 };
+var reached = { "1": true, "2": true, "3": false };   // mockup: land on 2, as the canary does
+
+function route() {
+  var h = (location.hash || "#2").slice(1);
+  if (!PAGES[h]) { h = "2"; }
+  for (var k in PAGES) {
+    document.getElementById(PAGES[k]).className = (k === h) ? "" : "pageoff";
+  }
+  var cur = STEPOF[h];
+  var links = document.querySelectorAll("#steps a");
+  for (var i = 0; i < links.length; i++) {
+    var n = parseInt(links[i].getAttribute("data-step"), 10);
+    links[i].className = n === cur ? "on" : (n < cur ? "done" : "");
+  }
+  if (h === "3") { renderPage3(); }
+  if (h === "1.5") { runFake(); }
+  if (h === "2") { render(); }
+  window.scrollTo(0, 0);
+}
+
+/* page 1 — the branch is read off the file, not chosen from a dropdown.
+   Mock only: the picker toggles between the two fixtures. */
+var SP_HINT = 'Plain text (<code>.txt</code>), or a <b>Song Performance JSON</b> ' +
+  '(<code>.sp.json</code>) \u2014 the format Tramoya promotes. ' +
+  '<a href="#" class="lnk">See an example</a>';
+var LANGS = [["es","Spanish"],["en","English"],["nl","Dutch"],["fr","French"]];
+var isTxt = false;
+
+function paintPage1() {
+  document.getElementById("txtbranch").className = isTxt ? "" : "pageoff";
+  document.getElementById("lyricsVal").textContent = isTxt ? "pimiento.txt" : "pimiento.sp.json";
+  document.getElementById("lyricsHint").innerHTML = SP_HINT;
+
+  /* §9.2 rule: an SP JSON declares its languages; the others cannot be picked,
+     because a language the file does not carry has no lines to anchor. */
+  var declared = isTxt ? null : SONG.declaredLanguages;
+  var sel = document.getElementById("langSel");
+  sel.innerHTML = LANGS.map(function (l) {
+    var off = declared && declared.indexOf(l[0]) === -1;
+    return '<option value="' + l[0] + '"' + (off ? " disabled" : "") + '>' +
+           l[0] + " \u2014 " + l[1] + (off ? " \u00b7 not in this file" : "") + "</option>";
+  }).join("");
+  sel.value = "es";
+  document.getElementById("langHint").innerHTML =
+    "The language on the recording and the lyrics file.";
+}
+document.getElementById("pickLyrics").addEventListener("click", function () {
+  isTxt = !isTxt; paintPage1();
+});
+paintPage1();
+
+document.getElementById("processbtn").addEventListener("click", function () {
+  location.hash = "#1.5";
+});
+
+/* page 1.5 — two visible phases and a working cancel */
+var runTimer = null;
+function runFake() {
+  var t0 = Date.now();
+  var p1 = document.getElementById("ph1"), p2 = document.getElementById("ph2");
+  p1.className = "phase run"; p2.className = "phase";
+  document.getElementById("t2").textContent = "—";
+  clearInterval(runTimer);
+  runTimer = setInterval(function () {
+    var s = (Date.now() - t0) / 1000;
+    if (s < 3) {
+      document.getElementById("t1").textContent = s.toFixed(1) + " s of ~50 s";
+    } else if (s < 3.6) {
+      p1.className = "phase ok"; p2.className = "phase run";
+      document.getElementById("t1").textContent = "done";
+      document.getElementById("t2").textContent = "…";
+    } else {
+      p2.className = "phase ok";
+      document.getElementById("t2").textContent = "0.07 s";
+      clearInterval(runTimer);
+      setTimeout(function () { location.hash = "#2"; }, 400);
+    }
+  }, 100);
+}
+document.getElementById("cancelbtn").addEventListener("click", function () {
+  clearInterval(runTimer); location.hash = "#1";
+});
+
+/* page 3 — read-only. The SP JSON *is* the Chango Pepper song JSON.
+   Two shapes, one format:
+     pass-through  — an .sp.json came in; Bombista fills four keys and touches
+                     nothing else, so title/artist/notes/translations/tempo/intro
+                     and all four languages of every lyric survive byte-for-byte.
+     from scratch  — a .txt came in; there is no song file yet, so Bombista
+                     writes one, with the keys it cannot know left empty for
+                     Jorge to fill in by hand. */
+var TIMING_KEYS = ["linesHash", "timelineSignedOff", "timelineVersion", "leadIn", "timeline"];
+var LINES_HASH = "sha256:1f3c\u2026 (over the 19 canonical lines \u2014 B4's guard)";
+
+function timingBlock() {
+  var rows = compute(), lead = state.lead;
+  return {
+    linesHash: LINES_HASH,
+    /* settled 2026-08-15: one scalar, so a reviewed timeline is distinguishable
+       from a machine one after the file leaves the folder its report is in */
+    timelineSignedOff: "2026-08-15T23:31:07+02:00",
+    timelineVersion: 2,
+    leadIn: {
+      durationSec: round2(lead),
+      source: Math.abs(lead - song.leadIn) < 0.001 ? "measured" : "hand-set",
+      confidence: "low",
+      apply: false
+    },
+    timeline: rows.map(function (r) {
+      return { start: round2(Math.max(0, r.start - lead)),
+               end: round2(Math.max(0, r.end - lead)) };
+    })
+  };
+}
+
+function buildSP() {
+  var t = timingBlock(), out;
+  if (isTxt) {
+    /* from scratch: only what a .txt plus page 1 can honestly supply */
+    var lang = document.getElementById("langSel").value || "es";
+    var tt = {}; tt[lang] = SONG.meta.title;
+    out = {
+      title: SONG.meta.title,
+      artist: "",
+      notes: "",
+      title_translations: tt
+    };
+    /* tempo is OMITTED when unset, never a null scaffold. songs@c5adf65 removed
+       placeholder tempo blocks "outright — not replaced with a flag or a null",
+       because tempo.bpm drives both Pregonero's scaling denominator and its
+       visual pulse, which need opposite things from an invented number.
+       Pregonero degrades safely when the key is absent. */
+    var bpm = document.getElementById("tempoSel");
+    if (bpm && bpm.value && bpm.value.charAt(0) !== "\u2014") {
+      out.tempo = { bpm: parseFloat(bpm.value), numerator: 6, denominator: 8, countInBars: 1 };
+    }
+    out.lyrics = compute().map(function (r) { var o = {}; o[lang] = r.es; return o; });
+  } else {
+    var m = SONG.meta;
+    out = {
+      title: m.title,
+      artist: m.artist,
+      notes: m.notes,
+      title_translations: m.title_translations,
+      tempo: m.tempo,
+      intro: m.intro,
+      lyrics: SONG.lyrics
+    };
+  }
+  TIMING_KEYS.forEach(function (k) { out[k] = t[k]; });
+  return out;
+}
+
+var CAP_PASS =
+  "This is your <b>Song Performance JSON</b> \u2014 the file you started from, with the timing " +
+  "keys filled in. Bombista wrote five: <code>linesHash</code>, <code>timelineSignedOff</code>, " +
+  "<code>timelineVersion</code>, <code>leadIn</code>, <code>timeline</code>. Entry 0 is " +
+  "<code>0.00</code> and the lead-in is " +
+  "banked. Everything above them is passed through untouched, all four languages included. " +
+  "Bands, signals and the record of what you set by hand are in the <b>report</b>, not here.";
+
+var CAP_NEW =
+  "There was no song file, so this is a new <b>Song Performance JSON</b> built from your " +
+  "<code>.txt</code>. It carries only what a plain text plus step 1 can honestly supply: " +
+  "<code>artist</code> and <code>notes</code> are empty for you to fill in, <code>tempo</code> is " +
+  "<b>absent rather than blank</b> \u2014 an invented tempo is worse than none, so the key only " +
+  "appears once it is real \u2014 and <code>lyrics</code> carries the " +
+  "one language you chose \u2014 same shape as <code>songs/_template.json</code>. Add the other " +
+  "languages later; <code>linesHash</code> will catch it if the line count changes.";
+
+function renderPage3() {
+  document.getElementById("json").textContent = JSON.stringify(buildSP(), null, 2);
+  document.getElementById("outcap").innerHTML = isTxt ? CAP_NEW : CAP_PASS;
+  document.getElementById("outname").textContent = "pimiento.sp.json";
+}
+
+/* B19's surviving clause: a JSON download must be pressed even when nothing was
+   flagged. The report alone is not a sign-off \u2014 it certifies nothing. */
+function signOff() {
+  var el = document.getElementById("signoff");
+  el.className = "signoff";
+  el.textContent = "Signed off 2026-08-15 23:31 \u00b7 your inputs untouched";
+  reached["3"] = true;
+}
+document.getElementById("dlfull").addEventListener("click", signOff);
+document.getElementById("dltimeline").addEventListener("click", signOff);
+document.getElementById("dlreport").addEventListener("click", function () { /* no sign-off */ });
+
+window.addEventListener("hashchange", route);
+route();
+
+})();
+</script>
+</body>
+</html>

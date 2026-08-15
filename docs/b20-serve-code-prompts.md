@@ -1,0 +1,371 @@
+# B20 `serve` — Claude Code prompts
+
+Four PRs, in order. Each is paste-ready. House rules apply throughout and are restated in each
+prompt because Code does not carry them between sessions: feature branch off `main`, strict
+red → green → refactor, Conventional Commits, `gh pr create --base main`, merge and pull `main`
+before starting the next.
+
+Reference material Code should read before touching anything: `docs/bombista-serve-spec.md`
+(§3 the four states, §4 invariants, §6 obligations, **§8 page 2's design**, **§9 pages 1/1.5/3**,
+**§10 the vocabulary and the skin**) and `docs/mockups/bombista-serve-mockup.html` (the clickable
+reference for all three steps, on pimiento's real numbers).
+
+**Vocabulary — §10.1, and it is not negotiable in user-facing strings.** The steps are
+`1 Input · 2 Review · 3 Output`. The format is the **Song Performance JSON** (`SP JSON`,
+`.sp.json`) — never "CP JSON", never a bare "song JSON". The audio row is **Media source**. The
+words *alignment* and *emit* may appear in code and internal docs; they must not appear on a page.
+
+**The format — §10.2, read it before writing any serialiser.** The SP JSON **is** the existing
+`songs/*.json` format; there is no new schema. Bombista owns exactly `linesHash`,
+`timelineSignedOff`, `timelineVersion`, `leadIn`, `timeline` — FIVE keys, and passes `title`,
+`artist`, `notes`, `title_translations`, `tempo`, `intro` and `lyrics` through untouched. `lyrics` entries are
+OBJECTS keyed by language (`{es, en, fr, nl}`), never strings: flattening them destroys every
+translation on the round trip. Do not invent a `format:` key, a `review:` block or a
+`provenance:` block in the song file — QA output belongs in the report.
+
+**Two shapes, one format — §10.2.1.** A `.sp.json` in means pass-through: fill five keys, touch
+nothing else. A `.txt` in means the song file does not exist yet, so write one with only what a
+plain text plus step 1 can honestly supply — `artist: ""`, `notes: ""`, `title_translations`
+keyed by the CHOSEN language, **`tempo` OMITTED unless page 1 supplied a real number — never a
+null scaffold, never a placeholder** (songs@c5adf65 removed placeholder tempo blocks "outright —
+not replaced with a flag or a null", because tempo.bpm drives both Pregonero's scaling denominator
+and its visual pulse and an invented number cannot serve both; Pregonero degrades safely when the
+key is absent), no `intro`, and `lyrics` carrying that one language. §10.2.1 has the table.
+
+---
+
+## PR 1 — signal glosses, one source of truth
+
+**Branch:** `feat/b20-signal-glosses`
+
+```
+Read docs/bombista-serve-spec.md §8.3 and CLAUDE.md first.
+
+Bombista's confidence signals are printed as bare tokens — `lead-fallback`, `gap-outlier`,
+`uncorroborated`, `ambiguous`, `no-anchor`, `clean-anchor`, `override` — in the markdown QA
+report, in the report JSON, and on B16's HTML review page. A user who has not read
+anchoring.py cannot act on them. B20 page 2 needs a plain-language sentence per signal, and
+it must be the same sentence everywhere, so it belongs beside the signal names rather than in
+any one writer.
+
+Task, strict red → green → refactor:
+
+1. Add `SIGNAL_GLOSSES: dict[str, str]` to bombista/anchoring.py, next to the tuning
+   constants, mapping every signal name anchor_lines can emit to one plain sentence written
+   for someone who has never read the source. Use §8.3's wording for `lead-fallback` verbatim;
+   write the rest in the same register — what the tool observed and where to listen, not what
+   the code did.
+
+2. Write the failing tests first, in tests/:
+   - every signal name that anchor_lines can emit has a KEY in SIGNAL_GLOSSES (derive the set
+     from the code, do not hardcode a literal list that can drift);
+   - every signal that indicates a PROBLEM has a non-empty sentence. `clean-anchor` and
+     `override` are not problems and map to "" — they are the two exceptions and the test should
+     name them explicitly rather than allowing any empty value through;
+   - no gloss names a function, a module, or a threshold constant;
+   - the markdown QA report renders the gloss for each flagged line;
+   - B16's HTML review page renders the gloss for each flagged line;
+   - the report JSON carries the gloss per line alongside the signal.
+
+3. Make them pass. report.py and writers.py import SIGNAL_GLOSSES from anchoring; neither
+   defines its own copy.
+
+Note for later, do not act on it here: B20 page 2 will SUPPRESS `clean-anchor` on screen
+entirely (§8.3) because 18 of 19 rows carry it and repeating it is noise. The markdown report
+and the report JSON keep printing every signal — they are audit documents with different
+duties. That asymmetry is deliberate; this PR just makes the vocabulary shared.
+
+Do not change any band, threshold, or signal name. This PR adds words, nothing else.
+The existing 263 tests must stay green.
+
+Commit as `feat(anchoring): name each confidence signal in plain language`, then
+`gh pr create --base main`.
+```
+
+---
+
+## PR 2 — the `serve` skeleton and the two routes page 2 needs
+
+**Branch:** `feat/b20-serve-routes`
+
+```
+Read docs/bombista-serve-spec.md — all of it, especially §1 (what this must never become),
+§2 (step 0, already merged as PR #18), §4 (the invariants) and §6 (test obligations) — and
+CLAUDE.md before touching anything.
+
+This PR builds `bombista serve` as a process and the JSON routes page 2 talks to. It does NOT
+build page 1, page 1.5, page 3, or page 2's HTML. Those are separate items; page 2's markup is
+PR 3.
+
+Build:
+
+1. `bombista/server.py` — a ThreadingHTTPServer on 127.0.0.1 with an explicit host argument
+   that is never 0.0.0.0 and never configurable to it (invariant 7). A `--port` option, default
+   an ephemeral port, printed on start.
+
+2. `bombista serve` in cli.py: wiring only, matching how align/promote/migrate are wired there
+   today. It takes a staging directory (the output of a previous `align`) and boots a session
+   from what is on disk: the song JSON or lyrics, asr-words.jsonl, the QA state. This is the
+   development seam that lets page 2 be built against pimiento without page 1 existing.
+
+3. Routes, JSON in and out:
+   - `GET  /api/session` — the lines, their machine anchors, bands, signals, ASR context,
+     leadIn, and the run's provenance.
+   - `POST /api/reanchor` — body `{ "overrides": { "<line>": <seconds> } }`. Parses through
+     anchoring.parse_anchor_overrides (which already exists for exactly this — read its
+     docstring), then calls anchoring.anchor_lines and pipeline.build_timeline. Returns the
+     full per-line result. It re-runs the anchoring; it never applies a delta to anything.
+   - `POST /api/emit` — writes a NEW file via the extracted merge path in promotion.py /
+     writers.merge_envelope. Never writes to an input path (invariant 6).
+
+Tests, written first and failing for the right reason (§6):
+
+- the server binds 127.0.0.1 and there is no code path to any other bind address;
+- `/api/reanchor` DELEGATES — assert it calls the extracted anchoring and merge rather than
+  reimplementing them. This is the drift risk the whole item is shaped around;
+- an override re-anchors: with a synthetic Word list, lines after a correction take values
+  derived from the word stream, not `original + delta`. Construct the fixture so those two
+  answers differ, or the test proves nothing;
+- line 0 cannot be moved through any route, and a lead offset lands in `leadIn`;
+- no route rounds coarser than 0.07 s, in either direction of the JSON round trip;
+- the emitted file carries `linesHash` and the hand-set provenance (which lines, their machine
+  values, when they were set);
+- `/api/emit` refuses to write to any path that was an input.
+
+Use synthetic Word lists throughout — never the whisper model (CLAUDE.md, Development Protocol).
+
+Do not import anything from cli.py into server.py; both call the extracted modules
+(invariant 1). The existing 263 tests must stay green.
+
+Commit as `feat(serve): local HTTP server and the re-anchor/emit routes`, then
+`gh pr create --base main`.
+```
+
+---
+
+## PR 3 — page 2
+
+**Branch:** `feat/b20-page2`
+
+```
+Read docs/bombista-serve-spec.md §3 (page 2), §4, §6 and §8 (the whole design), then open
+docs/mockups/bombista-serve-mockup.html in a browser and use it. That mockup is the
+reference implementation: pimiento's real 19 lines, with every re-anchor outcome taken from
+anchoring.py run against the real asr-words.jsonl. Match its behaviour; you may improve its
+code.
+
+Build page 2 as the HTML `serve` returns for `/`, driven by the routes from PR 2.
+
+Stack, and do not exceed it (§8.1): stdlib only. One page, inline CSS and JS, built by string
+composition the way writers.write_html_review already does it. Vanilla JS, no framework, no
+build step, no npm. `fetch` to the PR 2 routes is correct here — B16's zero-external-reference
+assertion is scoped to write_html_review's output file and MUST NOT be extended to this page.
+Serve the audio bytes from a loopback route rather than a relative src (§8.9).
+
+**The page is deliberately spare, and that is the design, not an unfinished state.** It is:
+an OPEN but quiet provenance block (two dim columns — collapsed, its summary line was an
+unreadable run-on; the fix was to make it recede, not to hide it), a sticky player with the three
+band counts, ONE line of instruction
+immediately above the table ("Click a START time to adjust it. Press and hold to move fast — a
+whole missed word is about a second."), the 19-line list, and one Confirm button. There is no lead-in panel, no "needs attention" card, no editor pane, no
+re-anchor banner, no JSON preview, no acknowledgement checkbox. Do not add explanatory text,
+help copy, status messages, or summary panels. If something needs explaining, it is in the
+spec, not on the page.
+
+The five things most likely to be got wrong:
+
+1. **The start time IS the control.** Clicking it opens a popup containing one stepper and
+   nothing else — no bounds text, no delta readout, no buttons. Bounds are the neighbouring
+   lines, enforced by silently clamping. Escape or click-outside closes; arrow keys nudge.
+
+2. **Press and hold auto-repeats** (380 ms, then 45 ms). This is load-bearing, not a nicety:
+   line 3's error is 1.22 s, which is 24 separate presses. Two implementation consequences,
+   both found while building the mockup — the struck-through previous value must have its line
+   reserved always, or the row grows mid-press and the button moves out from under the cursor;
+   and the popup must not be repositioned while a button is held.
+
+3. **A band that changed shows its before and its after**, on the row: old chip faded, arrow,
+   new chip, RE-ANCHORED badge, previous value struck through. Not a silent repaint. The
+   whole-song announcement is the HIGH/REVIEW/FAIL counts in the sticky bar — no banner.
+
+4. **Line 0's number is the lead-in control** (§8.6). Underlined in clay (§10.3 — there is no
+   blue in this palette), row labelled
+   `line 0 / lead-in`, popup captioned "lead-in · moves the whole song". It shifts every line
+   together and re-anchors nothing. Invariant 3 is untouched: line 0 is still 0.00 in the
+   emitted timeline. **Confirm this with Jorge before building it** — it is the one place §8
+   departs from §3's prose.
+
+5. **Debounce the re-anchor at 250 ms** after the last press. Not per press, not behind a
+   button.
+
+Tests:
+- every row carries its line's TEXT and not only its index (§6 — the requirement the CLI
+  failed);
+- the popup contains exactly one stepper and no other control;
+- the stepper step and every serialisation are 0.05/0.07 s or finer (invariant 2);
+- moving line 0 changes no band and re-anchors nothing;
+- an end-to-end test over the pimiento fixture, driving the routes rather than the DOM:
+  setting line 3 to 36.32 leaves all 15 lines below unchanged and all 19 HIGH; setting it to
+  40.00 returns line 4 as REVIEW/gap-outlier. Both are measured, not invented — §8.8.
+
+The acceptance case is §6's: a user who has never read the CLI docs can resolve line 3 of
+pimiento and reach a correct output file. Build to that, not to a feature list.
+
+Page 2's skin is retrofitted in PR 4 (§10.3). Build it here against the mockup's current CSS,
+which is already the ink-predominant brutalist one — do not reintroduce radii, easing, a light
+palette, or the blue edit colour.
+
+Commit as `feat(serve): page 2 — review`, then `gh pr create --base main`.
+```
+
+---
+
+## PR 4 — pages 1, 1.5 and 3
+
+**Branch:** `feat/b20-pages-1-and-3`
+
+```
+Read docs/bombista-serve-spec.md §3, §5 (the plain-text branch), §4 (invariants), §9 (the
+design for these three pages) and §10 (vocabulary, format and skin — §10.1 governs every user-facing
+string), then open docs/mockups/bombista-serve-mockup.html and click through steps
+1 → 1.5 → 2 → 3. Same stack rules as PR 3 (§8.1): stdlib, one page per step, inline CSS/JS,
+vanilla JS, no build step, no webfont.
+
+Build the remaining three states, plus the step bar that goes on all of them.
+
+1. **The step bar** (§9.2) — `1 Input · 2 Review · 3 Output`, on every page including page 2
+   (retrofit it there). One hard-bordered strip divided by 3px rules, not free-floating pills.
+   Every step clickable, including backwards; nothing is destroyed by navigating. Page 1.5 is a
+   state of step 1 and gets no segment of its own; its heading is "Processing".
+
+2. **Page 1** (§9.3) — heading "Input song". EXACTLY FOUR ROWS: Lyrics, Media source, Language,
+   Model. Each row is a label, one control, and one mono caption underneath. There is NO output
+   folder picker and NO "also write" checkbox group — both were cut on 2026-08-15 and must not
+   come back; step 3 offers downloads and the app does not choose where they land.
+
+   - The picker shows THE FILE NAME ALONE, never the path.
+   - There is no "as JSON / as plain text" dropdown. The branch is read off the extension.
+   - The Language dropdown is CONSTRAINED BY THE FILE: an SP JSON declares the languages it
+     carries and undeclared ones render disabled. This is a real rule — a language with no lines
+     has nothing to anchor — but the caption does NOT explain it. The caption is exactly "The
+     language on the recording and the lyrics file." and nothing more. Note that real Chango
+     Pepper song files carry es/en/fr/nl, so on the pimiento fixture nothing is disabled; the
+     guard is for .txt-derived and partial files.
+   - The Model caption must say it RUNS ON YOUR LOCAL MACHINE AND NOTHING IS UPLOADED (that
+     wording — "this machine" is ambiguous about whose), as well as the quality/time trade-off.
+     §1 says this tool must never become a hosted service; say so where the user is choosing the
+     thing that would otherwise have been the API call.
+   - One primary button: `Process song →`. Ink fill, clay shadow, the only filled button on the
+     page.
+   - The plain-text branch (§5) grows the same form in place: slug read-only from the filename,
+     title (the one free-text field in the whole flow), tempo as a dropdown starting at
+     "— not set —" beside a warning that tempo is NEVER measured (rules 4 and 5 — B14 was
+     dropped for this), and the stripped-line report shown BEFORE the run, never after.
+
+3. **Page 1.5** (§9.4) — two phase rows with a blinking dot and an elapsed readout, a Cancel
+   that actually cancels, and the one line about the transcription cache. Not a spinner. The
+   dot blinks on steps(2), it does not fade — see §10.3.
+
+4. **Page 3** (§9.5) — heading "Output", read-only. In order: one mono caption, a filename plate
+   with a fold control, the FULL SP JSON in a bordered code window, three downloads, a back link.
+
+   - Serialise the REAL song-file key order (§10.2): title, artist, notes, title_translations,
+     tempo, intro, lyrics, linesHash, timelineSignedOff, timelineVersion, leadIn, timeline.
+     Verify the passed-through part against songs/pimiento.json — do not take the order from this
+     prompt if the file disagrees.
+   - Render the FULL JSON. NO fold, NO expand control, no truncation. The window scrolls; the
+     caption tells the user which five keys Bombista wrote. An earlier pass added a fold and
+     Jorge cut it.
+   - The three buttons are `Download JSON file` (primary — the whole file), `Download timeline
+     only` (the FOUR TIMING KEYS: linesHash, timelineVersion, leadIn, timeline — never a bare
+     timeline array, which would hand over the unguarded artifact B4 exists to prevent),
+     `Download report` (bands, signals, provenance, hand-set lines, as markdown). One mono line
+     under each saying which is which.
+   - B19's surviving clause: EITHER JSON DOWNLOAD MUST BE PRESSABLE WHEN NOTHING WAS FLAGGED,
+     and pressing either records the sign-off. THE REPORT DOES NOT COUNT AS SIGN-OFF — it
+     certifies nothing. The buttons do NOT disable after the press.
+   - There is NO "ready to write <name> into <folder>" line and NO file list. Both were cut on
+     2026-08-15: they described a write to a folder the app no longer chooses.
+   - `timelineSignedOff` is SETTLED (Jorge, 2026-08-15): an ISO timestamp beside `linesHash`,
+     written when a JSON download is pressed. It is the whole of §3's provenance clause in one
+     scalar; all the detail stays in the report.
+
+5. **The masthead** (§9.1) — on every page, above the step bar: the "Bombista" wordmark, the
+   tagline "Forced-alignment triage", and right-aligned "v0.9.0 / A TRAMOYA tool / by CHANGO
+   PEPPER" with Tramoya in clay. Without it, page 1's "the format Tramoya promotes" has no
+   context on the page.
+
+6. **The skin** (§10.3) — brutalist, INK GROUND, QUIET REGISTER. Read §10.3's table of what
+   changed and why before writing CSS; Jorge rejected a louder first pass with "things compete
+   with your attention which are not relevant for the main flow", and that is the governing
+   constraint, not a preference.
+
+   Tokens: bg #121211, surface #1a1a18, surface-2 #232320, paper #e6dfd1 (body type), dim
+   #8b8478 (captions/labels), dimmer #635d54 (provenance, table heads, indices), line #2c2a26,
+   line-2 #423e37, clay #d98b7a (the accent), clay-dim #8f5a4e.
+
+   1px borders for structure. NO border radius anywhere. NO shadows except the popup's drop.
+   No transitions — removed, not eased. Mono uppercase labels at .13em tracking. Headings are
+   800-weight uppercase but SMALL: clamp(1.35rem, 2.2vw, 1.7rem). `color-scheme: dark` on :root.
+   The primary button is CLAY-FILLED with near-black text; secondary buttons are a hairline that
+   brightens on hover. NO WEBFONT — a local-first tool does not phone a font CDN; system sans and
+   mono stacks. ONE PALETTE ONLY: no light mode, no prefers-color-scheme block. No blue anywhere.
+
+   Bands, re-tuned for the quiet register: HIGH #4f7d63 (DELIBERATELY MUTED — 18 of 19 rows are
+   HIGH and none of them need attention), REVIEW #e0a437, FAIL #ef7a70, tints #241d11 / #251715.
+
+   The native <audio> element renders light regardless of color-scheme in Chromium. Invert it
+   back down (filter: invert(.92) hue-rotate(180deg); opacity: .72; full opacity on hover) or
+   build a custom transport. Do not leave a light slab as the brightest object on page 2.
+
+   Retrofit page 2 to match, including: provenance OPEN by default in two dim columns, and
+   `clean-anchor` NOT PRINTED in the why column (§8.3).
+
+Resolve before writing page 1: `serve` runs on the user's machine and needs a real filesystem
+PATH, but a browser <input type="file"> hands you a File object with no path. Either add a
+small loopback route that browses the filesystem, or accept the upload and stage it. Pick one
+and say why in the PR description — §9.6. Cutting the output-folder picker reduced this to two
+controls.
+
+Tests:
+- page 1 renders exactly four rows and contains no free-text input except the title, and the
+  title only on the .txt branch;
+- the round trip is lossless for every key Bombista does not own: load songs/pimiento.json,
+  emit, and assert title/artist/notes/title_translations/tempo/intro/lyrics are byte-identical,
+  INCLUDING all four languages on every lyrics entry;
+- page 1 has no output-directory control and no emit-format checkboxes;
+- selecting a language an SP JSON does not declare is impossible through the rendered page;
+- the stripped-line report is rendered before the run is startable, from the reader's
+  strippedLines, not recomputed;
+- tempo is never derived from anything — assert there is no code path from audio or lyrics to a
+  tempo value (rules 4 and 5);
+- page 3 serialises the real song-file key order and entry 0 is 0.00 with the offset in leadIn;
+- the .txt branch emits the from-scratch shape of §10.2.1: artist and notes are "", intro is
+  absent, title_translations and lyrics are keyed by the chosen language;
+- NO emitted file ever contains a tempo key with a null or invented bpm — assert it is either
+  absent or fully real (songs@c5adf65);
+- page 3 renders the whole JSON with no fold or truncation control;
+- "download timeline only" yields all five timing keys, never a bare timeline array;
+- an emitted file carries `timelineSignedOff`, and a file emitted without a JSON download being
+  pressed does not exist (there is no path to one);
+- page 3's two JSON downloads are enabled when bands are all HIGH (B19's clause), the report
+  download does NOT record sign-off, and no download overwrites an input path (invariant 6);
+- no user-facing string in any page contains "emit", "align", "alignment" or "CP JSON";
+- the why column is empty on every clean-anchor row, and the markdown report still prints every
+  signal (the two have different duties);
+- no emitted song file contains a `format`, `review` or `provenance` key — QA data is in the
+  report only;
+- the served pages reference no external URL of any kind (no font CDN, no CSS host) — this is
+  narrower than B16's assertion, which forbids fetch too, and both must keep their own scope;
+- the step bar renders on all four states and every step is reachable from every other.
+
+Commit as `feat(serve): pages 1, 1.5 and 3, and the step bar`, then `gh pr create --base main`.
+```
+
+---
+
+## After PR 4
+
+`v1.0.0` is gated on `serve` shipping **and** line 3 of pimiento being fixable through it (§7).
+PR 3 closes the second half. PR 4 finishes the flow — cheap once page 2 is right, which was the
+premise of designing that one first.

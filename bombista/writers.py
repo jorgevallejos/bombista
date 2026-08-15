@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Sequence
 from urllib.parse import quote
 
-from .anchoring import LineAnchor
+from .anchoring import SIGNAL_GLOSSES, LineAnchor
 from .models import TimelineEntry
 from .report import AUDIO_CLOCK_RULE, band_counts, format_duration
 
@@ -152,7 +152,11 @@ def write_report_json(
     `anchors`, `lines` and `line_entries` are parallel, one per lyric line
     (same convention as `report.render_qa_report`). `asrContext` is
     included per line only when the anchor carries one (empty for
-    overrides and FAILs). `previousSignals` is part of this shape per the
+    overrides and FAILs). `signalGlosses` maps each of the line's signals
+    to `anchoring.SIGNAL_GLOSSES`'s plain sentence (B20 §8.3) and is
+    omitted when none of them has one to give — `clean-anchor` and
+    `override` say nothing, and a key full of empty strings on every clean
+    line would be noise in an audit document. `previousSignals` is part of this shape per the
     backlog (recording a line's prior confidence signals across an
     `--anchor` correction) but nothing in `anchoring.py` populates it yet
     — it is never emitted here, by construction, until that tracking
@@ -172,6 +176,13 @@ def write_report_json(
         }
         if anchor.asr_context:
             line["asrContext"] = anchor.asr_context
+        glosses = {
+            signal: SIGNAL_GLOSSES[signal]
+            for signal in anchor.signals
+            if SIGNAL_GLOSSES.get(signal)
+        }
+        if glosses:
+            line["signalGlosses"] = glosses
         lines_out.append(line)
 
     result = {
@@ -344,6 +355,7 @@ code, .cmd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospa
 .flag-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
 .idx { font-size: .78rem; color: var(--muted); }
 .signals { font-size: .78rem; color: var(--muted); }
+.gloss { margin: .35rem 0 0; font-size: .85rem; color: var(--fg); }
 .text { color: var(--fg); margin: .5rem 0 .3rem; white-space: pre-wrap; font-size: 1rem; }
 .asr { margin: .1rem 0; font-size: .82rem; color: var(--muted); white-space: pre-wrap; }
 .fix { display: flex; align-items: center; gap: .5rem; margin-top: .6rem; flex-wrap: wrap; }
@@ -593,9 +605,16 @@ def write_html_review(
                     f'<span class="chip band-{anchor.band}">{anchor.band}</span>',
                     f'<span class="signals">{esc(", ".join(anchor.signals))}</span>',
                     "</div>",
-                    f'<p class="text">{esc(lines[i])}</p>',
                 ]
             )
+            # The signal spelled out under its token (B20 §8.3) — the
+            # tokens above mean nothing to a reader who has not opened
+            # anchoring.py, and this page exists for exactly that reader.
+            for signal in anchor.signals:
+                gloss = SIGNAL_GLOSSES.get(signal, "")
+                if gloss:
+                    body.append(f'<p class="gloss">{esc(gloss)}</p>')
+            body.append(f'<p class="text">{esc(lines[i])}</p>')
             if anchor.asr_context:
                 body.append(f'<p class="asr">ASR heard: {esc(anchor.asr_context)}</p>')
             body.extend(

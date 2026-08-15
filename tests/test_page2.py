@@ -23,7 +23,7 @@ import re
 
 import pytest
 
-from bombista import pages, server
+from bombista import pages, server, writers
 
 from .test_pages import flow_text, visible_text
 from .test_synthetic_canary import FLAGGED_LINE, MACHINE_START, TRUE_ONSET
@@ -102,7 +102,7 @@ def test_no_lead_in_control_anywhere_on_the_page(page2):
     above the table, a control in the sticky bar — are all dropped. The
     provenance block still *reports* the measured lead-in, because that is
     a fact about the run rather than a control."""
-    outside_provenance = re.sub(r"<details class=\"prov\".*?</details>", " ", page2, flags=re.S)
+    outside_provenance = re.sub(r'<p class="prov">.*?</p>', " ", page2, flags=re.S)
 
     assert "lead-in" not in flow_text(outside_provenance).lower()
     assert "lead-in" in visible_text(page2).lower(), "provenance still reports it"
@@ -290,14 +290,88 @@ def test_times_are_raw_audio_clock_seconds(page2, payload):
 # ---------------------------------------------------------------------------
 
 
-def test_provenance_is_open_and_quiet(page2):
-    """Collapsed, its summary line was a run-on that "is not
-    understandable". The answer was to make it recede, not to hide it: a
-    block that recedes can stay open, and open it is legible at a glance."""
-    block = re.search(r"<details class=\"prov\"[^>]*>", page2)
+@pytest.fixture
+def provenance():
+    """A run's recorded provenance, as `<stem>-report.json` carries it."""
+    return {
+        "audio": "../../songs/audio/pimiento.m4a",
+        "sha256": "ab" * 32,
+        "durationSec": 173.376,
+        "model": "faster-whisper:medium",
+        "device": "cpu/int8",
+        "lang": "es",
+        "extractedAt": "2026-08-14T20:55:00+02:00",
+        "toolVersion": "bombista 0.9.0",
+    }
 
-    assert block and " open" in block.group(0)
-    assert "columns: 2" in pages.STYLESHEET
+
+@pytest.fixture
+def provenanced(synthetic_session, provenance):
+    synthetic_session.provenance = provenance
+    synthetic_session.song["title"] = "Pimiento"
+    return pages.render_review(server.session_payload(synthetic_session))
+
+
+def test_provenance_is_one_quiet_line(provenanced, payload):
+    """§8.2, reduced 2026-08-16. Three passes to get here. Pass one hid a
+    full table because it was loud; pass two opened it and made it recede,
+    which fixed the volume but not the *relevance*. Jorge's is the third:
+    "I would refrain from showing any of this info to the final user."
+    What survives is the one question a correcting user does ask — am I
+    looking at the right song and the right take?"""
+    line = re.search(r'<p class="prov">(.*?)</p>', provenanced, re.S)
+
+    assert line, "the provenance line is gone entirely"
+    assert visible_text(line.group(1)).strip() == (
+        "Pimiento · pimiento.m4a · faster-whisper medium (es) · measured lead-in 8.92 s"
+    )
+    assert "<details" not in provenanced, "no fold"
+    assert "<table" not in re.sub(r"<table>.*?</table>", "", provenanced, flags=re.S), "no table"
+
+
+def test_the_page_carries_none_of_what_only_an_audit_needs(provenanced, provenance):
+    """Everything removed STAYS in `<stem>-report.json` — it is filed, not
+    lost. The page is for judging lines by ear; the report is the audit
+    artifact and may be as technical as it likes. §1's claim that the
+    report's trustworthiness is the entire product is about the report."""
+    text = visible_text(provenanced)
+
+    assert provenance["sha256"] not in provenanced
+    assert "sha256" not in text.lower()
+    assert provenance["toolVersion"] not in provenanced
+    assert "toolVersion" not in provenanced
+    assert not re.search(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", provenanced), "an ISO timestamp"
+    assert "173.37" not in provenanced, "the audio duration"
+    assert "cpu/int8" not in provenanced
+
+
+def test_the_provenance_line_names_the_file_and_never_its_path(provenanced):
+    """The same rule page 1's picker follows (§9.3, decision 1):
+    `songs/audio/pimiento.m4a` is the tool's business, `pimiento.m4a` is
+    the user's."""
+    assert "pimiento.m4a" in provenanced
+    assert "../../songs/audio" not in provenanced
+
+
+def test_the_report_json_still_carries_everything_the_page_dropped(
+    synthetic_session, provenance
+):
+    """Filed, not lost."""
+    synthetic_session.provenance = provenance
+    report = writers.write_report_json(
+        provenance=provenance,
+        lines_hash=synthetic_session.lines_hash,
+        lead_in_block={"durationSec": 8.92, "source": "measured", "confidence": "high",
+                       "apply": False},
+        anchors=server._anchor(synthetic_session, {})["anchors"],
+        lines=synthetic_session.lines,
+        line_entries=server._anchor(synthetic_session, {})["entries"],
+        out_path=synthetic_session.staging_dir / "written-report.json",
+    )
+
+    assert report["source"]["sha256"] == provenance["sha256"]
+    assert report["source"]["toolVersion"] == provenance["toolVersion"]
+    assert report["source"]["extractedAt"] == provenance["extractedAt"]
 
 
 def test_the_sticky_bar_carries_the_player_and_the_three_band_counts(page2, payload):

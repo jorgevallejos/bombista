@@ -68,6 +68,20 @@ def format_duration(duration_sec: float | None) -> str:
     return f"{duration_sec:.2f} s"
 
 
+WORDS_REUSED_NOTE = "not recorded — the word stream was reused and its own run left no record"
+"""What the header says where `extractedAt` would go on a `--words` run
+against a staging directory with no `asr-words.meta.json` (B20 §11.10).
+
+The absence is *stated*, not silently dropped: this is an audit document,
+and a header that quietly loses a field reads as a field that was never
+meant to be there. A wrong timestamp would be worse than either.
+"""
+
+
+def extracted_at(provenance: dict) -> str:
+    return provenance.get("extractedAt") or WORDS_REUSED_NOTE
+
+
 def render_qa_report(
     *,
     anchors: Sequence[LineAnchor],
@@ -129,7 +143,7 @@ def render_qa_report(
         f"- Audio duration: {format_duration(provenance['durationSec'])}",
         f"- Model: `{provenance['model']}` (lang `{provenance['lang']}`, "
         f"device `{provenance['device']}`)",
-        f"- Extracted at: {provenance['extractedAt']}",
+        f"- Extracted at: {extracted_at(provenance)}",
         f"- Tool version: {provenance['toolVersion']}",
         f"- Generated: {generated_at.isoformat(timespec='seconds')}",
         f"- Re-run (skips transcription): `{rerun}`",

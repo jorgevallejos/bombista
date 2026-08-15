@@ -33,7 +33,7 @@ from urllib.parse import quote
 
 from .anchoring import SIGNAL_GLOSSES, LineAnchor
 from .models import TimelineEntry
-from .report import AUDIO_CLOCK_RULE, band_counts, format_duration
+from .report import AUDIO_CLOCK_RULE, band_counts, extracted_at, format_duration
 
 __all__ = [
     "ENVELOPE_KEYS",
@@ -557,7 +557,11 @@ def write_html_review(
         f"<li><b>Model</b> <code>{esc(str(provenance['model']))}</code> "
         f"(lang <code>{esc(str(provenance['lang']))}</code>, "
         f"device <code>{esc(str(provenance['device']))}</code>)</li>",
-        f"<li><b>Extracted at</b> {esc(str(provenance['extractedAt']))}</li>",
+        # `.get`, not `[…]`: a `--words` run against a staging directory
+        # with no `asr-words.meta.json` omits the field rather than invent
+        # a time (B20 §11.10), and this page is one of the two places that
+        # has to render the absence.
+        f"<li><b>Extracted at</b> {esc(extracted_at(provenance))}</li>",
         f"<li><b>Tool version</b> {esc(str(provenance['toolVersion']))}</li>",
         f"<li><b>Generated</b> {esc(generated_at.isoformat(timespec='seconds'))}</li>",
         f"<li><b>Measured lead-in</b> {lead_in:.2f} s "

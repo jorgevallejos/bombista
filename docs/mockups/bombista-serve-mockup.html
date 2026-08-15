@@ -116,19 +116,11 @@ button:focus-visible { outline: 2px solid var(--clay); outline-offset: 2px; }
 .steps a.done .n { color: var(--dimmer); }
 .steps .sep { display: none; }
 
-/* ---------- provenance — open by default, and quiet enough to be ---------- */
-details.prov { margin: 1.2rem 0 0; font-size: .8rem;
-               border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-details.prov > summary { cursor: pointer; padding: .5rem 0; list-style: none;
-                         font: 400 .72rem/1.45 var(--mono); color: var(--dim);
-                         text-transform: uppercase; letter-spacing: .11em; }
-details.prov > summary::-webkit-details-marker { display: none; }
-details.prov > summary:hover { color: var(--paper); }
-details.prov ul { list-style: none; margin: 0; padding: 0 0 .7rem;
-                  font: 400 .72rem/1.7 var(--mono); color: var(--dimmer);
-                  columns: 2; column-gap: 2.5rem; }
-details.prov li { break-inside: avoid; }
-details.prov li b { color: var(--dim); font-weight: 400; display: inline-block; min-width: 8.5rem; }
+/* ---------- provenance — one quiet line, one hairline (§8.2) ---------- */
+p.prov { margin: 1.2rem 0 0; padding: 0 0 .55rem;
+         border-bottom: 1px solid var(--line);
+         font: 400 .72rem/1.7 var(--mono); color: var(--dimmer);
+         overflow-wrap: anywhere; }
 
 /* ---------- sticky player ---------- */
 .sticky { position: sticky; top: 0; z-index: 20; background: var(--bg);
@@ -355,19 +347,19 @@ pre.json { background: var(--surface); border: 1px solid var(--line-2);
         <div class="ctl"><input type="text" value="Pimiento"></div>
         <p class="hint">The one text field in the whole flow. A <code>.txt</code> carries no title.</p>
       </div>
-      <div class="frow">
-        <label class="flabel">Tempo</label>
-        <div class="ctl">
-          <select id="tempoSel"><option>— not set —</option><option>66.67</option></select>
-          <span class="playhead">BPM · 6/8</span>
-        </div>
-      </div>
     </div>
+    <!-- The tempo control was removed 2026-08-16 (§9.3, §11.5). It could only ever
+         produce a bpm-only block, and Pregonero's beatScheduler.ts declares numerator
+         and denominator as required — a bpm-only block NaNs getBeatsPerBar, so the
+         scaling keeps working while the pulse and count-in break. Tempo is written
+         whole or not at all, and Bombista cannot write it whole. -->
     <div class="warnbox">
-      <b>Tempo is never measured</b>
-      Bombista answers <i>when</i> a line happens, not in which beat. Take the value from the
-      Ableton project that produced this audio, where it is exact. Leave it unset and the key is
-      left out of the file entirely — an invented tempo is worse than a missing one.
+      <b>Tempo is not Bombista's business</b>
+      Bombista answers <i>when</i> a line happens, not in which beat, so the file it writes
+      carries no <code>tempo</code> block. Add it by hand from the Ableton project that produced
+      this audio, where it is exact — all four values together (<code>bpm</code>,
+      <code>numerator</code>, <code>denominator</code>, <code>countInBars</code>), because a
+      partial block breaks Pregonero's pulse.
     </div>
     <p class="hint"><b>3 lines will be removed before processing</b> — 2 blank, 1 section marker
       (<code>[Estribillo]</code>). 19 lyric lines remain.</p>
@@ -396,19 +388,13 @@ pre.json { background: var(--surface); border: 1px solid var(--line-2);
 <h1>Review</h1>
 <p class="lede">19 lines · raw audio-clock seconds</p>
 
-<details class="prov" open>
-  <summary>Provenance — this run</summary>
-  <ul>
-    <li><b>Song file</b> <code>songs/pimiento.json</code></li>
-    <li><b>Audio file</b> <code>songs/audio/pimiento.m4a</code></li>
-    <li><b>Audio sha256</b> <code>69f116d8dcfc1b74ae618a34483b9fc2bbcb3e46a371b22da498108a90cd0726</code></li>
-    <li><b>Audio duration</b> 173.38 s</li>
-    <li><b>Model</b> <code>faster-whisper:medium</code> · lang <code>es</code> · device <code>cpu/int8</code></li>
-    <li><b>Extracted at</b> 2026-08-14T23:14:08+02:00</li>
-    <li><b>Tool version</b> bombista 0.9.0</li>
-    <li><b>Measured lead-in</b> 8.92 s</li>
-  </ul>
-</details>
+<!-- Reduced to ONE line 2026-08-16 (§8.2). Jorge: "I would refrain from showing any of
+     this info to the final user." The table that was here is not lost, it is filed — every
+     field of it is in <stem>-report.json, which is the audit artifact and may be as
+     technical as it likes. This page is for judging lines by ear, so what survives is the
+     one question a correcting user asks: am I looking at the right song and the right take?
+     Note the file NAME, never the path — page 1's picker follows the same rule (§9.3). -->
+<p class="prov">Pimiento · pimiento.m4a · faster-whisper medium (es) · measured lead-in 8.92 s</p>
 
 <div class="sticky">
   <audio id="audio" controls preload="metadata" src="../../../../songs/audio/pimiento.m4a"></audio>
@@ -932,15 +918,12 @@ function buildSP() {
       notes: "",
       title_translations: tt
     };
-    /* tempo is OMITTED when unset, never a null scaffold. songs@c5adf65 removed
-       placeholder tempo blocks "outright — not replaced with a flag or a null",
-       because tempo.bpm drives both Pregonero's scaling denominator and its
-       visual pulse, which need opposite things from an invented number.
-       Pregonero degrades safely when the key is absent. */
-    var bpm = document.getElementById("tempoSel");
-    if (bpm && bpm.value && bpm.value.charAt(0) !== "\u2014") {
-      out.tempo = { bpm: parseFloat(bpm.value), numerator: 6, denominator: 8, countInBars: 1 };
-    }
+    /* NO tempo key, ever, on this branch (§11.5, decided 2026-08-16). It used to be
+       built here from the control above, with the meter filled in from pimiento's real
+       6/8 — which is exactly the invention the rule forbids: the tool has no way to know
+       the meter of the next song, and a bpm-only block NaNs Pregonero's getBeatsPerBar.
+       songs@c5adf65 deleted the placeholder blocks for the same reason, one key out.
+       Pregonero degrades safely when the key is absent, and breaks on a partial one. */
     out.lyrics = compute().map(function (r) { var o = {}; o[lang] = r.es; return o; });
   } else {
     var m = SONG.meta;
@@ -969,9 +952,9 @@ var CAP_PASS =
 var CAP_NEW =
   "There was no song file, so this is a new <b>Song Performance JSON</b> built from your " +
   "<code>.txt</code>. It carries only what a plain text plus step 1 can honestly supply: " +
-  "<code>artist</code> and <code>notes</code> are empty for you to fill in, <code>tempo</code> is " +
-  "<b>absent rather than blank</b> \u2014 an invented tempo is worse than none, so the key only " +
-  "appears once it is real \u2014 and <code>lyrics</code> carries the " +
+  "<code>artist</code> and <code>notes</code> are empty for you to fill in, there is no " +
+  "<code>tempo</code> block \u2014 Bombista never measures one, and a partial one breaks " +
+  "Pregonero's pulse \u2014 and <code>lyrics</code> carries the " +
   "one language you chose \u2014 same shape as <code>songs/_template.json</code>. Add the other " +
   "languages later; <code>linesHash</code> will catch it if the line count changes.";
 

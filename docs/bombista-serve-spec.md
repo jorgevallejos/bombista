@@ -20,7 +20,7 @@ One cleanup PR (PR 5) left. Jorge's design, 2026-08-14. Supersedes and absorbs
 | **8** | **page 2 (Review) — what it looks like.** 8.1 stack · 8.2 the page top to bottom · 8.3 the row · 8.4 the stepper · 8.5 how a re-anchor shows · 8.6 line 0 (settled) · 8.7 confirming · 8.8 the fixture · 8.9 open |
 | **9** | **the chrome and the other three pages.** 9.1 masthead · 9.2 step bar · 9.3 page 1 Input · 9.4 page 1.5 Processing · 9.5 page 3 Output · 9.6 open |
 | **10** | **vocabulary, format, skin.** 10.1 names · 10.2 the SP JSON is the song JSON · **10.2.1 the two shapes** · 10.3 the skin |
-| **11** | **what building it found.** 11.1 corrected in place · 11.2 the lyrics argument · **11.3 the fixture** · 11.4 smaller · 11.5–11.10 what PR 4 found · **11.11 what page 2 found** · **11.12 how the docs nearly lost half of themselves** |
+| **11** | **what building it found.** 11.1 corrected in place · 11.2 the lyrics argument · **11.3 the fixture** · 11.4 smaller · 11.5–11.10 what PR 4 found · **11.11 what page 2 found** · **11.12 how the docs nearly lost half of themselves** · **11.13 what the cleanup found** |
 
 ---
 
@@ -597,9 +597,12 @@ button on the page. *`Align →`* was too quiet for the one control that starts 
   control used to be:
 
   > **Tempo is not Bombista's business.** Bombista answers *when* a line happens, not in which
-  > beat, so the emitted file carries no `tempo` block. Add it by hand from the Ableton project
+  > beat, so the file it writes carries no `tempo` block. Add it by hand from the Ableton project
   > that produced this audio, where it is exact — all four values together (`bpm`, `numerator`,
   > `denominator`, `countInBars`), because a partial block breaks Pregonero's pulse.
+
+  ⚠ *"the emitted file"* until 2026-08-16 — **§10.1 forbids "emit" in a user-facing string**, and
+  PR 4's test enforces it on every page. See §11.13.
 
   The original clause, kept so the removal is legible: a control starting at *— not set —*, with a
   warning block beside it in the REVIEW colour: *Tempo is never measured. Bombista answers when a line happens, not in which beat. Type the
@@ -1117,10 +1120,11 @@ is *unsound* — it can start passing for reasons unrelated to the code. Redirec
 - ~~**§11.10** — `extractedAt`.~~ **Decided: not displayed; not invented in the report either.**
 - ~~**The docs are not on GitHub.**~~ **Done.** §11.1–11.10 merged as #25; §11.11 and this
   amendment ride on #26. **See §11.12 for the accident that nearly lost half of them.**
-- **Three things now ship in one cleanup PR** (PR 5), after page 2: the tempo control out,
-  `extractedAt` honest, and §11.11's audio path. They are one idea — *the page shows what helps you
-  judge a line, the report records what an audit needs, and nothing anywhere states a fact it did
-  not establish.* Prompt is at the end of the code-prompts file.
+- ~~**Three things now ship in one cleanup PR** (PR 5), after page 2: the tempo control out,
+  `extractedAt` honest, and §11.11's audio path.~~ **Shipped 2026-08-16, plus §8.2's provenance
+  reduction — four items, 454 → 479 tests.** They were one idea and stayed one — *the page shows
+  what helps you judge a line, the report records what an audit needs, and nothing anywhere states
+  a fact it did not establish.* **What building them found is §11.13.**
 
 ### 11.10 `extractedAt` lies on a `--words` re-run
 
@@ -1311,3 +1315,74 @@ record of most of these decisions.** Losing it loses the reasoning, not the code
 is what stops a later pass reintroducing a bpm-only tempo block or a lead-in widget. A spec that
 can be silently truncated by a routine `git commit` is a single point of failure for everything
 this document exists to prevent.
+
+---
+
+## 11.13 What the cleanup found
+
+PR 5 shipped 2026-08-16 (454 → 479 tests). It implemented §11.5's tempo removal, §11.10's
+honest `extractedAt`, §8.2's one-line provenance and §11.11's audio path. Five things worth
+recording; two of them changed a decision's *wording* rather than the decision.
+
+### §9.3's replacement note used a retired word
+
+**Did not follow the spec.** §9.3 fixes the note that replaces the tempo control as *"so the
+emitted file carries no `tempo` block"*. **§10.1 forbids "emit" in a user-facing string**, and
+PR 4's own test enforces it on every page. The note was built as *"so the file it writes
+carries no `tempo` block"* — same claim, one word.
+
+Worth a line because it is the second time a section wrote copy without checking it against
+§10.1 (§11.11 has the first, in the line-0 instruction). §10.1 governs the page; a later
+section quoting a sentence is not an exemption from it. **§9.3's note text is corrected above.**
+
+### `tempo` passes through; Bombista never *constructs* one
+
+The PR 5 prompt asks for a test that *"no emitted file on either branch contains a `tempo`
+key"*. Taken literally that contradicts §10.2, which passes `tempo` through untouched — and
+libertad and pimiento both carry a real one. The rule that holds both is the one §11.5 states:
+**Bombista never constructs a tempo key.** Passing one through is not writing one.
+
+So the tests are: the `.txt` branch emits no `tempo`; the `.sp.json` branch emits byte-identically
+what it was handed; and `server.py` has no code path that names a tempo at all. That last one is
+structural rather than a grep, because the *reasoning* for the removal lives in `server.py`'s
+docstrings and should stay there — a grep for `bpm` over the whole file would forbid the comment
+explaining why there is no bpm.
+
+### A `--words` run establishes some of its provenance and not the rest
+
+§11.10 says the sibling carries `extractedAt`, `model`, `device`, `lang` and the audio `sha256`,
+and that `--words` reads it back "instead of stamping fresh". Building it forced the question of
+*which* fields, and the answer follows from the PR's own headline — **nothing states a fact it
+did not establish**:
+
+- **carried forward** — `extractedAt`, `model`, `device`, `lang`. Facts about *when and how the
+  machine listened*, which a run that skipped transcription did not establish.
+- **still this run's own** — `sha256`, `durationSec`, `audio`. That run *did* hash the file it
+  was pointed at, and the three are one coherent description of one file on disk, which is the
+  whole of what B1 exists to record. Overwriting a live description with a recorded one would
+  split it across two runs — the same split brain §11.5 deletes elsewhere.
+
+The sibling still records `sha256`, which is what would make a future "this is not the audio that
+was transcribed" warning possible. That warning is not in this PR.
+
+### The sibling is a provenance carrier, and a partial one
+
+`asr-words.meta.json` is now the third thing `_find_provenance` reads, after the report JSON and
+an `--emit songjson` output. It is the poorest of the three — no duration, no tool version — and
+the only one **a run started from page 1 leaves behind at all**, which is why it is read.
+
+That made the markdown report's header raise `KeyError` on the download route, on a shape that had
+never existed before this PR. Fixed by laying the unknowns down first and the recorded facts over
+them, so the report renders `unknown` where a carrier says nothing. An audit document that says
+`unknown` is telling the truth; one that cannot render tells the user nothing.
+
+### The mockup still had both removals in it
+
+**Corrected, on §11.11's precedent.** The mockup carried the tempo dropdown, an `out.tempo` that
+filled the meter in from pimiento's real 6/8 — the invention §11.5 forbids, since the tool cannot
+know the next song's meter — and page 2's full provenance table. It is the reference
+implementation and the next reader copies from it, so both were brought in line and the reasoning
+left as a comment where each used to be.
+
+The general rule, now three for three: **a decision is not landed until the mockup agrees with
+it.** §11.11 found `hand-set`, the line-0 instruction, and now these.

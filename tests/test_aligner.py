@@ -20,6 +20,7 @@ from being trivially true.
 """
 import json
 import re
+import shutil
 import unicodedata
 from pathlib import Path
 
@@ -29,7 +30,9 @@ from bombista.aligner import (
     COMPUTE_TYPE,
     DEVICE,
     DEVICE_STRING,
+    WORDS_META_FILENAME,
     load_words,
+    load_words_meta,
     save_words,
     transcribe_words,
 )
@@ -126,6 +129,67 @@ def test_round_trip_handles_empty_list(tmp_path):
     loaded = load_words(out)
 
     assert loaded == []
+
+
+# ---------------------------------------------------------------------------
+# the sibling — §11.10, §11.11: what the word stream cannot say about itself
+# ---------------------------------------------------------------------------
+
+
+def test_save_words_writes_no_sibling_when_it_is_given_no_meta(tmp_path):
+    """`asr-words.jsonl` is bare word records with no header, and adding
+    one would break every reader — so the facts about the run go beside it
+    rather than in it. Only when there are facts to file."""
+    out = tmp_path / "words.jsonl"
+
+    save_words([Word("uno", 0.0, 0.1)], out)
+
+    assert not (tmp_path / WORDS_META_FILENAME).exists()
+    assert load_words_meta(out) is None
+
+
+def test_save_words_files_the_meta_beside_the_stream_and_reads_it_back(tmp_path):
+    out = tmp_path / "words.jsonl"
+    meta = {
+        "extractedAt": "2026-08-14T20:55:00+02:00",
+        "model": "faster-whisper:medium",
+        "device": "cpu/int8",
+        "lang": "es",
+        "sha256": "ab" * 32,
+        "audio": "/somewhere/pimiento.m4a",
+    }
+
+    save_words([Word("uno", 0.0, 0.1)], out, meta=meta)
+
+    sibling = tmp_path / WORDS_META_FILENAME
+    assert sibling.exists()
+    assert json.loads(sibling.read_text(encoding="utf-8")) == meta
+    assert load_words_meta(out) == meta
+
+
+def test_the_sibling_survives_the_staging_directory_being_copied(tmp_path):
+    """The whole reason it is a file rather than an mtime: an mtime does
+    not survive a copy, and a staging directory that is moved must still
+    be able to say when the machine listened."""
+    first = tmp_path / "one"
+    first.mkdir()
+    save_words([Word("uno", 0.0, 0.1)], first / "words.jsonl", meta={"lang": "es"})
+
+    second = tmp_path / "two"
+    shutil.copytree(first, second)
+
+    assert load_words_meta(second / "words.jsonl") == {"lang": "es"}
+
+
+def test_load_words_meta_returns_none_for_an_unreadable_sibling(tmp_path):
+    """An older staging directory can hold anything. A half-written or
+    hand-edited sibling is answered the same way a missing one is — the
+    caller omits the field rather than inventing a value from rubble."""
+    out = tmp_path / "words.jsonl"
+    save_words([Word("uno", 0.0, 0.1)], out)
+    (tmp_path / WORDS_META_FILENAME).write_text("{not json", encoding="utf-8")
+
+    assert load_words_meta(out) is None
 
 
 def test_save_words_writes_one_json_object_per_line(tmp_path):

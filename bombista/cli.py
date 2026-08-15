@@ -21,12 +21,23 @@ from pathlib import Path
 
 import click
 
-from .aligner import load_words, save_words, transcribe_words
+from .aligner import (
+    load_words,
+    load_words_meta,
+    save_words,
+    save_words_meta,
+    transcribe_words,
+)
 from .anchoring import anchor_lines, parse_anchor_overrides
 from .migrate import migrate_song_to_v2
 from .pipeline import build_timeline, lyric_lines, normalize_to_lead_in
 from .promotion import promote_candidate
-from .provenance import build_provenance, compute_lines_hash
+from .provenance import (
+    build_provenance,
+    compute_lines_hash,
+    provenance_for_reused_words,
+    words_meta,
+)
 from .readers import read_lyrics_input
 from .report import band_counts, render_qa_report
 from .serializer import to_dict, write_timeline
@@ -162,13 +173,29 @@ def align(
 
     staging_dir.mkdir(parents=True, exist_ok=True)
     words_out = staging_dir / "asr-words.jsonl"
+
+    # Built once per run, even when --words skips transcription — that's
+    # exactly when the audio's sha256 earns its keep (B1). Built *before*
+    # the branch below, because on the transcribing path it is also what
+    # gets filed beside the word stream, and on the --words path it is
+    # what the sibling corrects (B20 §11.10).
+    provenance = build_provenance(audio, model_size=model_size, lang=lang)
+
     if words_path is not None:
         words = load_words(words_path)
+        meta = load_words_meta(words_path)
         if words_path.resolve() != words_out.resolve():
             shutil.copyfile(words_path, words_out)
+            # The facts travel with the stream, or the copy is the
+            # older-staging-directory case one run later.
+            if meta is not None:
+                save_words_meta(meta, words_out)
+        # faster-whisper never ran, so this run cannot say when the
+        # machine listened, or with which model. The run that did says so.
+        provenance = provenance_for_reused_words(provenance, meta)
     else:
         words = transcribe_words(audio, model_size=model_size, language=lang)
-        save_words(words, words_out)
+        save_words(words, words_out, meta=words_meta(provenance, audio))
 
     anchors = anchor_lines(words, lines, overrides=overrides or None)
     try:
@@ -177,10 +204,6 @@ def align(
         raise click.ClickException(str(exc))
 
     lead_in, normalized_entries = normalize_to_lead_in(entries)
-
-    # Built once per run, even when --words skips transcription — that's
-    # exactly when the audio's sha256 earns its keep (B1).
-    provenance = build_provenance(audio, model_size=model_size, lang=lang)
 
     stem = song_json.stem
     emit_set = set(emit_targets)
@@ -334,12 +357,27 @@ def promote(timeline_json: Path, song_json: Path) -> None:
 )
 @click.option("--lang", default="es", show_default=True, help="Song JSON lyric key.")
 @click.option(
+    "--audio",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help=(
+        "The take this staging directory was aligned against. Only needed "
+        "when the run's own record of it no longer resolves — a staging "
+        "directory that was moved, or one from before the record existed."
+    ),
+)
+@click.option(
     "--port",
     default=0,
     show_default="an ephemeral port, printed on start",
     help=f"Port to bind on {LOOPBACK_HOST}.",
 )
-def serve(staging_dir: Path | None, lyrics: Path | None, lang: str, port: int) -> None:
+def serve(
+    staging_dir: Path | None,
+    lyrics: Path | None,
+    lang: str,
+    audio: Path | None,
+    port: int,
+) -> None:
     """Open the three-step interface in a browser, on this machine only.
 
     With no arguments it starts at step 1, where the song and its media
@@ -351,6 +389,14 @@ def serve(staging_dir: Path | None, lyrics: Path | None, lang: str, port: int) -
     copies its lyrics input into staging — pass the same song JSON (or
     lyrics text) you aligned against. It may be omitted only when the
     staging directory holds an `--emit songjson` output to fall back on.
+
+    --audio names the take the review plays. It is the third of the three
+    things page 1 collects with pickers, and it is only needed when the
+    run's own record of the take no longer resolves: `align` stores that
+    path as it was given, so a staging directory that has been moved
+    records a relative path that leads nowhere. The player says so rather
+    than finding some other file — a timeline is only meaningful against
+    the audio it was measured from.
 
     Binds 127.0.0.1 and nothing else. The audio, the transcription and the
     anchoring all stay in this process on this machine — nothing is
@@ -367,7 +413,7 @@ def serve(staging_dir: Path | None, lyrics: Path | None, lang: str, port: int) -
                     "lyrics text this run was aligned against."
                 )
         try:
-            session = load_session(staging_dir, lyrics, lang=lang)
+            session = load_session(staging_dir, lyrics, lang=lang, audio_path=audio)
         except ValueError as exc:
             raise click.ClickException(str(exc))
 

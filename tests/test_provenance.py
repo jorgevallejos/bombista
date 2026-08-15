@@ -17,7 +17,12 @@ from pathlib import Path
 import pytest
 
 from bombista.aligner import DEVICE_STRING
-from bombista.provenance import build_provenance, compute_lines_hash
+from bombista.provenance import (
+    build_provenance,
+    compute_lines_hash,
+    provenance_for_reused_words,
+    words_meta,
+)
 
 FIXTURE_AUDIO = Path(__file__).parent / "fixtures" / "synthetic-es-12s.wav"
 
@@ -212,3 +217,98 @@ def test_compute_lines_hash_differs_from_a_reordering_of_the_same_lines():
 
 def test_compute_lines_hash_of_empty_list_is_stable():
     assert compute_lines_hash([]) == compute_lines_hash([])
+
+
+# ---------------------------------------------------------------------------
+# §11.10 — `extractedAt` is a claim about when the machine listened
+# ---------------------------------------------------------------------------
+
+
+def test_words_meta_carries_what_the_word_stream_cannot_say_about_itself(tmp_path):
+    audio = tmp_path / "sub" / "a.wav"
+    audio.parent.mkdir()
+    audio.write_bytes(b"bytes")
+    provenance = build_provenance(audio, model_size="medium", lang="es")
+
+    meta = words_meta(provenance, audio)
+
+    assert set(meta) == {"extractedAt", "model", "device", "lang", "sha256", "audio"}
+    for key in ("extractedAt", "model", "device", "lang", "sha256"):
+        assert meta[key] == provenance[key]
+
+
+def test_words_meta_records_the_audio_as_an_absolute_path(tmp_path, monkeypatch):
+    """§11.11: `align` stores the path *as it was given*, so a staging
+    directory records `../../songs/audio/pimiento.m4a` — which resolves
+    only from the directory that run happened in. Copy the directory and
+    the player has nothing. The sibling records where the take actually
+    is."""
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"bytes")
+    monkeypatch.chdir(tmp_path)
+    provenance = build_provenance(Path("a.wav"), model_size="medium", lang="es")
+
+    meta = words_meta(provenance, Path("a.wav"))
+
+    assert provenance["audio"] == "a.wav", "the run still records what it was given"
+    assert Path(meta["audio"]).is_absolute()
+    assert Path(meta["audio"]).resolve() == audio.resolve()
+
+
+def test_reusing_words_carries_the_original_time_forward_rather_than_stamping(tmp_path):
+    """The bug: on a `--words` run faster-whisper never runs, and the
+    report claimed the machine listened at the moment the report was
+    written. §9.4 makes reusing the word stream *the* correction loop, so
+    that is most runs, not an edge case."""
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"bytes")
+    fresh = build_provenance(audio, model_size="tiny", lang="nl")
+    meta = {
+        "extractedAt": "2026-08-14T20:55:00+02:00",
+        "model": "faster-whisper:medium",
+        "device": "cpu/int8",
+        "lang": "es",
+        "sha256": "ab" * 32,
+        "audio": str(audio),
+    }
+
+    carried = provenance_for_reused_words(fresh, meta)
+
+    assert carried["extractedAt"] == "2026-08-14T20:55:00+02:00"
+    assert carried["model"] == "faster-whisper:medium"
+    assert carried["device"] == "cpu/int8"
+    assert carried["lang"] == "es"
+    assert carried["wordsReused"] is True
+
+
+def test_reusing_words_still_describes_the_audio_this_run_was_pointed_at(tmp_path):
+    """The four fields carried forward are the four a `--words` run cannot
+    establish. `sha256`, `durationSec` and `audio` it *can* — it hashed
+    the file it was given — and they are one coherent description of one
+    file, which is exactly what B1 exists to record. Splitting them across
+    two runs would be the split brain this cleanup deletes elsewhere."""
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"bytes")
+    fresh = build_provenance(audio, model_size="tiny", lang="nl")
+
+    carried = provenance_for_reused_words(fresh, {"sha256": "cd" * 32, "audio": "/gone.wav"})
+
+    assert carried["sha256"] == fresh["sha256"]
+    assert carried["audio"] == fresh["audio"]
+    assert carried["durationSec"] == fresh["durationSec"]
+
+
+def test_reusing_words_with_no_sibling_omits_the_time_rather_than_inventing_one(tmp_path):
+    """An older staging directory has no sibling. A wrong timestamp in an
+    audit file is worse than an absent one, and absent is cheap — so the
+    field goes, and `wordsReused` says why. Never an mtime: an mtime does
+    not survive the directory being copied."""
+    audio = tmp_path / "a.wav"
+    audio.write_bytes(b"bytes")
+    fresh = build_provenance(audio, model_size="medium", lang="es")
+
+    carried = provenance_for_reused_words(fresh, None)
+
+    assert "extractedAt" not in carried
+    assert carried["wordsReused"] is True
+    assert carried["sha256"] == fresh["sha256"]

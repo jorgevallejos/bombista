@@ -655,6 +655,16 @@ class Run:
     # -- lifecycle ---------------------------------------------------------
 
     def start(self) -> None:
+        # `state` and phase 0 are ONE fact, so they get one writer, here,
+        # before the worker exists (§12.3). `__init__` setting
+        # `state = "transcribing"` while `_work` turned the phase running
+        # on the other thread left a window — a few milliseconds wide on
+        # this Mac, wide enough on a loaded CI runner — where the payload
+        # claimed transcription with every phase `waiting`. That is §9.4's
+        # state degraded into a spinner with extra rows, and the page
+        # renders it. The staging `mkdir` now counts inside this phase's
+        # elapsed time, which is honest: it is work the phase is doing.
+        self._begin("transcribe")
         thread = threading.Thread(target=self._work, daemon=True)
         thread.start()
 
@@ -704,7 +714,6 @@ class Run:
                 # is a second rather than ninety.
                 self._finish("transcribe", "cached")
             else:
-                self._begin("transcribe")
                 words = transcribe_words(
                     media,
                     model_size=self.request["model"],

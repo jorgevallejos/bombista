@@ -27,26 +27,28 @@
 |---|---|
 | `docs/bombista-serve-spec.md` | The spec. §1–§7 Jorge's original, amended for naming. **§8 = page 2's visual design.** **§9 = the masthead, the step bar and pages 1, 1.5 and 3.** **§10 = the vocabulary (10.1), the format (10.2) and the ink-predominant skin (10.3).** |
 | `docs/mockups/bombista-serve-mockup.html` | Clickable mockup of the **whole three-step flow**, on pimiento's real 19 lines, in the ink-predominant brutalist skin, using the real metadata and four-language lyrics from `songs/pimiento.json`. Hash-routed: `#1` input, `#1.5` processing, `#2` review, `#3` output. Steps at the top are clickable. On step 1, **Choose file** swaps between the `.sp.json` and `.txt` fixtures. |
-| `docs/b20-serve-code-prompts.md` | **Five** paste-ready Claude Code prompts, one PR each. PRs 1–4 are run; **PR 5 at the end of the file is the only unrun one.** |
+| `docs/b20-serve-code-prompts.md` | **Five** paste-ready Claude Code prompts, one PR each. **All five are run and merged** — the file is now a record of how B20 was built, not a queue. |
 
 ## Where the build is (2026-08-16)
 
-**All four pages are standing.** PRs 1, 2 and 4 are **merged** (#22, #23, #24). **Page 2 is PR
-[#26](https://github.com/jorgevallejos/bombista/pull/26), open, on `feat/b20-page2`** — 389 → **457
-collected, 454 passing**; the 3 skips are the opt-in pimiento canary, and all three pass when run
-against the vault. Code drove page 2 in a real browser on the real canary: the stepper, the
-press-and-hold, the debounced re-anchor, the before/after bands and the line-0 move all behave.
+**B20 is built. All five PRs are merged** — #22, #23, #24, #26 and #27 — and `main` carries
+**479 tests green**. The 3 skips are the opt-in pimiento canary; all three pass against the vault.
+Code drove page 2 in a real browser on the real canary: the stepper, the press-and-hold, the
+debounced re-anchor, the before/after bands and the line-0 move all behave.
+
+**Nothing is left to build. What is left is one acceptance run** — §7's gate, below.
 
 `serve` has eight routes: `/api/session`, `/api/reanchor`, `/api/emit` (PR 2), `/api/run`
 (start/poll/cancel), `/api/lyrics`, `/api/browse`, `/api/download` (PR 4) and `/api/audio` with
-ranges, plus `GET /review/rows` (PR 3).
+ranges, plus `GET /review/rows` (PR 3). `serve` takes `[STAGING_DIR] [SONG_JSON_OR_LYRICS_TXT]`
+and `--audio`, `--lang`, `--port`.
 
-**§11 has grown to nineteen findings across §11.1–§11.12.** Read it before touching anything —
+**§11 has grown to twenty-four findings across §11.1–§11.13.** Read it before touching anything —
 §11.5 (tempo is whole or absent, checked against Pregonero's `beatScheduler.ts`), §11.8 (a test that
-passed while proving nothing), **§11.11** (what page 2 found) and **§11.12** (how the docs nearly
-lost half of themselves — a process rule, not a code one).
+passed while proving nothing), **§11.11** (what page 2 found), **§11.13** (what the cleanup found)
+and **§11.12** (how the docs nearly lost half of themselves — a process rule, not a code one).
 
-**The docs are on GitHub now.** §11.1–§11.10 merged as #25; §11.11 and §11.12 ride on #26.
+**The docs are all on GitHub.** §11.1–§11.10 as #25, §11.11–§11.12 on #26, §11.13 on #27.
 
 ## What page 2 settled (§11.11, 2026-08-16)
 
@@ -75,19 +77,42 @@ lost half of themselves — a process rule, not a code one).
    goes through `anchor_lines` like any other override. What is true and now tested: **no raw onset
    below it moves, and no band changes.**
 
+## What the cleanup settled (§11.13, 2026-08-16)
+
+1. **A section quoting page copy is not exempt from §10.1.** §9.3's replacement note said *"so the
+   emitted file carries no `tempo` block"* — and *emit* is a retired word that PR 4's own test bans
+   from every page. Built as *"so the file it writes carries…"*. **Second time**: §11.11 found the
+   first, in the line-0 instruction. §10.1 governs the page no matter which section wrote the words.
+2. **`tempo` passes through; Bombista never *constructs* one.** The prompt asked for a test that no
+   emitted file contains a `tempo` key, which contradicts §10.2's pass-through — libertad and
+   pimiento both carry a real block. §11.5's own wording is the rule that holds both. Asserted
+   structurally over the AST, not by grep, so `server.py` keeps the docstrings explaining why there
+   is no bpm.
+3. **A `--words` run carries forward some provenance and not the rest.** Carried: `extractedAt`,
+   `model`, `device`, `lang` — facts about *when and how the machine listened*, which a run that
+   skipped transcription did not establish. Still its own: `sha256`, `durationSec`, `audio` — that
+   run did hash the file it was pointed at, and the three are one coherent description of one file.
+4. **The sibling is a *partial* provenance carrier**, and the poorest of the three `_find_provenance`
+   reads — but the only one a page-1 run leaves behind. It gave the report header a shape that had
+   never existed and raised `KeyError` on download. Fixed by laying unknowns down first and recorded
+   facts over them: a report that says `unknown` tells the truth; one that cannot render says nothing.
+5. **A decision is not landed until the mockup agrees with it** — now three for three. The mockup
+   still had the tempo dropdown, an `out.tempo` inventing pimiento's real 6/8, and the full
+   provenance table. All corrected, with the reasoning left as a comment where each used to be.
+
 ## Next actions
 
-1. **Repair and push the branch** — see *The stale docs commit* below. `2cb5af2` is a local,
-   unpushed commit that reverted half the spec; the merged spec is already written to disk and just
-   needs committing over it.
-2. **Merge #26**, then bump the umbrella's `projects/bombista` pointer (Code left it alone rather
-   than point it at an unmerged branch — correct).
-3. **PR 5 (cleanup)** — tempo out, `extractedAt` honest, provenance quiet, **audio findable**.
-   Four items now: §11.11's audio path joined the other three, because it writes the same
-   `asr-words.meta.json` that `extractedAt` needs. Paste-ready at the end of
-   `b20-serve-code-prompts.md`. Run after #26 merges.
-4. **`v1.0.0` ships when `serve` exists and line 3 of pimiento is fixable through it (§7).** After
-   PR 5, that is one acceptance run Jorge does by hand on the real canary — not a thing CI asserts.
+**Only one thing is left, and it is not a build.**
+
+1. **The §7 acceptance run — the `v1.0.0` gate.** `v1.0.0` is gated on `serve` existing **and line 3
+   of pimiento being fixable through it**. `serve` exists. So: boot the real canary into the review,
+   move line 3 from **37.54 → 36.32** with the stepper, confirm all 19 lines read HIGH and the 15
+   below line 3 are unchanged, and download the JSON. It is a thing Jorge does once, by hand — CI
+   asserts the mechanism on the synthetic fixture, not this.
+2. **Then tag `v1.0.0`** and bump the umbrella pointer a last time.
+3. **After that, the skin review.** §10.3 has had one round of Jorge's direction as a mockup and has
+   never been reviewed on the built pages. The acceptance run is the first time he sees the real
+   thing in a browser — worth looking with both hats on.
 
 ## The stale docs commit (2026-08-16) — what happened and how it was fixed
 
@@ -240,9 +265,12 @@ lives in the `DATA` object at the bottom of the mockup HTML.
 Everything that gated a PR is now closed. What is left is genuinely open, and none of it blocks
 `v1.0.0`:
 
-- **`serve <staging>` cannot name its own audio when the staging directory has moved** (§11.11).
-  PR 5 fixes it: `--audio`, then an absolute path in `asr-words.meta.json`, then the recorded
-  relative path, then a loud failure. **Never a substituted file.**
+- **A staging directory made before PR 5 has no `asr-words.meta.json`.** `staging/pimiento` is one:
+  `extractedAt` is omitted and `wordsReused: true` rather than invented, and the audio resolves by
+  the recorded relative path — which works from `projects/bombista` and nowhere else. `--audio`
+  names it explicitly if that ever fails. Not a bug; the honest behaviour of an old directory.
+- **"This is not the audio that was transcribed."** The sibling records the `sha256`, so the warning
+  is now *possible* — it is not built. §11.13.
 - **Killing the transcription outright** (§11.6). Cancel currently abandons the worker rather than
   killing it — the user's experience is correct and the cost is a thread finishing work nobody
   reads. Not worth a subprocess boundary yet.
@@ -256,5 +284,5 @@ Everything that gated a PR is now closed. What is left is genuinely open, and no
   can finally be of the thing rather than of a drawing of it.
 
 **Closed since this list was written:** line 0 (§8.6, not special), one-correction-at-a-time (§8.9,
-many), page 1's file pickers (§9.6, `/api/browse`), and *nothing has been committed to git* — the
-docs are on GitHub as #21, #25 and #26.
+many), page 1's file pickers (§9.6, `/api/browse`), the audio path (§11.11, four-step resolution in
+#27), and *nothing has been committed to git* — the docs are on GitHub as #21, #25, #26 and #27.

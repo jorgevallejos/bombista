@@ -299,12 +299,22 @@ tr.divider td { background: var(--bg); border-bottom: none;
    only when the hand is already there, and it is the only place a value changes */
 .pop { position: absolute; z-index: 60; background: var(--surface-2);
        border: 1px solid var(--clay); box-shadow: 0 8px 26px rgba(0,0,0,.65);
-       padding: .45rem; display: flex; align-items: center; gap: .4rem; }
-.pop .val { font: 400 1.4rem/1 var(--mono); font-variant-numeric: tabular-nums;
-            min-width: 5.6rem; text-align: right; color: var(--paper); }
+       padding: .45rem; }
+.pop .stepper { display: flex; align-items: center; gap: .4rem; }
+.pop input.val { font: 400 1.4rem/1 var(--mono); font-variant-numeric: tabular-nums;
+            width: 5.6rem; text-align: right; color: var(--paper);
+            background: var(--surface); border: 1px solid var(--line-2);
+            border-radius: 0; padding: .16rem .3rem; }
+.pop input.val:focus { outline: none; border-color: var(--clay); }
 .pop .unit { font: 400 .76rem/1 var(--mono); color: var(--dim); margin-right: .2rem; }
 .pop button.step { min-width: 3.2rem; color: var(--paper); border-color: var(--line-2); }
 .pop button.step:hover { border-color: var(--clay); color: var(--clay); }
+/* §12.1's one departure from §8.4's "no bounds text", and the reason for it:
+   you FEEL a stepper stop, and you do not feel a text field clamp. Type 13,
+   get 30.20, and nothing on screen would explain it. Two numbers, no label,
+   dim — the smallest sentence that closes that gap. */
+.pop .bounds { margin: .32rem .1rem 0; text-align: right; color: var(--dimmer);
+               font: 400 .68rem/1 var(--mono); font-variant-numeric: tabular-nums; }
 .confirm { margin: 1.7rem 0 0; }
 """
 
@@ -618,13 +628,29 @@ _REVIEW_JS = """\
   var HOLD_DELAY = 380;    /* press and hold before the auto-repeat starts */
   var HOLD_RATE = 45;      /* and how fast it then repeats */
 
-  /* One stepper and nothing else (§8.4). No bounds text, no delta readout,
-     no explanation, no buttons — and no caption, because line 0 is not
-     special (§8.6). A stated bound is one more sentence on a page that
-     should have almost none; the bounds clamp silently instead. */
-  var POPUP = '<button class="step" data-step="-0.05">− 0.05</button>' +
-              '<span class="val" id="popval"></span><span class="unit">s</span>' +
-              '<button class="step" data-step="0.05">+ 0.05</button>';
+  /* §8.4's stepper, with §12.1's field where its number was. *Type to
+     arrive, nudge to land*: a phrase the ASR did not recognise leaves a
+     line with nothing to anchor to, so the error is unbounded by
+     construction — 47 s in Luz y Sal, about 940 presses — and getting
+     near the right place must not be a distance problem. Finding the
+     exact onset is still done by ear with the player, which is
+     nudge-and-listen and is the half a text field cannot do.
+
+     So the popup GROWS A FIELD; it does not grow a second control. Two
+     step buttons and no more, no delta readout, no explanation, and no
+     caption, because line 0 is not special (§8.6).
+
+     The one line under it is the allowed interval, and it is a
+     deliberate departure from §8.4's "no bounds text" that §12.1
+     authorises: a stepper stop is felt, a text field clamp is not. */
+  var POPUP = '<div class="stepper">' +
+              '<button class="step" data-step="-0.05">− 0.05</button>' +
+              '<input class="val" id="popval" type="text" inputmode="decimal" ' +
+              'autocomplete="off" spellcheck="false">' +
+              '<span class="unit">s</span>' +
+              '<button class="step" data-step="0.05">+ 0.05</button>' +
+              '</div>' +
+              '<div class="bounds" id="popbounds"></div>';
 
   var tbody = document.getElementById("tbody");
   var audio = document.getElementById("audio");
@@ -657,9 +683,36 @@ _REVIEW_JS = """\
     pop.className = "pop";
     pop.innerHTML = POPUP;
     document.body.appendChild(pop);
-    document.getElementById("popval").textContent = value.toFixed(2);
+    /* The field is not focused on open: Space belongs to the transport,
+       and judging is the player's job (§8.4). Clicking into it selects
+       what is there, because arriving somewhere else means replacing the
+       number rather than editing it. */
+    var el = field();
+    el.addEventListener("focus", function () { el.select(); });
+    el.addEventListener("blur", commitTyped);
+    show(value);
     mark();
     placePopup();
+  }
+
+  function field() { return document.getElementById("popval"); }
+
+  function show(v) {
+    var el = field();
+    if (el) { el.value = v.toFixed(2); }
+    showBounds();
+  }
+
+  /* The interval, restated whenever it can have changed — a re-anchor
+     moves the neighbours, and a bound that is no longer true is worse
+     than the silence §8.4 asked for. Two numbers and a dash: a label on
+     this line would be the second sentence page 2 has spent since the
+     design closed rather than the first. */
+  function showBounds() {
+    var el = document.getElementById("popbounds");
+    if (!el || open === null) { return; }
+    var b = boundsFor(open);
+    el.textContent = b.lo.toFixed(2) + " – " + b.hi.toFixed(2);
   }
 
   /* Never while a button is held: the row would move out from under the
@@ -673,10 +726,15 @@ _REVIEW_JS = """\
     pop.style.left = Math.max(8, window.scrollX + box.right - pop.offsetWidth) + "px";
   }
 
+  /* The state goes first and the node second: removing a focused field
+     can raise a blur, and a blur that arrives after Escape must find
+     nothing to commit. Escape closes WITHOUT committing (§8.4). */
   function closePopup() {
-    if (pop) { pop.parentNode.removeChild(pop); pop = null; }
+    var node = pop;
+    pop = null;
     open = null;
     value = null;
+    if (node) { node.parentNode.removeChild(node); }
     mark();
   }
 
@@ -689,15 +747,53 @@ _REVIEW_JS = """\
     }
   }
 
+  /* ONE clamp, for every way of setting a value. §12.1 adds a second way
+     in and not a second answer about what the allowed interval is: the
+     edges are the neighbours, exclusive, and both paths come through
+     here. */
+  function clamp(i, v) {
+    var b = boundsFor(i);
+    if (v <= b.lo) { return round2(b.lo + 0.01); }
+    if (v >= b.hi) { return round2(b.hi - 0.01); }
+    return v;
+  }
+
   function nudge(d) {
     if (open === null) { return; }
-    var i = open, b = boundsFor(i), v = round2(value + d);
-    if (v <= b.lo) { v = round2(b.lo + 0.01); }
-    if (v >= b.hi) { v = round2(b.hi - 0.01); }
+    var i = open, v = clamp(i, round2(value + d));
     value = v;
-    var el = document.getElementById("popval");
-    if (el) { el.textContent = v.toFixed(2); }
+    show(v);
     schedule(i, v);
+  }
+
+  /* The typed value, corrected in this order (§12.1):
+       - a non-numeric entry keeps the last good value, and says nothing.
+         There is no error state on this page and this is not the place
+         to open one;
+       - round to 2 decimals, and NEVER snap to a multiple of STEP. 0.05
+         is coarser than what the user typed and invariant 2 forbids only
+         what is coarser than 0.07 s — 0.01 is what the stepper itself
+         lands on;
+       - clamp with the same exclusive edges a nudge uses.
+     Then it is SCHEDULED, exactly as a press is. One re-anchor mechanism
+     (§8.5), which is also what puts a typed commit behind the held-button
+     guard rather than needing a second one. */
+  function commitTyped() {
+    if (open === null) { return; }
+    var el = field();
+    if (!el) { return; }
+    var text = el.value.trim();
+    var typed = /^-?[0-9]*\\.?[0-9]+$/.test(text) ? parseFloat(text) : NaN;
+    if (!isFinite(typed)) { show(value); return; }
+    var v = clamp(open, round2(typed));
+    value = v;
+    show(v);
+    schedule(open, v);
+  }
+
+  function dirty() {
+    var el = field();
+    return !!el && value !== null && el.value.trim() !== value.toFixed(2);
   }
 
   /* 250 ms after the last press — and never DURING one.
@@ -734,7 +830,9 @@ _REVIEW_JS = """\
         if (data.error) { return; }
         counts(data.bands);
         return fetch("/review/rows").then(function (r) { return r.text(); })
-          .then(function (html) { tbody.innerHTML = html; mark(); placePopup(); });
+          .then(function (html) {
+            tbody.innerHTML = html; mark(); placePopup(); showBounds();
+          });
       });
   }
 
@@ -783,7 +881,23 @@ _REVIEW_JS = """\
     if (!el.closest(".pop") && open !== null) { closePopup(); }
   });
 
+  /* The field's own keys. ArrowLeft/ArrowRight belong to the CARET while
+     there is uncommitted text — a number being typed is text, and moving
+     through it is what those keys do everywhere else. Once the value is
+     committed the field shows the committed number again and the arrows
+     go back to nudging, which is the by-ear pass and the reason the
+     stepper stays (§12.1). */
+  function fieldKey(ev) {
+    if (ev.key === "Escape") { closePopup(); return; }
+    if (ev.key === "Enter") { ev.preventDefault(); commitTyped(); return; }
+    if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") { return; }
+    if (dirty()) { return; }
+    ev.preventDefault();
+    nudge(ev.key === "ArrowLeft" ? -STEP : STEP);
+  }
+
   document.addEventListener("keydown", function (ev) {
+    if (ev.target && ev.target.id === "popval") { fieldKey(ev); return; }
     if (ev.target && /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName)) { return; }
     if (ev.key === " ") {
       ev.preventDefault();
@@ -1054,7 +1168,7 @@ def render_input(*, home: str = "") -> str:
       <span class="fname" id="lyrics-name">—</span>
     </div>
     <p class="hint">Plain text (<code>.txt</code>), or a <b>Song Performance JSON</b>
-      (<code>.sp.json</code>) — the format Tramoya promotes.
+      (<code>.json</code>) — the format Tramoya promotes.
       <a href="{FORMAT_DOC_URL}">See an example</a></p>
   </div>
 

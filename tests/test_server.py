@@ -390,8 +390,8 @@ def test_moving_line_0_is_the_global_shift_and_entry_0_stays_zero(client, tmp_pa
     0 moved. So moving line 0 *is* B6's global nudge, obtained for free
     from the same control as everything else — no second widget, no
     special case."""
-    machine_out = tmp_path / "machine.sp.json"
-    moved_out = tmp_path / "moved.sp.json"
+    machine_out = tmp_path / "machine.json"
+    moved_out = tmp_path / "moved.json"
     client.post("/api/emit", {"overrides": {}, "out": str(machine_out)})
     _, payload = client.post(
         "/api/emit", {"overrides": {"0": MOVED_LINE_0}, "out": str(moved_out)}
@@ -424,8 +424,8 @@ def test_a_hand_set_lead_in_says_so_in_the_contracts_own_word(client, tmp_path):
     writes `"hand-set"`, which the contract does not carry; the fact it
     records is right and the spelling is not (docs/timeline-v2-contract.md).
     """
-    machine_out = tmp_path / "machine.sp.json"
-    moved_out = tmp_path / "moved.sp.json"
+    machine_out = tmp_path / "machine.json"
+    moved_out = tmp_path / "moved.json"
 
     client.post("/api/emit", {"overrides": {}, "out": str(machine_out)})
     client.post("/api/emit", {"overrides": {"0": MOVED_LINE_0}, "out": str(moved_out)})
@@ -437,14 +437,14 @@ def test_a_hand_set_lead_in_says_so_in_the_contracts_own_word(client, tmp_path):
 def test_moving_a_line_that_is_not_line_0_leaves_the_lead_in_measured(client, tmp_path):
     """Only line 0 sets the lead-in. A correction anywhere else is not a
     claim about where the song starts."""
-    out = tmp_path / "out.sp.json"
+    out = tmp_path / "out.json"
     client.post("/api/emit", {"overrides": {"1": CORRECTED_LINE_1}, "out": str(out)})
 
     assert json.loads(out.read_text())["leadIn"]["source"] == "measured"
 
 
 def test_the_lead_offset_lands_in_lead_in_and_entry_0_is_zero(client, tmp_path):
-    out = tmp_path / "out.sp.json"
+    out = tmp_path / "out.json"
 
     _, payload = client.post(
         "/api/emit", {"overrides": {"1": CORRECTED_LINE_1}, "out": str(out)}
@@ -476,7 +476,7 @@ def test_no_route_rounds_coarser_than_the_correction_loop(client, tmp_path):
     assert first["lines"][1]["start"] == near
     assert second["lines"][1]["start"] == nearer
 
-    out = tmp_path / "out.sp.json"
+    out = tmp_path / "out.json"
     client.post("/api/emit", {"overrides": {"1": nearer}, "out": str(out)})
     emitted = json.loads(out.read_text(encoding="utf-8"))
 
@@ -490,7 +490,7 @@ def test_no_route_rounds_coarser_than_the_correction_loop(client, tmp_path):
 
 
 def test_emit_writes_through_the_one_merge_path(client, tmp_path):
-    out = tmp_path / "out.sp.json"
+    out = tmp_path / "out.json"
 
     with mock.patch.object(
         server, "merge_envelope", wraps=writers.merge_envelope
@@ -503,7 +503,7 @@ def test_emit_writes_through_the_one_merge_path(client, tmp_path):
 
 
 def test_the_emitted_file_carries_lines_hash_and_the_sign_off(client, tmp_path):
-    out = tmp_path / "out.sp.json"
+    out = tmp_path / "out.json"
 
     _, payload = client.post("/api/emit", {"overrides": {"1": CORRECTED_LINE_1}, "out": str(out)})
     emitted = json.loads(out.read_text(encoding="utf-8"))
@@ -523,7 +523,7 @@ def test_the_emit_response_records_which_lines_were_hand_set_and_when(client, tm
     signals and the per-line hand-set record all belong to the report, and
     the file keeps one scalar, `timelineSignedOff`. So the record travels
     on the response, for the report to render."""
-    out = tmp_path / "out.sp.json"
+    out = tmp_path / "out.json"
 
     _, payload = client.post("/api/emit", {"overrides": {"1": CORRECTED_LINE_1}, "out": str(out)})
 
@@ -540,7 +540,7 @@ def test_the_emit_response_records_which_lines_were_hand_set_and_when(client, tm
 def test_the_emitted_file_carries_no_qa_block(client, tmp_path):
     """§10.2, verbatim: no invented `format` key, no `review` block, no
     `provenance` block in the song file. QA output belongs in the report."""
-    out = tmp_path / "out.sp.json"
+    out = tmp_path / "out.json"
 
     client.post("/api/emit", {"out": str(out)})
     emitted = json.loads(out.read_text(encoding="utf-8"))
@@ -552,7 +552,7 @@ def test_the_emitted_file_carries_no_qa_block(client, tmp_path):
 def test_the_emitted_file_passes_every_other_key_through_untouched(client, tmp_path):
     """`lyrics` entries are objects keyed by language — flattening them
     would destroy every translation on the round trip (§10.2)."""
-    out = tmp_path / "out.sp.json"
+    out = tmp_path / "out.json"
 
     client.post("/api/emit", {"out": str(out)})
     emitted = json.loads(out.read_text(encoding="utf-8"))
@@ -590,7 +590,7 @@ def test_emitting_twice_to_the_same_path_is_not_an_input_collision(client, tmp_p
     """The refusal is about the run's inputs, not about anything that
     happens to be on disk — a correction loop re-emits over its own
     previous output constantly."""
-    out = tmp_path / "out.sp.json"
+    out = tmp_path / "out.json"
 
     first, _ = client.post("/api/emit", {"out": str(out)})
     second, payload = client.post(

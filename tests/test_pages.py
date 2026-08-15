@@ -63,7 +63,7 @@ def page3(libertad):
     from bombista import server
 
     session = server.load_session(libertad["staging"], libertad["song_path"], lang="es")
-    return pages.render_output(server.build_sp_json(session, {})[0], filename="libertad.sp.json")
+    return pages.render_output(server.build_sp_json(session, {})[0], filename="libertad.json")
 
 
 @pytest.fixture

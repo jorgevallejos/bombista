@@ -639,7 +639,7 @@ def test_every_sp_json_this_tool_can_produce_carries_a_sign_off(client, tmp_path
         _, payload, _ = client.get(f"/api/download?kind={kind}", raw=True)
         assert json.loads(payload)["timelineSignedOff"]
 
-    out = tmp_path / "out.sp.json"
+    out = tmp_path / "out.json"
     client.post("/api/emit", {"out": str(out)})
     assert json.loads(out.read_text(encoding="utf-8"))["timelineSignedOff"]
 
@@ -659,7 +659,76 @@ def test_a_download_writes_nothing_to_disk(client, libertad, tmp_path):
 def test_the_download_filename_is_the_slug(client):
     _, _, headers = client.get("/api/download?kind=song", raw=True)
 
-    assert "libertad.sp.json" in headers["Content-Disposition"]
+    assert "libertad.json" in headers["Content-Disposition"]
+
+
+# ---------------------------------------------------------------------------
+# §12.2 — the download is a song file
+# ---------------------------------------------------------------------------
+#
+# §10.2 settled that the SP JSON IS the `songs/*.json` format: there is no
+# new schema, only a name for the one that exists. A distinct file
+# EXTENSION reintroduced the distinction that correction removed, and it
+# is the whole reason the reconciliation step looked missing. Called
+# `luz-y-sal.json` the download looks like an intermediate artifact you
+# must do something with; called `luz-y-sal.json` it is plainly the song
+# file, and *replace the old one with it* is the whole procedure.
+
+
+@pytest.mark.parametrize(
+    ("kind", "name"),
+    [
+        ("song", "libertad.json"),
+        ("timeline", "libertad-timeline.json"),
+        ("report", "libertad-qa-report.md"),
+    ],
+)
+def test_no_download_carries_the_sp_extension(client, kind, name):
+    _, _, headers = client.get(f"/api/download?kind={kind}", raw=True)
+
+    assert f'filename="{name}"' in headers["Content-Disposition"]
+    assert ".sp.json" not in headers["Content-Disposition"]
+
+
+def test_the_downloaded_song_file_is_the_vault_file(client, libertad):
+    """§12.2's rule, and the reason no reconciliation is needed anywhere:
+    *Bombista receives a file and returns a file. It does not change the
+    state of one.* The returned file already carries all five owned keys
+    AND every original field untouched, so the vault file IS the returned
+    file — replace, do not merge. `linesHash` and `timelineSignedOff` only
+    ever went missing on a path that took the returned file apart and
+    merged three of its keys into the old one."""
+    _, payload, headers = client.get("/api/download?kind=song", raw=True)
+    emitted = json.loads(payload)
+
+    assert headers["Content-Disposition"].endswith('filename="libertad.json"')
+    for key, value in libertad["song"].items():
+        if key not in ("timelineVersion", "leadIn", "timeline"):
+            assert emitted[key] == value, key
+    for key in ("linesHash", "timelineSignedOff", "timelineVersion", "leadIn", "timeline"):
+        assert emitted[key] is not None, key
+
+
+def test_the_format_is_still_called_the_song_performance_json(client):
+    """Only the extension goes (§12.2). The NAME is §10.1 vocabulary and
+    it stays in every user-facing string."""
+    _, page, _ = client.get("/input")
+
+    assert "Song Performance JSON" in page
+    assert "<code>.json</code>" in page
+    assert ".sp.json" not in page
+
+
+def test_a_lyrics_file_is_still_detected_by_its_extension(client, tmp_path):
+    """`LYRICS_SUFFIXES` was already `(".json", ".txt")`, so page 1's
+    branch detection needs nothing from B22 — verified rather than
+    assumed."""
+    assert server.LYRICS_SUFFIXES == (".json", ".txt")
+
+    (tmp_path / "luz-y-sal.json").write_text("{}", encoding="utf-8")
+    _, payload, _ = client.get(f"/api/browse?path={tmp_path}")
+
+    assert "luz-y-sal.json" in [entry["name"] for entry in payload["entries"]]
 
 
 # ---------------------------------------------------------------------------
@@ -682,13 +751,13 @@ def test_the_browse_route_marks_directories_and_offers_only_usable_files(
     client, tmp_path
 ):
     (tmp_path / "notes.docx").write_text("x", encoding="utf-8")
-    (tmp_path / "song.sp.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "song.json").write_text("{}", encoding="utf-8")
 
     _, payload, _ = client.get(f"/api/browse?path={tmp_path}")
     by_name = {entry["name"]: entry for entry in payload["entries"]}
 
     assert by_name["staging"]["dir"] is True
-    assert "song.sp.json" in by_name
+    assert "song.json" in by_name
     assert "notes.docx" not in by_name
 
 

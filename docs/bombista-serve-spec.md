@@ -21,7 +21,7 @@ What remains is §7's acceptance run, not code. Jorge's design, 2026-08-14. Supe
 | **9** | **the chrome and the other three pages.** 9.1 masthead · 9.2 step bar · 9.3 page 1 Input · 9.4 page 1.5 Processing · 9.5 page 3 Output · 9.6 open |
 | **10** | **vocabulary, format, skin.** 10.1 names · 10.2 the SP JSON is the song JSON · **10.2.1 the two shapes** · 10.3 the skin |
 | **11** | **what building it found.** 11.1 corrected in place · 11.2 the lyrics argument · **11.3 the fixture** · 11.4 smaller · 11.5–11.10 what PR 4 found · **11.11 what page 2 found** · **11.12 how the docs nearly lost half of themselves** · **11.13 what the cleanup found** |
-| **12** | **what *using* it found.** 12.1 the stepper does not scale to a large error · 12.2 the downloaded file and the vault file do not meet · **12.3 the run said it was transcribing before it was** |
+| **12** | **what *using* it found.** 12.1 the stepper does not scale to a large error · 12.2 the downloaded file and the vault file do not meet · **12.3 the run said it was transcribing before it was** · **12.4 what building 12.1 and 12.2 found** |
 
 ---
 
@@ -82,7 +82,7 @@ few options for this first version"*):
 
 | field | control | note |
 |---|---|---|
-| Lyrics | file picker, `.txt` or `.sp.json` | Chooses the branch in §5. The branch is **read off the file**, not chosen from a second dropdown. |
+| Lyrics | file picker, `.txt` or `.json` | Chooses the branch in §5. The branch is **read off the file**, not chosen from a second dropdown. |
 | Media source | file picker | Audio or video; the audio track is read from video. Filename convention is `songs/audio/<slug>.<ext>`, but the picker takes any path. |
 | Language | dropdown | Default `es`, matching the CLI. **Constrained by the file** — see below. |
 | Model | dropdown | Default `medium`, matching the CLI. The label states the impact *and* that it runs locally. |
@@ -371,15 +371,29 @@ That is the whole page.
 
 ### 8.4 The start time is the control
 
+⚠ **Amended by §12.1, 2026-08-16, in two places — read them together.** The number is now a
+**field**, and the allowed interval is now **stated** under it. Everything else in this section
+stands unchanged, including both step buttons, the auto-repeat and the silent-clamp reasoning,
+which is what the departure is argued from. The popup grew a field; it did not grow a second
+control.
+
 Clicking a start time opens a popup containing **one stepper and nothing else**:
 
 ```
-[ − 0.05 ]   37.54 s   [ + 0.05 ]
+[ − 0.05 ]  [ 37.54 ] s  [ + 0.05 ]
+                29.46 – 43.34
 ```
 
-No bounds text, no delta readout, no explanation, no buttons. Escape or a click outside closes it.
-Arrow keys nudge while it is open. Bounds are the neighbouring lines and are enforced by silently
-clamping — a stated bound is one more sentence on a page that should have almost none.
+No delta readout, no explanation, no buttons. Escape or a click outside closes it, and Escape
+commits nothing. Arrow keys nudge while it is open — and while the field holds text that has not
+been committed they do the caret's job instead, because a number being typed is text (§12.1).
+Bounds are the neighbouring lines and are enforced by clamping.
+
+**The bound is stated, and only because a value can now be typed.** The original clause — *a stated
+bound is one more sentence on a page that should have almost none* — was right about a stepper and
+wrong about a field: **you feel a stepper stop, and you do not feel a text field clamp.** Type 13,
+get 30.20, and nothing on screen explains it. One line, two numbers, dim, no label. §12.1
+authorises it and records why it is worth the page's first new sentence since the design closed.
 
 **Press and hold auto-repeats** (380 ms, then every 45 ms). This is what replaces the first pass's
 *Set from playhead*, and it is load-bearing rather than a nicety: line 3's error is **1.22 s**, which
@@ -561,7 +575,7 @@ output to learn from:
 
 | row | control | caption under it |
 |---|---|---|
-| Lyrics | file picker, then **the file name alone** | *Plain text (`.txt`), or a Song Performance JSON (`.sp.json`) — the format Tramoya promotes.* Plus a link to a worked example. |
+| Lyrics | file picker, then **the file name alone** | *Plain text (`.txt`), or a Song Performance JSON (`.json`) — the format Tramoya promotes.* Plus a link to a worked example. |
 | Media source | file picker, then the file name alone | *MP3 · M4A · WAV · FLAC · MP4 · MOV. The audio track is read from video too.* |
 | Language | dropdown, default `es`, **options constrained by the file** | *The language on the recording and the lyrics file.* — and nothing more. The constraint is enforced, not explained (§3). |
 | Model | dropdown: *medium — ~50 s per song* / *small — ~20 s* / *tiny — ~5 s* | ***Runs on your local machine. Nothing is uploaded.** A bigger model recognises more of the sung words, so fewer lines come back flagged — and it takes longer. Change it and come back if a run reads badly.* |
@@ -572,7 +586,7 @@ button on the page. *`Align →`* was too quiet for the one control that starts 
 **Four decisions from Jorge's review, and why each holds:**
 
 1. **The path is never shown, only the file name.** `songs/pimiento.json` is the tool's business;
-   `pimiento.sp.json` is the user's. A path in a picker's result slot is a leak of the filesystem
+   `pimiento.json` is the user's. A path in a picker's result slot is a leak of the filesystem
    into a page that is otherwise about a song.
 2. **The branch dropdown is gone.** A first pass had `as CP song JSON / as plain text` beside the
    picker. The extension already answers it, and a control that restates what the file said is a
@@ -651,7 +665,7 @@ Top to bottom:
    `timelineVersion`, `leadIn`, `timeline`. Entry 0 is `0.00` and the lead-in is banked. Everything above them is passed through
    untouched, *which is why `lyrics` is folded here*. The bands, the signals and the record of what
    was set by hand are in the **report**, not in the song.
-2. **The filename**, quiet, above the code window: `pimiento.sp.json`.
+2. **The filename**, quiet, above the code window: `pimiento.json`.
 3. **The JSON itself, read-only, in full**, in a bordered code window. **No fold, no expand
    control** — a second pass added one and Jorge cut it: *"not needed"*. He is right. The window
    scrolls, the file is the file, and a control whose only job is to shorten a scroll is a control
@@ -711,7 +725,7 @@ looks like.
 | now | was | why it changed |
 |---|---|---|
 | **Input · Review · Output** | Set up · Review and correct · Emit | *Emit* is a compiler's word. *Alignment* named the mechanism, not the user's move. The triad now reads as one sentence and step 3's name is literally true — the page is three download buttons. |
-| **Song Performance JSON**, short **SP JSON**, extension `.sp.json` | CP song JSON / song JSON | *CP* was a private initialism. Plain *song JSON* was already ambiguous in this spec — it named both the canonical lyrics file and the merged output. **Song** is the content; **Performance** is the timing half that makes the format worth having. See §10.3 — the rename is the important part of it, but not the whole of it. |
+| **Song Performance JSON**, short **SP JSON**, extension `.json` (`.sp.json` until §12.2) | CP song JSON / song JSON | *CP* was a private initialism. Plain *song JSON* was already ambiguous in this spec — it named both the canonical lyrics file and the merged output. **Song** is the content; **Performance** is the timing half that makes the format worth having. See §10.3 — the rename is the important part of it, but not the whole of it. |
 | **Media source** | Audio | The picker takes video too, and the audio track is read out of it. *Audio* told the user to convert first. |
 | **Process song →** | Align → | It starts a job that takes the better part of a minute. The button's weight and its verb both have to say so. |
 | **Processing** | Aligning | Follows *Process song*. |
@@ -773,11 +787,11 @@ Three consequences, all load-bearing:
 
 ### 10.2.1 Two shapes, one format
 
-A `.txt` produces a file that did not exist; an `.sp.json` produces the file you handed in. Same
+A `.txt` produces a file that did not exist; a song `.json` produces the file you handed in. Same
 format, different amounts of truth available. **Jorge's sketch of the from-scratch shape,
 2026-08-15, is the contract:**
 
-| key | pass-through (`.sp.json` in) | from scratch (`.txt` in) |
+| key | pass-through (a song `.json` in) | from scratch (`.txt` in) |
 |---|---|---|
 | `title` | as given | from page 1's one text field |
 | `artist` | as given | `""` — Bombista does not know it |
@@ -863,7 +877,7 @@ file is a song, and every consumer downstream would otherwise have to step aroun
 **The exception, settled 2026-08-15 (Jorge: yes): one scalar, `timelineSignedOff`.** An ISO
 timestamp beside `linesHash`, and nothing else. Without it, §3's clause — *a machine timeline and a
 reviewed one are indistinguishable* — becomes unenforceable the moment the file leaves the folder
-its report is in: hand someone a `.sp.json` and there is no way to tell whether a human ever looked
+its report is in: hand someone an SP JSON and there is no way to tell whether a human ever looked
 at it, and `promote` cannot refuse an unreviewed timeline. One string buys that back at a cost of
 one line.
 
@@ -1548,3 +1562,62 @@ lock. `dict.update(**kwargs)` is not atomic, so a payload can in principle catch
 today because nothing downstream branches on it. It is the same class of window as the one above,
 and it should be closed with a lock if the phase list ever grows a consumer that does more than
 display it.
+
+### 12.4 What building 12.1 and 12.2 found
+
+Both decisions survived contact whole: the popup grew a field and kept both step buttons, and the
+extension went with nothing else moving. Nothing here reopens either. What follows is what the
+implementation turned up, in the shape §11 records these.
+
+**The field cannot be focused when the popup opens, and that is the transport's doing.** Space
+toggles play/pause on this page, which is the whole of the by-ear pass (§8.4: *play, listen, click,
+hold, listen again*). A field that takes focus on open eats Space. So the popup opens with the
+number selectable but not focused; clicking into it selects what is there, because arriving
+somewhere else means **replacing** the number rather than editing it. One extra click, and it buys
+back the key the page uses most.
+
+**The arrows needed their own handler, because the page's keydown already exempted every field.**
+The exemption exists for page 1's title input and is correct there. The popup's field is the first
+input on page 2, so its keys never reached the page's handler at all — Escape would not have closed
+the popup and the arrows would not have nudged. The handler now routes `popval`'s keys to the
+field's own, which is also where §12.1's *caret while uncommitted, nudge once committed* rule
+lives. **Two behaviours out of one key, decided by whether the field holds text that has been
+committed** — and the committed state is the one that has to be checked, not the other way round,
+because that is the state the by-ear pass is in.
+
+**Escape can race a blur.** Blur commits, Escape does not — so `closePopup` clears `open` and
+`value` **before** it removes the node. A blur that arrives after the popup is gone then finds
+nothing to commit. Ordering, not a flag.
+
+**The clamp had to be extracted, and that is the finding rather than the fix.** §8.4's bounds lived
+inside `nudge`. A typed value needs the same edges, and a second copy of `lo + 0.01` / `hi - 0.01`
+is a second answer to what the allowed interval is. One `clamp(i, v)` now holds it and both paths
+come through it — the same argument as one row template (§11.11) and one merge path (§2). A test
+that asserted on `nudge`'s body moved with it, which is the honest consequence of testing a
+function's insides.
+
+**The stated interval names the neighbours, and a value typed exactly onto one lands 0.01 inside
+it.** The line reads `29.46 – 43.34`; typing `29.46` gives `29.47`, because the edges are exclusive
+and always were (§8.4). Stating the *reachable* values instead — `29.47 – 43.33` — would be more
+literally true and would say two numbers no one recognises. The neighbours are the numbers on the
+rows above and below, which is what makes the line readable at a glance.
+
+**Dropping `.sp` gave `/api/emit`'s default path one way to collide, and invariant 6 already
+refuses it.** With no `out`, `emit` writes `<staging>/<stem>.json`. If a staging directory ever *is*
+the lyrics directory, that path is the input path — which `emit_sp_json` refuses by name, before
+opening anything. It is loud, it is the guard doing its job, and it is one more reason the guard
+compares resolved paths rather than trusting a suffix to keep the two apart.
+
+**The spec's operative sections now say `.json`; §11's and §12.2's records keep the name they were
+written with.** §3's table, §9.3, §9.5, §10.2 and §10.2.1 describe what the tool does and were
+updated. §11.5, §11.13 and §12.2 record what was found on a given day, and a record edited to match
+today's vocabulary stops being a record — the same reasoning §11.12 reached about deletions.
+
+**The page's JavaScript is still asserted at source level, and the behaviour was verified by
+hand.** `tests/test_page2.py` reads the shipped JS with regexes because this repo has no JS runtime
+and adding one for a popup would be a new dependency class (§8.1: no build step, no npm). The floor,
+the ceiling, the non-numeric entry, the round-to-2 and the caret/nudge switch were each driven
+through the real `serve` process in a browser before this landed — typing `13` into line 1 of
+pimiento gives `8.93`, `999` gives `29.45`, `zz` keeps the last good value, and `36.32` re-anchors
+line 3 to 19/0/0. **If page 2's JavaScript grows past this, the next thing it needs is a way to run
+it in a test, not more regexes.**

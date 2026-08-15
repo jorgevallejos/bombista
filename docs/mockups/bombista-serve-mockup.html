@@ -192,10 +192,17 @@ tr.divider td { background: var(--bg) !important; border-bottom: none;
 
 /* the popup — the loudest thing on the page, because it is where the hand is */
 .pop { position: absolute; z-index: 60; background: var(--surface-2); border: 1px solid var(--clay);
-       box-shadow: 0 8px 26px rgba(0,0,0,.65); padding: .45rem; display: flex; align-items: center;
-       gap: .4rem; }
-.pop .val { font: 400 1.4rem/1 var(--mono); font-variant-numeric: tabular-nums;
-            min-width: 5.6rem; text-align: right; color: var(--paper); }
+       box-shadow: 0 8px 26px rgba(0,0,0,.65); padding: .45rem; }
+.pop .stepper { display: flex; align-items: center; gap: .4rem; }
+.pop input.val { font: 400 1.4rem/1 var(--mono); font-variant-numeric: tabular-nums;
+            width: 5.6rem; text-align: right; color: var(--paper);
+            background: var(--surface); border: 1px solid var(--line-2);
+            border-radius: 0; padding: .16rem .3rem; }
+.pop input.val:focus { outline: none; border-color: var(--clay); }
+/* §12.1's one departure from §8.4's "no bounds text": you feel a stepper stop,
+   you do not feel a text field clamp. Two numbers, no label, dim. */
+.pop .bounds { margin: .32rem .1rem 0; text-align: right; color: var(--dimmer);
+               font: 400 .68rem/1 var(--mono); font-variant-numeric: tabular-nums; }
 .pop .unit { font: 400 .76rem/1 var(--mono); color: var(--dim); margin-right: .2rem; }
 .pop button.step { min-width: 3.2rem; color: var(--paper); border-color: var(--line-2); }
 .pop button.step:hover { border-color: var(--clay); color: var(--clay); }
@@ -260,7 +267,7 @@ pre.json { background: var(--surface); border: 1px solid var(--line-2);
 <div class="mockbar" id="mockbar">
   <b>Mockup</b> — bombista <code>serve</code>, the three-step flow on the real pimiento fixture.
   Every band is what <code>anchoring.py</code> actually returns for that value. Steps are clickable.
-  On step 1, <b>Choose file</b> swaps between the <code>.sp.json</code> and <code>.txt</code> fixtures.
+  On step 1, <b>Choose file</b> swaps between the <code>.json</code> and <code>.txt</code> fixtures.
 </div>
 <div class="wrap">
 <header class="mast">
@@ -291,10 +298,10 @@ pre.json { background: var(--surface); border: 1px solid var(--line-2);
       <label class="flabel">Lyrics</label>
       <div class="ctl">
         <button id="pickLyrics">Choose file</button>
-        <span class="fname" id="lyricsVal">pimiento.sp.json</span>
+        <span class="fname" id="lyricsVal">pimiento.json</span>
       </div>
       <p class="hint" id="lyricsHint">Plain text (<code>.txt</code>), or a <b>Song Performance
-        JSON</b> (<code>.sp.json</code>) — the format Tramoya promotes.
+        JSON</b> (<code>.json</code>) — the format Tramoya promotes.
         <a href="#" class="lnk">See an example</a></p>
     </div>
 
@@ -428,7 +435,7 @@ pre.json { background: var(--surface); border: 1px solid var(--line-2);
   <p class="hint" id="outcap"></p>
 
   <div class="jsonhead">
-    <span class="fn" id="outname">pimiento.sp.json</span>
+    <span class="fn" id="outname">pimiento.json</span>
   </div>
   <pre class="json" id="json"></pre>
 
@@ -634,7 +641,7 @@ function render() {
     }
   }
   tbody.innerHTML = html;
-  if (state.open !== null) { placePopup(); }
+  if (state.open !== null) { placePopup(); showBounds(); }
 }
 
 /* ---------- the popup — the only added surface --------------------------- */
@@ -650,13 +657,43 @@ function openPopup(i) {
 
   pop = document.createElement("div");
   pop.className = "pop";
+  /* §12.1: the number itself is a FIELD, and the stepper is untouched beside
+     it. Type to arrive, nudge to land — an unrecognised phrase can leave a
+     line 47 s from where it belongs, and arriving must not be a distance
+     problem; the exact onset is still found by ear, which is nudge-and-listen
+     and is the half a text field cannot do. */
   pop.innerHTML =
+    '<div class="stepper">' +
     '<button class="step" data-step="' + (-STEP) + '">− 0.05</button>' +
-    '<span class="val" id="popval">' + f2(state.value) + '</span><span class="unit">s</span>' +
-    '<button class="step" data-step="' + STEP + '">+ 0.05</button>';
+    '<input class="val" id="popval" type="text" inputmode="decimal" ' +
+    'autocomplete="off" spellcheck="false">' +
+    '<span class="unit">s</span>' +
+    '<button class="step" data-step="' + STEP + '">+ 0.05</button>' +
+    '</div>' +
+    '<div class="bounds" id="popbounds"></div>';
   document.body.appendChild(pop);
+  var el = field();
+  el.addEventListener("focus", function () { el.select(); });
+  el.addEventListener("blur", commitTyped);
+  show(state.value);
   render();
   placePopup();
+}
+
+function field() { return document.getElementById("popval"); }
+
+function show(v) {
+  var el = field();
+  if (el) { el.value = f2(v); }
+  showBounds();
+}
+
+/* the interval, restated whenever it can have changed — no label, two numbers */
+function showBounds() {
+  var el = document.getElementById("popbounds");
+  if (!el || state.open === null) { return; }
+  var b = boundsFor(state.open);
+  el.textContent = f2(b.lo) + " – " + f2(b.hi);
 }
 
 function placePopup() {
@@ -668,32 +705,77 @@ function placePopup() {
   pop.style.left = Math.max(8, window.scrollX + r.right - pop.offsetWidth) + "px";
 }
 
+/* state first, node second: removing a focused field can raise a blur, and a
+   blur that arrives after Escape must find nothing to commit */
 function closePopup() {
-  if (pop) { pop.parentNode.removeChild(pop); pop = null; }
+  var node = pop;
+  pop = null;
   state.open = null;
   state.value = null;
+  if (node) { node.parentNode.removeChild(node); }
 }
 
 var timer = null;
-function nudge(d) {
-  if (state.open === null) { return; }
-  var i = state.open;
-  var b = boundsFor(i);
-  var v = round2(state.value + d);
-  if (v <= b.lo) { v = round2(b.lo + 0.01); }
-  if (v >= b.hi) { v = round2(b.hi - 0.01); }
-  state.value = v;
-  var el = document.getElementById("popval");
-  if (el) { el.textContent = f2(v); }
 
+/* ONE clamp for every way of setting a value: §12.1 adds a second way in, not a
+   second answer about what the allowed interval is */
+function clamp(i, v) {
+  var b = boundsFor(i);
+  if (v <= b.lo) { return round2(b.lo + 0.01); }
+  if (v >= b.hi) { return round2(b.hi - 0.01); }
+  return v;
+}
+
+function schedule(i, v) {
   clearTimeout(timer);
-  var committed = v;
   timer = setTimeout(function () {
     /* 8.6 settled 2026-08-16: line 0 is not special. Its edit is an edit like any
        other; the v2 normaliser banks its onset into leadIn at emit time. */
-    state.edit = { i: i, value: round2(committed - shiftAmt()) };
+    state.edit = { i: i, value: round2(v - shiftAmt()) };
     render();
   }, DEBOUNCE);
+}
+
+function nudge(d) {
+  if (state.open === null) { return; }
+  var i = state.open, v = clamp(i, round2(state.value + d));
+  state.value = v;
+  show(v);
+  schedule(i, v);
+}
+
+/* the typed value, corrected in this order (§12.1): a non-numeric entry keeps
+   the last good value and says nothing; the number is rounded to 2 decimals and
+   NEVER snapped to a multiple of STEP, which is coarser than what was typed;
+   then it is clamped by the edges a nudge uses. One commit path, debounced the
+   same way — a typed value is not a second mechanism. */
+function commitTyped() {
+  if (state.open === null) { return; }
+  var el = field();
+  if (!el) { return; }
+  var text = el.value.trim();
+  var typed = /^-?[0-9]*\.?[0-9]+$/.test(text) ? parseFloat(text) : NaN;
+  if (!isFinite(typed)) { show(state.value); return; }
+  var v = clamp(state.open, round2(typed));
+  state.value = v;
+  show(v);
+  schedule(state.open, v);
+}
+
+function dirty() {
+  var el = field();
+  return !!el && state.value !== null && el.value.trim() !== f2(state.value);
+}
+
+/* ArrowLeft/ArrowRight belong to the CARET while there is uncommitted text;
+   once the value is committed they go back to nudging, which is the by-ear pass */
+function fieldKey(ev) {
+  if (ev.key === "Escape") { closePopup(); render(); return; }
+  if (ev.key === "Enter") { ev.preventDefault(); commitTyped(); return; }
+  if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") { return; }
+  if (dirty()) { return; }
+  ev.preventDefault();
+  nudge(ev.key === "ArrowLeft" ? -STEP : STEP);
 }
 
 /* press and hold to cross a whole word — 1.22 s is 24 separate presses otherwise */
@@ -735,6 +817,7 @@ document.getElementById("confirmbtn").addEventListener("click", function () {
 });
 
 document.addEventListener("keydown", function (ev) {
+  if (ev.target && ev.target.id === "popval") { fieldKey(ev); return; }
   if (ev.target && /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName)) { return; }
   if (ev.key === " ") {
     ev.preventDefault(); if (audio.paused) { audio.play(); } else { audio.pause(); } return;
@@ -811,14 +894,14 @@ function route() {
 /* page 1 — the branch is read off the file, not chosen from a dropdown.
    Mock only: the picker toggles between the two fixtures. */
 var SP_HINT = 'Plain text (<code>.txt</code>), or a <b>Song Performance JSON</b> ' +
-  '(<code>.sp.json</code>) \u2014 the format Tramoya promotes. ' +
+  '(<code>.json</code>) \u2014 the format Tramoya promotes. ' +
   '<a href="#" class="lnk">See an example</a>';
 var LANGS = [["es","Spanish"],["en","English"],["nl","Dutch"],["fr","French"]];
 var isTxt = false;
 
 function paintPage1() {
   document.getElementById("txtbranch").className = isTxt ? "" : "pageoff";
-  document.getElementById("lyricsVal").textContent = isTxt ? "pimiento.txt" : "pimiento.sp.json";
+  document.getElementById("lyricsVal").textContent = isTxt ? "pimiento.txt" : "pimiento.json";
   document.getElementById("lyricsHint").innerHTML = SP_HINT;
 
   /* §9.2 rule: an SP JSON declares its languages; the others cannot be picked,
@@ -873,7 +956,7 @@ document.getElementById("cancelbtn").addEventListener("click", function () {
 
 /* page 3 — read-only. The SP JSON *is* the Chango Pepper song JSON.
    Two shapes, one format:
-     pass-through  — an .sp.json came in; Bombista fills four keys and touches
+     pass-through  — a .json came in; Bombista fills four keys and touches
                      nothing else, so title/artist/notes/translations/tempo/intro
                      and all four languages of every lyric survive byte-for-byte.
      from scratch  — a .txt came in; there is no song file yet, so Bombista
@@ -961,7 +1044,7 @@ var CAP_NEW =
 function renderPage3() {
   document.getElementById("json").textContent = JSON.stringify(buildSP(), null, 2);
   document.getElementById("outcap").innerHTML = isTxt ? CAP_NEW : CAP_PASS;
-  document.getElementById("outname").textContent = "pimiento.sp.json";
+  document.getElementById("outname").textContent = "pimiento.json";
 }
 
 /* B19's surviving clause: a JSON download must be pressed even when nothing was

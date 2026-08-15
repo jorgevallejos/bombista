@@ -26,7 +26,7 @@
 | file | what it is |
 |---|---|
 | `docs/bombista-serve-spec.md` | The spec. §1–§7 Jorge's original, amended for naming. **§8 = page 2's visual design.** **§9 = the masthead, the step bar and pages 1, 1.5 and 3.** **§10 = the vocabulary (10.1), the format (10.2) and the ink-predominant skin (10.3).** |
-| `docs/mockups/bombista-serve-mockup.html` | Clickable mockup of the **whole three-step flow**, on pimiento's real 19 lines, in the ink-predominant brutalist skin, using the real metadata and four-language lyrics from `songs/pimiento.json`. Hash-routed: `#1` input, `#1.5` processing, `#2` review, `#3` output. Steps at the top are clickable. On step 1, **Choose file** swaps between the `.sp.json` and `.txt` fixtures. |
+| `docs/mockups/bombista-serve-mockup.html` | Clickable mockup of the **whole three-step flow**, on pimiento's real 19 lines, in the ink-predominant brutalist skin, using the real metadata and four-language lyrics from `songs/pimiento.json`. Hash-routed: `#1` input, `#1.5` processing, `#2` review, `#3` output. Steps at the top are clickable. On step 1, **Choose file** swaps between the `.json` and `.txt` fixtures. |
 | `docs/b20-serve-code-prompts.md` | **Five** paste-ready Claude Code prompts, one PR each. **All five are run and merged** — the file is now a record of how B20 was built, not a queue. |
 
 ## Where the build is (2026-08-16)
@@ -168,7 +168,7 @@ first is *a whole-file write is not an edit — diff before writing a doc the br
 4. **The `Expand lyrics` control on page 3 is cut.** The full JSON renders, the window scrolls.
 5. **Two shapes, one format** (§10.2.1) — Jorge's pasted sketch is the contract for the from-scratch
    case. `.txt` in → a new file with `artist: ""`, `notes: ""`, `title_translations` keyed by the
-   chosen language, `tempo` **omitted unless real**, no `intro`, `lyrics` in one language. `.sp.json` in
+   chosen language, `tempo` **omitted unless real**, no `intro`, `lyrics` in one language. A song `.json` in
    → pass-through, five keys written, nothing else touched. The mockup demonstrates both: toggling
    the fixture on step 1 changes what step 3 emits.
 6. **The native `<audio>` element** ignores `color-scheme` in Chromium and rendered as the brightest
@@ -206,12 +206,14 @@ first is *a whole-file write is not an edit — diff before writing a doc the br
 
 1. **Step names: `1 Input · 2 Review · 3 Output`.** *Set up*, *alignment* and *emit* are retired
    from the interface. §10.1.
-2. **The format is the Song Performance JSON — `SP JSON`, `.sp.json`.** It is the **whole
+2. **The format is the Song Performance JSON — `SP JSON`, extension `.json`.** It is the **whole
    document**: lyrics, metadata, the timeline as one section, and everything Jorge later adds for
    performance support (translations, projection cues, animation triggers). It replaces both "CP
    song JSON" and the ambiguous bare "song JSON". Documentation home: likely a section on the
    **Tramoya tab of changopepper.com** — tracked in §9.6, not blocking B20. *Superseded in the
-   third pass: it is not a new format, it is the name for `songs/*.json`.*
+   third pass: it is not a new format, it is the name for `songs/*.json`. The `.sp.json` extension
+   this pass gave it was dropped by §12.2 for the same reason — a distinct extension reintroduces
+   the distinction that correction removed.*
 3. **Page 1 is four rows**: Lyrics · Media source · Language · Model. The output-folder picker and
    the *Also write* checkboxes are **cut**. File name only, never the path. No branch dropdown —
    the extension answers it. The Language dropdown is **constrained by the languages the SP JSON

@@ -1,6 +1,7 @@
 # B20 — `bombista serve`: a local web interface
 
-**Status:** PRs 1 and 2 shipped 2026-08-16. Jorge's design, 2026-08-14. Supersedes and absorbs
+**Status:** all four PRs shipped 2026-08-16 (#22, #23, #24, and page 2). Jorge's design,
+2026-08-14. Supersedes and absorbs
 **B19** — the editable review page is page 2 of this flow, not a separate item.
 
 ## Where things are in this document
@@ -19,7 +20,7 @@
 | **8** | **page 2 (Review) — what it looks like.** 8.1 stack · 8.2 the page top to bottom · 8.3 the row · 8.4 the stepper · 8.5 how a re-anchor shows · 8.6 line 0 (settled) · 8.7 confirming · 8.8 the fixture · 8.9 open |
 | **9** | **the chrome and the other three pages.** 9.1 masthead · 9.2 step bar · 9.3 page 1 Input · 9.4 page 1.5 Processing · 9.5 page 3 Output · 9.6 open |
 | **10** | **vocabulary, format, skin.** 10.1 names · 10.2 the SP JSON is the song JSON · **10.2.1 the two shapes** · 10.3 the skin |
-| **11** | **what building it found.** 11.1 corrected in place · 11.2 the lyrics argument · **11.3 the fixture** · 11.4 smaller |
+| **11** | **what building it found.** 11.1 corrected in place · 11.2 the lyrics argument · **11.3 the fixture** · 11.4 smaller · 11.5–11.10 what PR 4 found · **11.11 what page 2 found** |
 
 ---
 
@@ -213,9 +214,11 @@ it — as controls, not free text where avoidable:
 - A test asserts an override re-anchors: lines after a correction take values derived from the word
   stream, not `original + delta`.
 - A test asserts **line 0 can be moved like any other line**, and that its onset lands in `leadIn`
-  with entry 0 written as `0.00`. ⚠ **Inverted 2026-08-16** — this read *"line 0 cannot be moved"*
-  and PR 2 implemented the refusal on every route. **PR 3 must remove that refusal and invert the
-  test.** See §8.6.
+  with entry 0 written as `0.00`. ✅ **Inverted and done, page 2's PR.** This read *"line 0 cannot
+  be moved"*; PR 2 implemented the refusal on every route and page 2's PR removed it. Note the
+  second half of the old clause did not survive the inversion either: moving line 0 **does**
+  re-anchor — it goes through `anchor_lines` like every other override. What is true, and what the
+  test now asserts, is that **no raw onset below it moves and no band changes** (§11.11).
 - A test asserts the emitted file carries `linesHash` and `timelineSignedOff`.
   ⚠ **Amended 2026-08-16.** This clause used to read *"and the hand-set provenance"*, which §10.2
   later contradicted by moving the per-line record to the report and leaving one scalar in the
@@ -435,10 +438,11 @@ in a recording. *Lead-in* is not a measurement — it is a performance concept, 
 moment someone counts a band in. That distinction belongs to Pregonero, at performance time. A
 timeline extractor that grows a lead-in control is answering a question that was not asked of it.
 
-**Consequence for the code, and it is a reversal.** §3's *"Line 0 has no stepper"* is struck, §6's
-*"a test asserts line 0 cannot be moved"* is inverted, and **PR 2 currently refuses line 0 on every
-route** — Code implemented the old rule faithfully. PR 3 must remove that refusal, allow line 0
-through `/api/reanchor` with bounds `[0, line 1's onset)`, and replace the test with its opposite.
+**Consequence for the code, and it is a reversal — now done.** §3's *"Line 0 has no stepper"* is
+struck, §6's *"a test asserts line 0 cannot be moved"* is inverted, and PR 2's refusal is gone.
+Line 0 goes through `/api/reanchor` with bounds `[0, line 1's onset)` like any other line. The one
+thing the reversal needed that was not written down: **`leadIn.source` has to be able to say a
+human set it** — see §11.11.
 
 ### 8.7 Confirming
 
@@ -466,14 +470,18 @@ Measured against the real `asr-words.jsonl`, not estimated:
 - Beyond the range — ≥ 43.36 line 4 also moves, ≥ 44.30 it `no-anchor`s — the neighbour bounds make
   these unreachable. The bound is doing real work.
 
-### 8.9 Open
+### 8.9 Answered while building page 2
 
-- **One correction at a time?** The mockup carries one; `anchor_lines` already takes a mapping. The
-  rail and the divider would then have to key off the *earliest* edited line, not the last one
-  touched. Decide before building.
-- **Where the audio comes from.** `serve` knows the path from page 1, so serve the bytes on a
-  loopback route rather than a relative `src`. B16's page needs the relative path because it is a
-  loose file; `serve` does not.
+- ~~**One correction at a time?**~~ **Many, settled by building it.** `anchor_lines` takes a
+  mapping and PR 2's routes already accept one, so limiting the page to a single correction would
+  have been a new restriction rather than a simplification. The rail and the divider key off the
+  **earliest** hand-set line, exactly as this clause predicted they would have to: everything below
+  the earliest edit is what was re-derived.
+- ~~**Where the audio comes from.**~~ **A loopback route, `GET /api/audio`, with ranges.** Ranges
+  are not optional: a transport that cannot seek cannot be used to judge a line by ear, and judging
+  by ear is the whole of §6's acceptance case. One thing this turned up — `serve <staging>
+  <lyrics>` has no audio argument, so a session booted straight into a review finds the take
+  through the run's own provenance. See §11.11.
 
 ---
 
@@ -1114,3 +1122,93 @@ a time; §8.2 can render *"reused, original run unknown"*, which is the honest s
 
 **Not a PR 3 blocker** — page 2's provenance block renders either way. It is a small follow-up PR,
 and it belongs with §11.5's tempo decision in the same cleanup.
+
+---
+
+## 11.11 What page 2 found
+
+Page 2 shipped 2026-08-16 (389 → 454 tests). It closed §8.6's reversal, §8.9's two open
+questions and §11.3's fixture decision. Six more things, three of which changed the code.
+
+### The mockup writes a `leadIn.source` the contract does not carry
+
+**Changed the code.** The mockup demonstrates the line-0 move by setting
+`leadIn: { durationSec: 9.32, source: "hand-set", … }`, and *hand-set* is the word this
+whole spec reaches for. **`docs/timeline-v2-contract.md` does not have it.** `leadIn.source`
+takes `"measured" | "manual" | "none"` — frozen, shared with Pregonero, and validated on
+both sides — and the contract's own gloss is *`manual` = a human overrode it*, which is
+exactly the fact being recorded. Copying the mockup would have written a file
+`validate_v2_envelope` rejects, in the one place the reversal makes newly reachable.
+
+So `to_dict` grew a `source` argument, `serve` passes `manual` exactly when line 0 carries
+an override, and `"hand-set"` is refused at the serialiser rather than discovered two tools
+downstream. **The mockup should be corrected**; it is the reference implementation and the
+next reader will copy the string.
+
+This is the one thing the §8.6 reversal needed that was not written down anywhere. Before
+it, every lead-in in the format was measured by definition, so the field had nothing to
+distinguish. Making line 0 editable made `source` load-bearing for the first time.
+
+### The debounce fires in the gap before the auto-repeat starts
+
+**Changed the code, and it is §8.5's finding a third time.** `HOLD_DELAY` is 380 ms and
+`DEBOUNCE` is 250 ms, so a plain debounce commits at t=250 — after the first press and
+*before* the auto-repeat begins. The commit re-renders the list, which swaps the button out
+from under a cursor that is still holding it down. Same failure as an unreserved struck-
+through line or a repositioned popup, one layer further in.
+
+**The mockup could not have found this**, and that is the interesting part: it re-rendered
+locally and instantly from a table of pre-computed outcomes, so it had no round trip to land
+mid-press. The fix is small — the timer waits out the hold rather than racing it — but the
+class of bug is *the mockup's fidelity ends where the network begins*, and it is worth
+expecting more of it in anything else built against it.
+
+### The one line of instruction names line 0 in the mockup
+
+**Did not follow the mockup.** §8.2 fixes the copy as *"Click a **START** time to adjust it.
+Press and hold to move fast — a whole missed word is about a second."* The mockup, updated
+for the reversal, reads *"Click any **START** time to adjust it — line 0 included."*
+
+Built §8.2's wording. §8.6 lists three ways line 0 must not be marked — no colour, no row
+label, no popup caption — and the page's only sentence of help copy is a fourth it did not
+think to name. A line singled out in the instructions is a special line; the point of the
+reversal is that it is not one. If a user needs telling that line 0 is clickable, every
+other row has already told them.
+
+### Page 2 needed a row template the tests can read
+
+**A deliberate departure from the mockup, recorded so it is not "fixed" back.** The mockup
+renders its rows in JavaScript. §6 makes *every row carries its line's text, not only its
+index* a hard requirement — it is the requirement the CLI failed — and a row built by
+client-side JS can only be asserted by reading the JS as a string, which tests the spelling
+of the template rather than what a row says.
+
+So the rows are rendered by `pages.render_rows`, and the page fetches that same markup back
+from `GET /review/rows` after a re-anchor. One template, in one language, and the assertions
+are about rows rather than about source code. The page keeps the popup, the hold, the
+debounce and the player; it does not keep a second opinion about what a row contains.
+
+### `serve <staging> <lyrics>` cannot name its own audio
+
+**Adjacent to §11.10, and the same shape of problem.** The audio route needs the take —
+timeline times are only meaningful against the audio they were measured from — and a session
+booted into a review has no media argument to read it from. It falls back to the run's
+provenance, which is honest but fragile twice over: `align` stores that path **as it was
+given**, so `staging/pimiento` records `../../songs/audio/pimiento.m4a`, which resolves only
+from the directory that run happened in. Copy the staging directory somewhere else and the
+player has nothing.
+
+Not fixed here — the fallback works for the canary and the failure is loud rather than
+silent (the route says the take is not where the run recorded it, and never substitutes some
+other file). **The fix belongs with §11.10's `asr-words.meta.json`**: both are "the staging
+directory cannot say what it was made from", and an absolute path recorded once would answer
+both. A `--audio` option on `serve` is the smaller half of it.
+
+### The payload had no "before" for a band
+
+Minor, mentioned because it is the sort of thing a spec cannot notice. §8.5 wants a changed
+band to show *its before and its after* on the row, and PR 2's `/api/session` carried
+`machineStart` but not `machineBand` — the machine's value but not the machine's verdict. It
+is computed once at load beside the starts, for the same reason they are: re-deriving it
+from a run that already carries corrections would quietly turn the human's answer into the
+machine's.

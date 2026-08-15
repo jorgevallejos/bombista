@@ -110,8 +110,13 @@ bombista/
                    write. Raises ValueError; `note` is a callback so a warning is
                    delivered before any refusal that follows it. B20 §2: `serve` must
                    promote what `promote` promotes, so there is one flow, not two
-  pages.py       — B20: the HTML `serve` returns — pages 1 (input), 1.5 (processing)
-                   and 3 (output), the masthead and the step bar. String composition,
+  pages.py       — B20: the HTML `serve` returns — pages 1 (input), 1.5 (processing),
+                   2 (review) and 3 (output), the masthead and the step bar. Page 2's
+                   ROWS are rendered here too, not in the page's JavaScript: one
+                   template, which the page fetches back after a re-anchor rather than
+                   keeping a second copy of. Line 0 is an ordinary row — no special
+                   colour, no lead-in label, no popup caption, and no lead-in control
+                   anywhere (§8.6). String composition,
                    stdlib only, inline CSS/JS, no build step, NO WEBFONT. STYLESHEET is
                    the whole of §10.3's skin and is defined ONCE — page 2 inherits it
                    rather than being retrofitted. §10.1's vocabulary is enforced by
@@ -127,15 +132,23 @@ bombista/
                    An override RE-ANCHORS — there is no code here that adds an offset
                    to anything. Also owns the run (transcribe -> anchor, cancellable),
                    the loopback file-browse route (the server needs a real path; a
-                   browser File object has none), and the three downloads, which hand
-                   over bytes and write nothing. Page 2 is the one page not here —
-                   `/review` is a 404 until it lands
+                   browser File object has none), the three downloads, which hand
+                   over bytes and write nothing, and the audio route page 2 plays
+                   from (ranges honoured — a transport that cannot seek cannot judge
+                   a line by ear). NO line is refused: line 0 moves like any other
+                   and `leadIn.source` says `manual` when a human set it (§8.6)
   cli.py         — click CLI: align / promote / migrate / serve, and nothing else. Wiring only:
                    options, help text, and translating ValueError into ClickException /
                    BadParameter. `extract` is a registered alias of `align` (B11) — the
                    same Command object, so the two cannot drift
-tests/           — 389 tests; all fast except one tiny-model integration test on a
-                   committed 12 s fixture (tests/fixtures/)
+tests/           — 454 tests; all fast except one tiny-model integration test on a
+                   committed 12 s fixture (tests/fixtures/). The `serve` acceptance
+                   case runs in two tiers (B20 §11.3): a committed synthetic 19-line
+                   fixture in CI, and the pimiento canary opt-in behind
+                   BOMBISTA_CANARY_SONG / BOMBISTA_CANARY_STAGING, which skip with
+                   those names in the message. NO song lyrics, no real
+                   asr-words.jsonl and no audio are committed here — this repo ships
+                   as `pipx install bombista`
 docs/
   timeline-v2-contract.md           — THE live contract with the translator (Pregonero).
                                       Shared, amended by either side; do not diverge from it.

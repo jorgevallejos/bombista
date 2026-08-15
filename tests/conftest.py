@@ -24,6 +24,41 @@ from bombista.models import Word
 FIXTURES = Path(__file__).parent / "fixtures"
 LIBERTAD_SONG = FIXTURES / "libertad-song.json"
 
+SYNTHETIC_SONG = FIXTURES / "synthetic-19-song.json"
+SYNTHETIC_WORDS = FIXTURES / "synthetic-19-words.jsonl"
+
+# --- the synthetic 19-line fixture, and the facts the tests assume of it ---
+#
+# §11.3, settled 2026-08-16: two tiers. This one is committed and runs in
+# CI; the pimiento canary is opt-in and points at the private vault. **No
+# song lyrics, no real asr-words.jsonl and no audio enter this
+# repository** — the words below are invented, built by hand rather than
+# trimmed from the real stream, because a trimmed ASR stream still
+# contains the sung words.
+#
+# What it *is* built to share with the canary is the arithmetic: the same
+# nineteen onsets, the same one-word misdetection, so §6's and §8.8's
+# measured numbers are reproduced by a fixture that publishes nothing.
+# Those onsets are already printed in docs/bombista-serve-spec.md; the
+# lyrics are not, and are not here.
+LINE_COUNT = 19
+LEAD_IN = 8.92
+MOVED_LEAD_IN = 9.32
+"""Line 0, forward by 0.40 s — the mockup's demonstration of §8.6."""
+
+FLAGGED_LINE = 3
+MACHINE_START = 37.54
+"""Where the machine puts the flagged line: its first word was misheard,
+so it anchored on the second one."""
+
+TRUE_ONSET = 36.32
+"""Where the line actually starts. The error is exactly one word — 1.22 s,
+which is 24 separate presses and the reason §8.4's press-and-hold exists."""
+
+LATE_ONSET = 40.00
+"""Inside the bounds, and far enough that the NEXT line's gap falls below
+a third of the song's median — the band recompute §8.8 exists to show."""
+
 
 def words_for(lines, *, first_start: float = 10.0, gap: float = 5.0) -> list[Word]:
     """A word stream that anchors `lines` cleanly, one line every `gap`
@@ -73,6 +108,35 @@ def libertad(tmp_path: Path) -> dict:
     }
 
 
+@pytest.fixture
+def synthetic(tmp_path: Path) -> dict:
+    """The committed 19-line fixture, staged the way `align` leaves a run.
+
+    Copied into `tmp_path` rather than read in place, because a session
+    computes its input paths from where the files are and `/api/emit`
+    refuses to write to any of them — a test that emitted next to the
+    committed fixture would be writing into the repository.
+    """
+    staging = tmp_path / "synthetic-staging"
+    staging.mkdir()
+    (staging / "asr-words.jsonl").write_text(
+        SYNTHETIC_WORDS.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    song_path = tmp_path / "synthetic.json"
+    song_path.write_text(SYNTHETIC_SONG.read_text(encoding="utf-8"), encoding="utf-8")
+
+    return {"staging": staging, "song_path": song_path, "audio": _touch(tmp_path / "s.m4a")}
+
+
+@pytest.fixture
+def synthetic_session(synthetic: dict):
+    from bombista import server
+
+    return server.load_session(
+        synthetic["staging"], synthetic["song_path"], lang="es", audio_path=synthetic["audio"]
+    )
+
+
 def _touch(path: Path) -> Path:
     path.write_bytes(b"\x00" * 32)
     return path
@@ -84,21 +148,21 @@ class Client:
     def __init__(self, base: str) -> None:
         self.base = base
 
-    def request(self, method, path, body=None, *, raw=False):
+    def request(self, method, path, body=None, *, raw=False, binary=False, headers=None):
         data = json.dumps(body).encode("utf-8") if body is not None else None
-        req = urllib.request.Request(
-            self.base + path,
-            data=data,
-            method=method,
-            headers={"Content-Type": "application/json"} if data else {},
-        )
+        sent = {"Content-Type": "application/json"} if data else {}
+        sent.update(headers or {})
+        req = urllib.request.Request(self.base + path, data=data, method=method, headers=sent)
         opener = urllib.request.build_opener(_NoRedirect)
         try:
             response = opener.open(req)
         except urllib.error.HTTPError as exc:
             response = exc
         with response:
-            payload = response.read().decode("utf-8")
+            body = response.read()
+            if binary:
+                return response.status, body, dict(response.headers)
+            payload = body.decode("utf-8")
             if raw or not (response.headers.get("Content-Type") or "").startswith(
                 "application/json"
             ):

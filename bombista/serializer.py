@@ -50,19 +50,34 @@ def _lead_in_apply_default(song: dict) -> bool:
     return isinstance(media, dict) and media.get("type") == "video"
 
 
-def to_dict(lead_in: float, entries: Sequence[TimelineEntry], song: dict) -> dict:
+def to_dict(
+    lead_in: float,
+    entries: Sequence[TimelineEntry],
+    song: dict,
+    *,
+    source: str = "measured",
+) -> dict:
     """Build the timeline v2 envelope from an already-normalised timeline.
 
     `entries` must already be relative to the start cue (see
     `pipeline.normalize_to_lead_in`) — entry 0 is expected to start at
     `0.0`. `song` supplies `media.type` for the `leadIn.apply` default.
     Raises ValueError if the resulting envelope fails `validate_v2_envelope`.
+
+    *source* is the contract's `leadIn.source`: `measured` when Bombista
+    computed the value, `manual` when a human overrode it. It defaults to
+    `measured` because that is what every caller but `serve` does — the
+    CLI derives line 0's onset from the word stream and nothing else.
+    `serve` passes `manual` when line 0 was hand-set, which it may be
+    since §8.6: the normaliser banks whatever line 0's onset is, so a
+    lead-in can now come from either place and a file that cannot say
+    which one claims a machine measured a number a person typed.
     """
     envelope = {
         "timelineVersion": TIMELINE_VERSION,
         "leadIn": {
             "durationSec": round(lead_in, 2),
-            "source": "measured",
+            "source": source,
             "confidence": "low",
             "apply": _lead_in_apply_default(song),
         },

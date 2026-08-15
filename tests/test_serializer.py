@@ -67,6 +67,26 @@ def test_to_dict_rounds_lead_in_to_two_decimals():
     assert result["leadIn"]["durationSec"] == 4.12
 
 
+def test_to_dict_records_a_human_overridden_lead_in_as_manual():
+    """The contract's two words: `measured` = Bombista computed it,
+    `manual` = a human overrode it. Line 0 became editable on 2026-08-16
+    (§8.6), so a lead-in can now be either, and a file that cannot say
+    which is a file that claims a machine measured a number a person
+    typed."""
+    assert to_dict(4.1, ENTRIES, SONG_AUDIO, source="manual")["leadIn"]["source"] == "manual"
+    assert to_dict(4.1, ENTRIES, SONG_AUDIO)["leadIn"]["source"] == "measured"
+
+
+def test_to_dict_refuses_a_source_the_contract_does_not_carry():
+    """`hand-set` is the word the mockup uses and the word this repo's own
+    prose reaches for. It is not in the interchange format, which takes
+    `measured` | `manual` | `none` and is frozen — Pregonero validates
+    against exactly those. Refused here rather than written and rejected
+    two tools downstream."""
+    with pytest.raises(ValueError, match="source"):
+        to_dict(4.1, ENTRIES, SONG_AUDIO, source="hand-set")
+
+
 def test_write_timeline_produces_valid_json(tmp_path):
     out = tmp_path / "song-timeline.json"
     write_timeline(4.1, ENTRIES, SONG_AUDIO, out)

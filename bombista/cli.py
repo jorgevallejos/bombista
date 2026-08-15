@@ -30,6 +30,7 @@ from .provenance import build_provenance, compute_lines_hash
 from .readers import read_lyrics_input
 from .report import band_counts, render_qa_report
 from .serializer import to_dict, write_timeline
+from .server import LOOPBACK_HOST, create_server, load_session
 from .songfile import back_up_and_replace, timeline_diff
 from .writers import (
     build_bombista_block,
@@ -317,6 +318,63 @@ def promote(timeline_json: Path, song_json: Path) -> None:
     click.echo(f"backup: {outcome.backup}")
     for line in outcome.diff:
         click.echo(line)
+
+
+@main.command()
+@click.argument(
+    "staging_dir", type=click.Path(exists=True, file_okay=False, path_type=Path)
+)
+@click.argument(
+    "lyrics",
+    required=False,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    metavar="[SONG_JSON_OR_LYRICS_TXT]",
+)
+@click.option("--lang", default="es", show_default=True, help="Song JSON lyric key.")
+@click.option(
+    "--port",
+    default=0,
+    show_default="an ephemeral port, printed on start",
+    help=f"Port to bind on {LOOPBACK_HOST}.",
+)
+def serve(staging_dir: Path, lyrics: Path | None, lang: str, port: int) -> None:
+    """Review a staged alignment in a browser, on this machine only.
+
+    STAGING_DIR is the output of a previous `align` — it supplies the word
+    stream and the QA state. The lyrics argument supplies the lines;
+    `align` never copies its lyrics input into staging, so pass the same
+    song JSON (or lyrics text) you aligned against. It is optional only
+    when the staging directory holds an `--emit songjson` output to fall
+    back on.
+
+    Binds 127.0.0.1 and nothing else. The audio, the transcription and the
+    anchoring all stay in this process on this machine — nothing is
+    uploaded, and there is no configuration that would change that.
+    """
+    if lyrics is None:
+        fallback = next(iter(sorted(staging_dir.glob("*-song.json"))), None)
+        if fallback is None:
+            raise click.ClickException(
+                f"{staging_dir}: no lyrics argument, and no <stem>-song.json in "
+                "the staging directory to fall back on. Pass the song JSON or "
+                "lyrics text this run was aligned against."
+            )
+        lyrics = fallback
+
+    try:
+        session = load_session(staging_dir, lyrics, lang=lang)
+        httpd = create_server(session, port=port)
+    except ValueError as exc:
+        raise click.ClickException(str(exc))
+
+    bound_port = httpd.server_address[1]
+    click.echo(f"bombista serve — http://{LOOPBACK_HOST}:{bound_port}/ (ctrl-c to stop)")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:  # pragma: no cover - interactive
+        click.echo("")
+    finally:
+        httpd.server_close()
 
 
 @main.command()

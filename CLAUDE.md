@@ -37,6 +37,9 @@ bombista align <audio.wav> <song.json|lyrics.txt> -o <staging-dir> \
     [--emit timeline|songjson|report-json|srt|lrc|html]
 bombista promote <staging>/<song>-timeline.json <song.json>
 
+# Review a staged run in a browser, on this machine only (B20):
+bombista serve <staging-dir> <song.json|lyrics.txt> [--lang es] [--port 0]
+
 # One-off, for songs timed before timeline v2 (B13) — not part of the loop:
 bombista migrate <song.json> [--dry-run]
 ```
@@ -106,11 +109,20 @@ bombista/
                    write. Raises ValueError; `note` is a callback so a warning is
                    delivered before any refusal that follows it. B20 §2: `serve` must
                    promote what `promote` promotes, so there is one flow, not two
-  cli.py         — click CLI: align / promote / migrate, and nothing else. Wiring only:
+  server.py      — B20: `serve`'s process and the JSON routes page 2 talks to.
+                   ThreadingHTTPServer on 127.0.0.1 ONLY (invariant 7 — the host is
+                   an explicit argument that refuses every other value). Holds one
+                   Session (lines, words, QA state of a previous `align`) and answers
+                   GET /api/session, POST /api/reanchor, POST /api/emit. Imports
+                   NOTHING from cli.py (invariant 1): it calls the same extracted
+                   anchoring/pipeline/merge the CLI calls, so the two cannot drift.
+                   An override RE-ANCHORS — there is no code here that adds an offset
+                   to anything. Page 2's HTML is not here; `/` is a 404 until it lands
+  cli.py         — click CLI: align / promote / migrate / serve, and nothing else. Wiring only:
                    options, help text, and translating ValueError into ClickException /
                    BadParameter. `extract` is a registered alias of `align` (B11) — the
                    same Command object, so the two cannot drift
-tests/           — 263 tests; all fast except one tiny-model integration test on a
+tests/           — 304 tests; all fast except one tiny-model integration test on a
                    committed 12 s fixture (tests/fixtures/)
 docs/
   timeline-v2-contract.md           — THE live contract with the translator (Pregonero).

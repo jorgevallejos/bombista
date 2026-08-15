@@ -179,8 +179,6 @@ tr.band-HIGH td.text { color: #cdc6b9; }
 .tbtn:hover { background: var(--surface-2); border-color: var(--line-2); color: var(--paper); }
 .tbtn:active { background: var(--surface-2); }
 .tbtn.open { background: var(--clay); color: #1a100d; border-color: var(--clay); }
-.tbtn.lead { border-bottom-color: var(--clay-dim); }
-.tbtn.lead.open { background: var(--clay); }
 
 .was { display: block; font: 400 .68rem/1.2 var(--mono); min-height: 1.2em; color: var(--dimmer);
        text-decoration: line-through; padding-right: .3rem; }
@@ -381,7 +379,7 @@ pre.json { background: var(--surface); border: 1px solid var(--line-2);
 <!-- =========================== PAGE 1.5 =========================== -->
 <section id="page15" class="pageoff">
   <h1>Processing</h1>
-  <p class="lede">pimiento.m4a · faster-whisper medium · es · on this machine</p>
+  <p class="lede">pimiento.m4a · faster-whisper medium · es · on your local machine</p>
   <div style="max-width:34rem">
     <div class="phase" id="ph1"><span class="dot"></span> Transcribing the audio
       <span class="t" id="t1">—</span></div>
@@ -422,8 +420,8 @@ pre.json { background: var(--surface); border: 1px solid var(--line-2);
   </div>
 </div>
 
-<p class="hint tablehint">Click a <b>START</b> time to adjust it. Press and hold to move fast —
-  a whole missed word is about a second.</p>
+<p class="hint tablehint">Click any <b>START</b> time to adjust it — line 0 included. Press and
+  hold to move fast; a whole missed word is about a second.</p>
 
 <table id="lines">
   <thead><tr>
@@ -521,7 +519,9 @@ function belowFor(i, v) {
   return chosen;
 }
 
-function shiftAmt() { return round2(state.lead - song.leadIn); }
+/* Always 0 since 8.6 was settled: there is no separate lead-in state to shift by.
+   Kept as a seam only because bounds and compute() read it. */
+function shiftAmt() { return 0; }
 
 /* bounds in the clock the page displays — the neighbouring lines, live */
 function boundsFor(i) {
@@ -605,10 +605,9 @@ function render() {
     var startCell =
       '<span class="was mono">' +
         (r.wasStart !== null && r.wasStart !== r.start ? f2(r.wasStart) : "") + "</span>" +
-      '<button class="tbtn' + (state.open === k ? " open" : "") + (k === 0 ? " lead" : "") +
-        '" data-open="' + k + '" title="' +
-        (k === 0 ? "lead-in — moves the whole song" : "adjust this line's start") +
-        '">' + f2(r.start) + "</button>";
+      '<button class="tbtn' + (state.open === k ? " open" : "") +
+        '" data-open="' + k + '" title="adjust this line\'s start">' +
+        f2(r.start) + "</button>";
 
     var bandCell;
     if (r.wasBand && r.wasBand !== r.band) {
@@ -631,7 +630,7 @@ function render() {
             '" data-end="' + r.end + '">' +
       '<td class="' + rail + '"><i></i></td>' +
       '<td><button class="play" data-start="' + r.start + '">▶</button></td>' +
-      '<td class="idx">line ' + k + (k === 0 ? "<br>lead-in" : "") + "</td>" +
+      '<td class="idx">line ' + k + "</td>" +
       '<td class="text">' + esc(r.es) + "</td>" +
       '<td class="num">' + startCell + "</td>" +
       '<td class="num"><span class="mono">' + (r.end - r.start).toFixed(2) + "</span>" +
@@ -666,7 +665,6 @@ function openPopup(i) {
   pop = document.createElement("div");
   pop.className = "pop";
   pop.innerHTML =
-    (i === 0 ? '<span class="cap">lead-in · moves the whole song</span>' : "") +
     '<button class="step" data-step="' + (-STEP) + '">− 0.05</button>' +
     '<span class="val" id="popval">' + f2(state.value) + '</span><span class="unit">s</span>' +
     '<button class="step" data-step="' + STEP + '">+ 0.05</button>';
@@ -705,8 +703,9 @@ function nudge(d) {
   clearTimeout(timer);
   var committed = v;
   timer = setTimeout(function () {
-    if (i === 0) { state.lead = round2(song.leadIn + (committed - base[0].start)); }
-    else { state.edit = { i: i, value: round2(committed - shiftAmt()) }; }
+    /* 8.6 settled 2026-08-16: line 0 is not special. Its edit is an edit like any
+       other; the v2 normaliser banks its onset into leadIn at emit time. */
+    state.edit = { i: i, value: round2(committed - shiftAmt()) };
     render();
   }, DEBOUNCE);
 }
@@ -898,7 +897,9 @@ var TIMING_KEYS = ["linesHash", "timelineSignedOff", "timelineVersion", "leadIn"
 var LINES_HASH = "sha256:1f3c\u2026 (over the 19 canonical lines \u2014 B4's guard)";
 
 function timingBlock() {
-  var rows = compute(), lead = state.lead;
+  /* leadIn is DERIVED from line 0's current onset (8.6) - there is no separate
+     lead-in state, because there is no separate lead-in control. */
+  var rows = compute(), lead = rows[0].start;
   return {
     linesHash: LINES_HASH,
     /* settled 2026-08-15: one scalar, so a reviewed timeline is distinguishable

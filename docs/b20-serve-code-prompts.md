@@ -1,9 +1,15 @@
 # B20 `serve` — Claude Code prompts
 
-Four PRs, in order. Each is paste-ready. House rules apply throughout and are restated in each
-prompt because Code does not carry them between sessions: feature branch off `main`, strict
-red → green → refactor, Conventional Commits, `gh pr create --base main`, merge and pull `main`
-before starting the next.
+Four PRs. **PRs 1, 2 and 4 shipped 2026-08-16** (#22, #23, #24, all merged). **PR 3 is the last one
+and is now unblocked** — see the note under its heading. Each is paste-ready. House rules
+apply throughout and are restated in each prompt because Code does not carry them between sessions:
+feature branch off `main`, strict red → green → refactor, Conventional Commits,
+`gh pr create --base main`, merge and pull `main` before starting the next.
+
+**Read §11 first — all of it.** Building PRs 1, 2 and 4 found twelve problems in the spec. Most are
+corrected in place; the ones that change what PR 3 can assume are §11.2 (`serve` takes lyrics as a
+second argument), §11.3 (the fixture, settled), §11.5 (tempo is whole or absent — checked against
+Pregonero) and §11.8 (tests must never touch a real user path).
 
 Reference material Code should read before touching anything: `docs/bombista-serve-spec.md`
 (§3 the four states, §4 invariants, §6 obligations, **§8 page 2's design**, **§9 pages 1/1.5/3**,
@@ -14,6 +20,8 @@ reference for all three steps, on pimiento's real numbers).
 `1 Input · 2 Review · 3 Output`. The format is the **Song Performance JSON** (`SP JSON`,
 `.sp.json`) — never "CP JSON", never a bare "song JSON". The audio row is **Media source**. The
 words *alignment* and *emit* may appear in code and internal docs; they must not appear on a page.
+The report-JSON key for the glosses is **`signalGlosses`** (a signal → sentence map, omitted when a
+line's signals say nothing) — set by PR 1, §11.4.
 
 **The format — §10.2, read it before writing any serialiser.** The SP JSON **is** the existing
 `songs/*.json` format; there is no new schema. Bombista owns exactly `linesHash`,
@@ -31,6 +39,10 @@ null scaffold, never a placeholder** (songs@c5adf65 removed placeholder tempo bl
 not replaced with a flag or a null", because tempo.bpm drives both Pregonero's scaling denominator
 and its visual pulse and an invented number cannot serve both; Pregonero degrades safely when the
 key is absent), no `intro`, and `lyrics` carrying that one language. §10.2.1 has the table.
+**§11.5 sharpens this:** `tempo` is written **whole** — `bpm`, `numerator`, `denominator`,
+`countInBars` — **or not at all**. A bpm-only block breaks Pregonero's pulse (`getBeatsPerBar`
+returns `NaN` without a time signature) while the scaling path keeps working. There is no valid
+partial tempo block.
 
 ---
 
@@ -143,7 +155,39 @@ Commit as `feat(serve): local HTTP server and the re-anchor/emit routes`, then
 
 ---
 
-## PR 3 — page 2
+## PR 3 — page 2 — **UNBLOCKED, RUN THIS NEXT**
+
+> **Unblocked 2026-08-16. Both open questions are answered — read §8.6 and §11.3 before starting.**
+>
+> **§8.6 — line 0 is NOT special.** Jorge's decision: *"line timestamps can change independently
+> without any ripple effect. Line 0 should be the same. The first value should not be considered
+> anything special. It is Pregonero that will make a distinction between lead-in and line 0 — it is
+> a performance-time topic, not a timeline-extractor one."*
+>
+> **This REVERSES what PR 2 built.** PR 2 refuses line 0 on every route, faithfully implementing
+> the old §3 rule. This PR must:
+> - remove that refusal and allow line 0 through `/api/reanchor`, bounds `[0, line 1's onset)`;
+> - **invert the §6 test** — it currently asserts line 0 cannot be moved; it must assert line 0
+>   moves like any other line, that its onset lands in `leadIn.durationSec`, and that entry 0 is
+>   still written `0.00`;
+> - render line 0 with **no special colour, no `lead-in` row label, no popup caption**. Item 4 of
+>   the prompt below is void — build line 0 as an ordinary row.
+>
+> Invariant 3 is untouched and is not at risk: the v2 normaliser banks line 0's onset into `leadIn`
+> at emit no matter how the value got there. It was being defended at the wrong layer.
+>
+> Verified in the mockup: moving line 0 from 8.92 to 9.32 leaves line 1's RAW onset at 18.44
+> (no ripple), sets `leadIn.durationSec` to 9.32 with `source: "hand-set"`, keeps entry 0 at 0.00,
+> and shifts every cue-relative value by −0.40. Reproduce that as a test.
+>
+> **§11.3 the fixture — settled: two tiers.** A synthetic fixture, committed, runs in CI and proves
+> the mechanism. The pimiento canary is an opt-in acceptance run pointed at the private vault by an
+> env var, skipped with a clear message when absent. **No song lyrics, no real asr-words.jsonl and
+> no audio ever enter this repository** — build the synthetic fixture BY HAND, do not trim the real
+> one, because a trimmed ASR stream still contains the sung words.
+>
+> Also read §11.5–§11.9 (what PR 4 found), and §11.8 in particular: tests must never touch a real
+> user path. An autouse fixture redirects the staging root at `tmp_path` — keep using it.
 
 **Branch:** `feat/b20-page2`
 
@@ -188,8 +232,9 @@ The five things most likely to be got wrong:
    new chip, RE-ANCHORED badge, previous value struck through. Not a silent repaint. The
    whole-song announcement is the HIGH/REVIEW/FAIL counts in the sticky bar — no banner.
 
-4. **Line 0's number is the lead-in control** (§8.6). Underlined in clay (§10.3 — there is no
-   blue in this palette), row labelled
+4. ~~**Line 0's number is the lead-in control.**~~ **VOID — §8.6 settled the other way on
+   2026-08-16. Line 0 is an ordinary row.** The original clause, kept only so the reversal is
+   legible: line 0 was to be underlined in clay, row labelled
    `line 0 / lead-in`, popup captioned "lead-in · moves the whole song". It shifts every line
    together and re-anchors nothing. Invariant 3 is untouched: line 0 is still 0.00 in the
    emitted timeline. **Confirm this with Jorge before building it** — it is the one place §8
@@ -220,7 +265,18 @@ Commit as `feat(serve): page 2 — review`, then `gh pr create --base main`.
 
 ---
 
-## PR 4 — pages 1, 1.5 and 3
+## PR 4 — pages 1, 1.5 and 3 — **RUN THIS NEXT, BEFORE PR 3**
+
+> **Reordered 2026-08-16.** PR 3 is blocked on two of Jorge's decisions; this one is blocked on
+> nothing. The order is also simply better: this PR establishes the masthead, the step bar and the
+> shared stylesheet, so page 2 **inherits** the skin instead of being retrofitted with it. Every
+> "retrofit page 2" clause below therefore does not apply yet — build the shared chrome once, here,
+> and PR 3 picks it up.
+>
+> **Expect to add one route.** PR 2 built `/api/session`, `/api/reanchor` and `/api/emit`. Page 1 →
+> page 1.5 needs a way to *start* a run (transcribe, then anchor, with a working cancel). If it
+> does not exist, add it here — it belongs with the pages that use it. Same rules as PR 2: bind
+> loopback only, delegate to the extracted modules, never reimplement anchoring.
 
 **Branch:** `feat/b20-pages-1-and-3`
 
@@ -364,8 +420,8 @@ Commit as `feat(serve): pages 1, 1.5 and 3, and the step bar`, then `gh pr creat
 
 ---
 
-## After PR 4
+## After the last PR
 
 `v1.0.0` is gated on `serve` shipping **and** line 3 of pimiento being fixable through it (§7).
-PR 3 closes the second half. PR 4 finishes the flow — cheap once page 2 is right, which was the
-premise of designing that one first.
+PR 3 closes the second half — which is why it runs last now, not first: the gate is an acceptance
+run Jorge does by hand on the real canary, and it wants the whole flow standing.

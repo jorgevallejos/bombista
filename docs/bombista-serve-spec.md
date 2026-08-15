@@ -1,7 +1,25 @@
 # B20 — `bombista serve`: a local web interface
 
-**Status:** specced, not built. Jorge's design, 2026-08-14. Supersedes and absorbs **B19** — the
-editable review page is page 2 of this flow, not a separate item.
+**Status:** PRs 1 and 2 shipped 2026-08-16. Jorge's design, 2026-08-14. Supersedes and absorbs
+**B19** — the editable review page is page 2 of this flow, not a separate item.
+
+## Where things are in this document
+
+`§` means a section of *this file*. Referenced constantly in the code prompts and in Cowork, so:
+
+| § | what is in it |
+|---|---|
+| **1** | what `serve` is, and the four things it must never become |
+| **2** | the refactor that has to land first (extracting `promote`'s merge) — **done, PR #18** |
+| **3** | the four states, one paragraph each: what every page must **do** |
+| **4** | the seven invariants |
+| **5** | the plain-text branch — what a `.txt` cannot supply |
+| **6** | test obligations, and the pimiento acceptance case |
+| **7** | open product questions, and what gates `v1.0.0` |
+| **8** | **page 2 (Review) — what it looks like.** 8.1 stack · 8.2 the page top to bottom · 8.3 the row · 8.4 the stepper · 8.5 how a re-anchor shows · 8.6 line 0 (settled) · 8.7 confirming · 8.8 the fixture · 8.9 open |
+| **9** | **the chrome and the other three pages.** 9.1 masthead · 9.2 step bar · 9.3 page 1 Input · 9.4 page 1.5 Processing · 9.5 page 3 Output · 9.6 open |
+| **10** | **vocabulary, format, skin.** 10.1 names · 10.2 the SP JSON is the song JSON · **10.2.1 the two shapes** · 10.3 the skin |
+| **11** | **what building it found.** 11.1 corrected in place · 11.2 the lyrics argument · **11.3 the fixture** · 11.4 smaller |
 
 ---
 
@@ -119,15 +137,22 @@ Controls:
 
 - **Stepper, ±0.05 s.** The differentiator is a 0.07 s correction loop, so the step must sit below
   it; neither the control nor the JSON round trip may round coarser.
-- **Set from playhead.** A stepper alone cannot span a 1.2 s misdetection — that is 24 clicks. Play
-  the audio, press a key at the moment the line starts, then use the stepper for the last hundred
-  milliseconds. This is how a musician finds an onset.
+- ~~**Set from playhead.**~~ **Superseded by §8.4's press-and-hold — flagged 2026-08-16.** The
+  requirement behind it stands and is the important part: *a stepper alone cannot span a 1.2 s
+  misdetection — that is 24 clicks.* §8.4 answers it with **press-and-hold auto-repeat** (380 ms,
+  then 45 ms) rather than a playhead-capture control, on the argument that the onset is found by ear
+  with the player and the stepper only has to reach where the ear already went — a held second
+  crosses 1.22 s.
+  **This is now the only place §8 departs from §3** — §8.6's line-0 departure was resolved on
+  2026-08-16 by changing §3 rather than §8. Claude Code caught this one while building PR 2.
+  Recorded rather than reopened: if press-and-hold does not close the canary in practice, *Set from
+  playhead* is the fallback and this clause comes back.
 - **Bounds come from the neighbouring lines**, recomputed live. That is the real allowed interval;
   a fixed range is not.
-- **Line 0 has no stepper.** Timeline v2 normalises line 0 to zero and banks the offset in
-  `leadIn`. A stepper on line 0 silently breaks the v2 contract. If the whole song sits late that is
-  a `leadIn` control at the top of the page — which is also where B6's global nudge belongs. Local
-  error and global drift are different problems and get different widgets.
+- **Line 0 has a stepper like every other line.** ⚠ **Reversed 2026-08-16 — see §8.6.** This clause
+  used to read *"Line 0 has no stepper"*, on the argument that a stepper there silently breaks the
+  v2 contract. It does not: the v2 normaliser runs on emit regardless, banks line 0's onset in
+  `leadIn` and writes `0.00`. Invariant 3 is enforced by the normaliser, not by refusing the edit.
 - Every hand-set line is **recorded as hand-set**, with its original machine value and a timestamp.
 
 ### Page 3 — output
@@ -142,10 +167,11 @@ Controls:
   something skippable into something the pipeline structurally requires, so every timeline reaching
   an SP JSON carries a conscious human sign-off. **The report does not count as sign-off** — it
   certifies nothing and downloading it is not a decision.
-- The file carries **`linesHash`** (B4) and the **edit provenance** from page 2. Without the
+- The file carries **`linesHash`** (B4) and **`timelineSignedOff`** — the edit provenance reduced
+  to one scalar (§10.2); the per-line record lives in the report. Without the
   hash the download routes around B4's guard: you save the file, a line gets added to the canonical
   lyrics upstream, you copy yours over it, and everything after that line misaligns silently —
-  the precise scenario B4 exists to prevent. Without the provenance, a machine timeline and a
+  the precise scenario B4 exists to prevent. Without the sign-off stamp, a machine timeline and a
   reviewed one are indistinguishable.
 - The merge is the extracted one from §2. Page 3 does not hand-roll a write.
 
@@ -155,7 +181,8 @@ Controls:
 
 1. `serve` imports no logic from `cli.py`; both call the same extracted modules.
 2. No timestamp control or serialisation step rounds coarser than 0.07 s.
-3. Line 0 is always 0 in a v2 timeline; any lead offset lives in `leadIn`.
+3. Line 0 is always 0 in a v2 timeline; any lead offset lives in `leadIn`. **This is enforced by
+   the normaliser at emit, not by making line 0 uneditable** (§8.6).
 4. Onsets are monotonic; a stepper's bounds are its neighbours.
 5. A correction re-anchors. Nothing anywhere applies a blanket delta except the explicit global
    `leadIn` / `--lead` control.
@@ -185,8 +212,16 @@ it — as controls, not free text where avoidable:
   reimplementing them — the drift risk is the whole reason this item is shaped this way.
 - A test asserts an override re-anchors: lines after a correction take values derived from the word
   stream, not `original + delta`.
-- A test asserts line 0 cannot be moved and that a lead offset lands in `leadIn`.
-- A test asserts the emitted file carries `linesHash` and the hand-set provenance.
+- A test asserts **line 0 can be moved like any other line**, and that its onset lands in `leadIn`
+  with entry 0 written as `0.00`. ⚠ **Inverted 2026-08-16** — this read *"line 0 cannot be moved"*
+  and PR 2 implemented the refusal on every route. **PR 3 must remove that refusal and invert the
+  test.** See §8.6.
+- A test asserts the emitted file carries `linesHash` and `timelineSignedOff`.
+  ⚠ **Amended 2026-08-16.** This clause used to read *"and the hand-set provenance"*, which §10.2
+  later contradicted by moving the per-line record to the report and leaving one scalar in the
+  song file. Both could not hold; **§10.2 is the settled position** and Claude Code correctly
+  followed it while building PR 2. The per-line record still exists — it comes back on
+  `/api/emit`'s response, for the report to render — it is simply not a key in the song file.
 
 ### The acceptance case for page 2 — the pimiento canary
 
@@ -240,10 +275,10 @@ So "line 3" is index 3, the **fourth** line — `desde niño quiere más que lat
 
 Design session 2026-08-15. §3 says what page 2 must **do**; this says what it **is**. §3, §4 and §6
 stand — the four states, the invariants, re-anchor-never-ripple, 0-indexed lines, `serve` in
-`v1.0.0`, the pimiento acceptance case. §8.6 records the one place this section departs from §3's
-prose, and why.
+`v1.0.0`, the pimiento acceptance case. §8.6 is settled — line 0 is not special — so the one
+remaining departure from §3 is §8.4's press-and-hold replacing *Set from playhead*.
 
-Reference: `docs/mockups/bombista-serve-page2-mockup.html` — pimiento's real 19 lines, with every
+Reference: `docs/mockups/bombista-serve-mockup.html` — pimiento's real 19 lines, with every
 re-anchor outcome taken from `anchoring.py` run against the real `asr-words.jsonl`.
 
 **The governing decision, Jorge's, 2026-08-15: the list of lines is the interface.** A first pass put
@@ -364,23 +399,46 @@ Two consequences the implementation must handle, both found by building it:
   line reserved always, or the row grows mid-press and the control moves out from under the cursor.
 - **The popup must not be repositioned while a button is held**, for the same reason.
 
-### 8.6 Line 0 — the one departure from §3, flagged for confirmation
+### 8.6 Line 0 — settled: it is not special
 
-§3 says *"Line 0 has no stepper"*, because a stepper there **silently** breaks the v2 contract. Here,
-line 0's start **is** the control for the lead-in: its number is rendered in the edit colour, its row
-is labelled `line 0 / lead-in`, and its popup carries the caption **lead-in · moves the whole song**.
+**Jorge's decision, 2026-08-16, and it closes this section.** In his words:
 
-- Invariant 3 is untouched: line 0 is still `0.00` in the emitted timeline; the offset is still
-  banked in `leadIn`.
-- The two behaviours stay different: moving line 0 shifts every line together and **re-anchors
-  nothing**; moving any other line re-anchors everything below it. Nothing is silent — different
-  colour, different label, different caption, different effect.
-- What it costs: §3 wanted *different widgets*, and this is the same widget shape with a different
-  label. It also removes an explicit lead-in control from the page, which is where B6's global nudge
-  was going to live.
+> We decided that line timestamps can change independently without any ripple effect. Line 0
+> should be the same. Changing the start time of line 0 should not trigger ripple changes, so the
+> first value should not be considered anything special. It is Pregonero that will make a
+> distinction between lead-in and line 0 — it is a performance-time topic, not a
+> timeline-extractor one.
 
-**Jorge to confirm.** The alternative is a lead-in row above the table, which is one of the panels
-this pass cut.
+**Line 0 gets the same stepper as every other line, with no special colour, no `lead-in` label and
+no popup caption.** There is no lead-in widget on this page — not on line 0, not above the table,
+not in the sticky bar. All three options considered are dropped.
+
+**Why the v2 contract is not at risk.** §3 used to argue that a stepper on line 0 *"silently breaks
+the v2 contract"*. It does not. The normaliser runs on emit no matter how the value got there: it
+banks line 0's onset into `leadIn.durationSec` and writes entry 0 as `0.00`. **Invariant 3 is
+enforced by the normaliser, not by refusing the edit.** Making line 0 uneditable was defending the
+invariant at the wrong layer.
+
+**What moving line 0 actually does**, and it is worth being exact because it looks like two things
+at once:
+
+- The **raw** onsets of lines 1–18 do not move. Nothing below is re-derived differently — line 0's
+  own word is where it always was, so the forward scan reaches line 1 the same way.
+- The **cue-relative** timeline shifts by exactly the amount line 0 moved, because `leadIn` changed
+  and every entry is measured from it.
+
+So moving line 0 *is* the global shift, obtained for free, without a second widget and without any
+special case. B6's global nudge has a home after all, and it is the same control as everything else.
+
+**The deeper point, which is Jorge's and which generalises:** Bombista measures when things happen
+in a recording. *Lead-in* is not a measurement — it is a performance concept, meaningful at the
+moment someone counts a band in. That distinction belongs to Pregonero, at performance time. A
+timeline extractor that grows a lead-in control is answering a question that was not asked of it.
+
+**Consequence for the code, and it is a reversal.** §3's *"Line 0 has no stepper"* is struck, §6's
+*"a test asserts line 0 cannot be moved"* is inverted, and **PR 2 currently refuses line 0 on every
+route** — Code implemented the old rule faithfully. PR 3 must remove that refusal, allow line 0
+through `/api/reanchor` with bounds `[0, line 1's onset)`, and replace the test with its opposite.
 
 ### 8.7 Confirming
 
@@ -390,7 +448,8 @@ skippable into structurally required. The user confirms against the list they ha
 page does not restate it back to them.
 
 What the press writes is unchanged from §3: always a new file, never an input path, carrying
-`linesHash` (B4) and the hand-set provenance — which lines, their machine values, when.
+`linesHash` (B4) and `timelineSignedOff`. The per-line hand-set record — which lines, their machine
+values, when — travels on `/api/emit`'s response into the report, not into the song file (§10.2).
 
 ### 8.8 What the fixture proved
 
@@ -412,7 +471,6 @@ Measured against the real `asr-words.jsonl`, not estimated:
 - **One correction at a time?** The mockup carries one; `anchor_lines` already takes a mapping. The
   rail and the divider would then have to key off the *earliest* edited line, not the last one
   touched. Decide before building.
-- **Line 0 as the lead-in control** — 8.6, Jorge's to confirm.
 - **Where the audio comes from.** `serve` knows the path from page 1, so serve the bytes on a
   loopback route rather than a relative `src`. B16's page needs the relative path because it is a
   loose file; `serve` does not.
@@ -509,8 +567,14 @@ button on the page. *`Align →`* was too quiet for the one control that starts 
 
 - **slug** — derived from the filename, shown read-only.
 - **title** — the one text input on the whole flow.
-- **tempo** — a dropdown that starts at *— not set —*, with a warning block beside it in the REVIEW
-  colour: *Tempo is never measured. Bombista answers when a line happens, not in which beat. Type the
+- **tempo** — ⚠ **cannot be a dropdown, and should not be a bpm field either. See §11.5.** A
+  dropdown cannot express 66.67; Claude Code correctly built a stepper in PR 4. But a bpm-only
+  block **breaks Pregonero's pulse** — `getBeatsPerBar` needs `numerator` and `denominator` and
+  produces `NaN` without them, while the scaling path keeps working, which is exactly the
+  split-brain failure `songs@c5adf65` deleted the placeholder blocks to avoid. The recommendation
+  in §11.5 is to drop the control entirely. Until that is decided, the text below stands as the
+  original intent: a control starting at *— not set —*, with a warning block beside it in the
+  REVIEW colour: *Tempo is never measured. Bombista answers when a line happens, not in which beat. Type the
   value from the Ableton project that produced this audio, where it is exact.* Rules 4 and 5 stand,
   and B14 was dropped for this reason; the UI has to make it obvious this is a value Jorge supplies,
   never one the tool derived. **Left unset, the key is omitted from the emitted file entirely** —
@@ -600,7 +664,7 @@ five keys travel together or not at all.
 - Pages 1, 1.5 and 3 have had **three rounds of Jorge's review** (2026-08-15) and this section
   reflects them. Page 2 is signed off. `timelineSignedOff` and the `title_translations` correction
   are **settled** (§10.2). **The only design item still open is line 0 as the lead-in control,
-  §8.6.** Everything else in this spec is buildable as written.
+  §8.6 — **now settled, 2026-08-16.** Everything in this spec is buildable as written.
 
 ---
 
@@ -620,6 +684,16 @@ looks like.
 | **Process song →** | Align → | It starts a job that takes the better part of a minute. The button's weight and its verb both have to say so. |
 | **Processing** | Aligning | Follows *Process song*. |
 | **Runs on your local machine** | Runs on this machine | *This machine* is ambiguous about whose, on a page served over HTTP. |
+
+**The masthead is exempt from the *alignment* ban, and the exemption is exactly one string.**
+Claude Code found the collision in PR 4: §10.1 forbids *alignment* on a page while §9.1 mandates
+the tagline **Forced-alignment triage** on every page. Its reading was right and is now the rule.
+The ban governs **the words of the flow** — its own rationale is that *alignment* named the
+mechanism rather than the user's move, and a user moving through Input → Review → Output should
+never have to learn the machinery. **The masthead is not part of the flow; it is the tool saying
+what it is**, to someone who may have arrived from a search result, and there the field's own term
+is the honest one. A test pins the tagline verbatim so the exemption cannot widen to a third
+string.
 
 ### 10.2 The format — the SP JSON **is** the Chango Pepper song JSON
 
@@ -852,3 +926,191 @@ Two consequences worth recording, both found by building it:
   control and a lifted background; the band chip keeps telling the truth underneath.
 - **Inline `<code>` in captions is `#b0a898`, not clay.** Clay means *the active thing*. A caption
   with six clay tokens in it speckles the page and spends the accent on nothing.
+
+---
+
+## 11. What building it found
+
+PRs 1 and 2 shipped 2026-08-16 (bombista#22 merged, #23 open; 263 → 304 tests). Claude Code
+surfaced six problems in this spec while building. Four are corrected in place above; the two that
+changed the code are recorded here, with the decisions they force.
+
+### 11.1 Corrected in place
+
+| finding | where | fix |
+|---|---|---|
+| §6 and §10.2 contradicted each other on the hand-set record | §6, §3 page 3, §8.7 | §10.2 wins. The song file carries `linesHash` + `timelineSignedOff`; the per-line record returns on `/api/emit`'s response for the report. Code followed §10.2 unprompted and was right. |
+| §8 pointed at `bombista-serve-page2-mockup.html`, a file renamed two sessions ago | §8 | now `bombista-serve-mockup.html`. **This would have tripped PR 3 on its first read.** |
+| §8.6 claims to be the only place §8 departs from §3 | §3 controls, §8.6 | it is not. §8.4 also drops *Set from playhead* for press-and-hold. Recorded as a second departure, with the fallback stated. |
+| "a lead offset lands in `leadIn`" is not a test | §6 | true by construction — `normalize_to_lead_in` always banks line 0. The real question is §8.6's global shift control, which is why §8.6 is still open. |
+
+### 11.2 `serve` cannot boot from a staging directory alone
+
+**§3's development seam was wrong, and it would have failed on the one fixture it exists for.**
+`align` never copies its lyrics input into staging: a staging dir holds `asr-words.jsonl`, a QA
+report and a bare envelope, and **nothing in it carries lyric text.** `staging/pimiento` is exactly
+this.
+
+`serve` therefore takes the lyrics as a **second argument**, falling back to `<stem>-song.json`
+when omitted. This is not a workaround — it is the honest signature, and it matches page 1, where
+lyrics and media are two separate pickers.
+
+**Consequence for `/api/session`'s provenance.** The default `--emit timeline` writes a bare
+envelope which by contract cannot carry provenance, so Code reads it from `<stem>-report.json`
+rather than recomputing — recomputing would stamp *now*, not the run on screen, which is the
+opposite of what a provenance block is for. **On `staging/pimiento` it currently returns `null`.**
+
+⚠ **Action before PR 3:** re-run the canary with `--emit report-json` so `staging/pimiento` carries
+a report JSON. §8.2's provenance block has nothing to show until that exists.
+
+### 11.3 The fixture — settled 2026-08-16
+
+Code verified the routes against the real canary by hand and reproduced **every measured number in
+§6 and §8.8**: 19 lines, HIGH 18 / REVIEW 1 / FAIL 0, lead-in 8.92, line 3 REVIEW `lead-fallback`
+at 37.54; line 3 → 36.32 gives all 19 HIGH with the 15 below unchanged; line 3 → 40.00 returns line
+4 as REVIEW `gap-outlier`. **Those are PR 3's acceptance tests and the routes already pass them.**
+
+They are not committed, because `songs/pimiento.json` lives in the private `songs` vault and
+Bombista is a public repo — §7 has it shipping as `pipx install bombista`. **Vendoring the fixture
+publishes Jorge's lyrics.**
+
+**Settled 2026-08-16 (Jorge): two tiers.**
+
+1. **A synthetic fixture, committed, runs in CI.** Nineteen invented lines and a hand-built
+   `asr-words.jsonl` constructed so one line misdetects by one word. Proves the *mechanism* —
+   re-anchor not ripple, bands recomputing, bounds clamping — which is what a regression test is
+   for. Publishes nothing.
+2. **The pimiento canary as an opt-in acceptance run**, pointed at the vault by an env var and
+   skipped with a clear message when it is absent. §7 gates `v1.0.0` on line 3 being *fixable
+   through `serve`* — that is a thing Jorge does once, by hand, not a thing CI asserts on every
+   push.
+
+The alternative — vendoring the real lyrics — was rejected: it buys a CI test that reproduces §8.8
+exactly, at the cost of publishing the songs from a repo that ships as `pipx install bombista`.
+Irreversible once pushed, and a product decision rather than a testing one.
+
+**So: no song lyrics, no real `asr-words.jsonl` and no audio ever enter this repository.** The
+synthetic fixture must be built by hand rather than trimmed from the real one, because a trimmed
+ASR stream still contains the sung words. If the synthetic fixture cannot be made to reproduce a
+one-word misdetection convincingly, say so rather than reaching for the real data.
+
+### 11.4 Smaller
+
+- **`signalGlosses`** is the report-JSON key PR 1's prompt failed to name: a signal → sentence map,
+  omitted when a line's signals have nothing to say. Recorded so PR 3 and PR 4 use the same name.
+- **Invariant 7 was self-contradictory** — "an explicit host argument that is never configurable to
+  `0.0.0.0`". Code made the argument explicit and validated it against a one-value allowlist, plus
+  a source-level test that no other bind literal exists in the module. That satisfies the intent;
+  the invariant's wording should be read as *the bind address is explicit in the signature and
+  cannot be set to anything but loopback.*
+
+---
+
+## 11.5 — 11.9: what PR 4 found
+
+PR 4 shipped 2026-08-16 (bombista#24, 304 → 389 tests). It added four routes beyond PR 2's three —
+`/api/run` (start, poll, cancel), `/api/lyrics`, `/api/browse`, `/api/download` — and surfaced six
+more spec problems. The two that changed the code are in §9.3 and §10.1 above; the rest are here.
+
+### 11.5 Tempo cannot be a bpm-only block — checked against Pregonero
+
+PR 4 built the tempo control as a stepper, correctly: §9.3 said *dropdown*, and pimiento's real bpm
+is **66.67**, which no dropdown expresses. Code then asked the right follow-up — neither §9.3 nor
+§10.2.1 says anything about `numerator`, `denominator` or `countInBars`, so a from-scratch file
+would get `{"bpm": 66.67}` alone. **Is that safe for Pregonero?**
+
+**Checked in `pregonero/src`, 2026-08-16. It is not.**
+
+- `performedTempo.ts` **degrades perfectly**: `getTempoScale` returns exactly `1` when either bpm is
+  unusable, and the comment says so — *"a song with no tempo block behaves exactly as it does today
+  — no fallback BPM is invented."*
+- `beatScheduler.ts` **does not**. `SongTempo` declares `numerator: number` and
+  `denominator: number` as **required**; only `countInBars` is optional. `getBeatsPerBar` does
+  `numerator % 3` and returns `numerator / 3` or `numerator` — on a bpm-only block that is `NaN`,
+  and `getBeatPhase` then produces `NaN` beats, bars and count-in. There is no runtime guard: the
+  one check in the codebase is `{tempo && …}`, and a bpm-only object is truthy.
+
+So a bpm-only block gives **correct scaling and a broken pulse** — the same split-brain that
+`songs@c5adf65` deleted the placeholder blocks to avoid, one key further in. The rule generalises:
+
+> **`tempo` is written whole — `bpm`, `numerator`, `denominator`, `countInBars` — or not written at
+> all.** There is no valid partial tempo block.
+
+**Recommendation, needs Jorge's yes: remove the tempo control from page 1 entirely.** Reasons: a
+whole block needs four fields on a page whose rule is four rows total; tempo is never Bombista's
+business (rules 4 and 5); and Jorge already types these in by hand — `songs@104b1ec` is literally
+*"Add tempo to seven songs (Jorge, typed in by hand)"*. §5's warning stays, as a **note** rather
+than a control: *tempo is never measured — add the block by hand once you have the real number from
+the Ableton project.* The `.txt` branch then emits no `tempo` key at all, which is already what
+§10.2.1 specifies.
+
+### 11.6 Cancel abandons the worker rather than killing it
+
+`faster_whisper`'s transcribe is not interruptible without taking the process down. PR 4's cancel
+marks the run, refuses to start the anchoring phase, and discards the result; the user is back on
+step 1 immediately. **That is the honest half of §9.6's open question and it is the right half** —
+the user's experience of cancel is correct, and the cost is a worker thread finishing work nobody
+will read. Killing the transcription outright stays open and is not worth a subprocess boundary yet.
+
+### 11.7 Four more, resolved in PR 4
+
+| finding | resolution |
+|---|---|
+| §8.1's *"one page per step"* vs PR 3's *"page 2 is the HTML for `/`"* | a redirect, so PR 3's sentence stays true in the case PR 3 develops in |
+| the step bar renders on three states, not four — `/review` 404s before PR 3 | expected; PR 3 makes the fourth real |
+| *"no external URL of any kind"* collides with §9.3's *See an example* link | the test is scoped to **loaded resources**, not hyperlinks. Correct: the guard exists so the page never phones out, and a link the user clicks is not the page phoning out |
+| the mockup's page-1.5 lede still said *"on this machine"* | the wording §10.1 retired; fixed in the mockup |
+
+### 11.8 A test that passed while proving nothing
+
+Worth recording because it is a class of bug, not an instance. PR 4's first test pass wrote to the
+real `~/.cache/bombista`. A later test then silently picked up that cache path and **stopped testing
+transcription at all — it passed, and proved nothing.** An autouse fixture now redirects the staging
+root at `tmp_path`, and the directory the run had created on Jorge's machine was removed.
+
+**The general rule for this repo:** a test that touches a real user path is not slow or untidy, it
+is *unsound* — it can start passing for reasons unrelated to the code. Redirect the root, always.
+
+### 11.9 Still outstanding
+
+- ~~**§11.2's action** — re-run the canary with `--emit report-json`.~~ **Done 2026-08-15 19:07.**
+  `staging/pimiento/pimiento-report.json` exists and carries everything §8.2's provenance block
+  needs: `source.sha256`, `durationSec` 173.376, `model` `faster-whisper:medium`, `device`
+  `cpu/int8`, `lang` `es`, `toolVersion`, plus `linesHash` and `leadIn.durationSec` 8.92. The run
+  reproduced the canary exactly — **HIGH 18 / REVIEW 1 / FAIL 0**. `/api/session` will now return a
+  populated `provenance` instead of `null`.
+- **§11.5** — Jorge's yes or no on removing the tempo control.
+- **§11.10** — `extractedAt` is stamped at report-write time, not extraction time.
+- **The docs are not on GitHub.** §11 and everything after the 2026-08-15 design rounds exist only
+  in Jorge's working tree. They survived PR 4's branch switches, but they need a `docs(B20)` commit
+  before another session reads them.
+
+### 11.10 `extractedAt` lies on a `--words` re-run
+
+Found while doing §11.2's action, 2026-08-15. The re-run passed `--words` to reuse the saved word
+stream, so **faster-whisper never ran** — and the report it wrote says:
+
+```
+source.extractedAt   2026-08-15T19:07:09+02:00     ← when the report was written
+asr-words.jsonl      mtime 2026-08-14 20:55        ← when the audio was actually transcribed
+```
+
+Nothing about *what* was aligned is misrepresented: the audio sha256, the model and the language
+are all still true. But `extractedAt` is a claim about **when the machine listened**, and on any
+`--words` run it silently becomes the time the report was written instead. §8.2 puts that value on
+screen under the word *provenance*, and the whole product rests on the report being trustworthy —
+so a field that is right by accident and wrong on the fast path is exactly the wrong field to
+leave alone. Note that the fast path is not the exception: §9.4 makes reusing the word stream *the*
+correction loop, so most runs will be `--words` runs.
+
+`asr-words.jsonl` cannot answer this itself — it is bare word records, `{"text","start","end"}`, one
+per line, with no header (and adding one would break every reader).
+
+**Recommended fix, small:** `save_words` writes a sibling `asr-words.meta.json` — `extractedAt`,
+`model`, `device`, `lang`, audio `sha256` — and `--words` reads it back instead of stamping fresh.
+That stays true when the staging directory is copied, which an mtime does not. If the sibling is
+missing (an older staging dir), set `extractedAt: null` and `wordsReused: true` rather than invent
+a time; §8.2 can render *"reused, original run unknown"*, which is the honest sentence.
+
+**Not a PR 3 blocker** — page 2's provenance block renders either way. It is a small follow-up PR,
+and it belongs with §11.5's tempo decision in the same cleanup.

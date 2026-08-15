@@ -1,4 +1,4 @@
-# B20 `serve` — design session resume (2026-08-15, design closed)
+# B20 `serve` — resume (2026-08-16, PRs 1/2/4 shipped, page 2 is all that is left)
 
 **Written so this can continue on a fresh account/session with no context loss.** Everything
 below is already on disk in this repo; nothing lives in Cowork memory.
@@ -11,7 +11,27 @@ below is already on disk in this repo; nothing lives in Cowork memory.
 | `docs/mockups/bombista-serve-mockup.html` | Clickable mockup of the **whole three-step flow**, on pimiento's real 19 lines, in the ink-predominant brutalist skin, using the real metadata and four-language lyrics from `songs/pimiento.json`. Hash-routed: `#1` input, `#1.5` processing, `#2` review, `#3` output. Steps at the top are clickable. On step 1, **Choose file** swaps between the `.sp.json` and `.txt` fixtures. |
 | `docs/b20-serve-code-prompts.md` | **Four** paste-ready Claude Code prompts, one PR each. PR 4 rewritten against the new design. |
 
-## Design is closed. Build order is PR 1 → 2 → 3 → 4, prompts in `b20-serve-code-prompts.md`.
+## Where the build is
+
+**PRs 1, 2 and 4 merged** (#22, #23, #24). `main` at `cf7961e`, **389 tests green**. The umbrella
+pointer was bumped to match (`fc9d19e`). Docs merged as #21, so §8/§9/§10 are on `main` — **but
+§11 and everything after it is still only in the working tree and needs a `docs(B20)` commit.**
+
+**§11.2's action is done** (2026-08-15 19:07): the canary was re-run with `--emit report-json`,
+reproduced **HIGH 18 / REVIEW 1 / FAIL 0**, and `staging/pimiento/pimiento-report.json` now carries
+the provenance §8.2 renders.
+
+**Page 2 is the only page left, and PR 3 is now unblocked.** Both of its questions are answered:
+§8.6 (line 0 is not special) and §11.3 (the fixture, two tiers).
+
+`serve` now has seven routes: `/api/session`, `/api/reanchor`, `/api/emit` (PR 2) and `/api/run`
+(start/poll/cancel), `/api/lyrics`, `/api/browse`, `/api/download` (PR 4).
+
+**§11 has grown to twelve findings.** Read it before touching anything — §11.5 in particular
+(tempo is whole or absent, checked against Pregonero's `beatScheduler.ts`) and §11.8 (a test that
+passed while proving nothing).
+
+## Design is closed. Prompts in `b20-serve-code-prompts.md`.
 
 **Settled last, 2026-08-15:**
 
@@ -28,8 +48,14 @@ below is already on disk in this repo; nothing lives in Cowork memory.
   "outright — not replaced with a flag or a null", because `tempo.bpm` drives both Pregonero's
   scaling denominator and its visual pulse and an invented number cannot serve both. Pregonero
   degrades safely when the key is absent. **Do not reintroduce it.**
-- **The only design item still open is line 0 as the lead-in control (§8.6)**, and it only blocks
-  PR 3.
+- **§8.6 settled 2026-08-16: line 0 is not special.** Jorge: *"the first value should not be
+  considered anything special. It is Pregonero that will make a distinction between lead-in and
+  line 0 — a performance-time topic, not a timeline-extractor one."* No lead-in widget anywhere.
+  **This reverses what PR 2 built** — line 0 is refused on every route today and PR 3 must undo it,
+  along with §6's test.
+- **The fixture is settled (§11.3): two tiers.** Synthetic fixture in CI for the mechanism; the
+  pimiento canary as an opt-in acceptance run against the private vault. No lyrics, no real
+  `asr-words.jsonl`, no audio in the Bombista repo — it ships as `pipx install`.
 
 ## Settled in the fourth pass (Jorge on contrast, and the from-scratch JSON)
 
@@ -159,6 +185,6 @@ lives in the `DATA` object at the bottom of the mockup HTML.
 
 1. Run **PR 1** (signal glosses) — smallest, independent, unblocks the rest. Nothing gates it.
 2. **PR 2** (server + routes). Nothing gates it either.
-3. Confirm or reject line 0 as the lead-in control — needed before **PR 3** (page 2).
-4. **PR 4** (masthead, pages 1, 1.5, 3, the step bar and the skin retrofit on page 2).
+3. **PR 4** (masthead, pages 1, 1.5, 3, the step bar, the shared skin) — unblocked, run it next.
+4. Answer §8.6 (line 0), then **PR 3** (page 2).
 5. `v1.0.0` ships when `serve` exists **and** line 3 of pimiento is fixable through it (§7).

@@ -21,7 +21,7 @@ What remains is §7's acceptance run, not code. Jorge's design, 2026-08-14. Supe
 | **9** | **the chrome and the other three pages.** 9.1 masthead · 9.2 step bar · 9.3 page 1 Input · 9.4 page 1.5 Processing · 9.5 page 3 Output · 9.6 open |
 | **10** | **vocabulary, format, skin.** 10.1 names · 10.2 the SP JSON is the song JSON · **10.2.1 the two shapes** · 10.3 the skin |
 | **11** | **what building it found.** 11.1 corrected in place · 11.2 the lyrics argument · **11.3 the fixture** · 11.4 smaller · 11.5–11.10 what PR 4 found · **11.11 what page 2 found** · **11.12 how the docs nearly lost half of themselves** · **11.13 what the cleanup found** |
-| **12** | **what *using* it found.** 12.1 the stepper does not scale to a large error · 12.2 the downloaded file and the vault file do not meet |
+| **12** | **what *using* it found.** 12.1 the stepper does not scale to a large error · 12.2 the downloaded file and the vault file do not meet · **12.3 the run said it was transcribing before it was** |
 
 ---
 
@@ -1411,23 +1411,34 @@ auto-repeat. Jorge's words: *"doing this with the arrows was a pain you know whe
 line 3 — **1.22 s, 24 presses, a held second crosses it** — and that is a one-word ASR slip. A 47 s
 error is a different failure class: the machine did not mishear a word, it anchored a line to
 somewhere else entirely. Nothing in §6, §8.8 or the synthetic fixture contains a case of that size,
-so nothing in the design was ever tested against one. **The fixture measured the error Bombista
-makes often; the interface also has to survive the error it makes rarely.**
+so nothing in the design was ever tested against one.
 
-**Jorge's proposal:** drop the arrows, accept a typed number, and correct the typed value to fit the
-valid intervals.
+⚠ **And it is not the rare case. Corrected by Jorge, 2026-08-16:** *"the error is not rare, it
+happens with a phrase that was not recognised. I expect this case to happen more often than not."*
+A whole phrase the ASR did not hear leaves the line with nothing to anchor to, and where it lands
+has no relation to where it belongs — so the size of the error is unbounded by construction. **This
+correction matters more than the control it settles**, because a first pass here argued from a
+frequency it had not measured: it called the 1.22 s slip common and the 47 s jump rare, on the sole
+evidence that the fixture contained one and not the other. The fixture is nineteen lines of one
+song. **What a fixture contains is not a frequency**, and reasoning about how often a failure
+happens from what the test data happens to hold is how a design gets calibrated on the wrong number
+twice.
 
-**The counter-case, recorded because it pulls the other way.** Finding the onset is done *by ear*
-with the player (§8.4: *"play, listen, click, hold, listen again"*), and by-ear work is
-nudge-and-listen — a text field cannot be nudged, it has to be retyped in full each pass. Pimiento's
-1.22 s case is exactly that, and it is the §7 gate. So **removing the stepper would fix the rare
-error by making the common one worse.** The shape that serves both is *type to arrive, nudge to
-land*: a typed field for the jump and the stepper for the last half-second.
+**Settled 2026-08-16: keep the arrows, and make the number itself editable.** Both, not either.
+Jorge: *"solution is not to drop them but also allow for editing the text itself."* The two controls
+answer two different questions and neither substitutes for the other:
 
-⚠ **Needs Jorge's decision — it is the one visible control on the page.** Drop the arrows as he
-proposed, or keep both.
+- **The typed number arrives.** An unrecognised phrase can land anywhere, so getting near the right
+  place must not be a distance problem at all.
+- **The stepper lands.** Finding the exact onset is done *by ear* with the player (§8.4: *"play,
+  listen, click, hold, listen again"*), and by-ear work is nudge-and-listen — a text field cannot be
+  nudged, it has to be retyped in full every pass. Pimiento's 1.22 s case is exactly this, and it is
+  the §7 gate.
 
-**What "correct the numbers to fit the right intervals" has to mean**, either way:
+*Type to arrive, nudge to land.* §8.4's popup grows from one stepper to a stepper whose number is a
+field; it does not grow a second control.
+
+**What "correct the numbers to fit the right intervals" has to mean:**
 
 1. **Clamp to the neighbouring lines**, as §8.4 already does for the stepper.
 2. **Round to the grid** — never coarser than 0.07 s (B19's surviving constraint); the stepper's
@@ -1436,13 +1447,15 @@ proposed, or keep both.
    reasoning that a stated bound is one more sentence on a page that should have almost none. That
    works because you *feel* a stepper stop. **You do not feel a text field clamp.** Type 13, get
    30.2, and nothing on screen explains it. A typed control needs the bound made visible — which is
-   the first thing on page 2 to earn its own sentence since the design closed.
+   the first thing on page 2 to earn its own sentence since the design closed. It is also now the
+   **common** path rather than the exceptional one, which is what makes it worth the sentence.
 
 ### 12.2 The downloaded file and the vault file do not meet
 
 **Reported: two `.sp.json` files downloaded, and `songs/` holds `.json` files.** Nothing in the
-product says how one becomes the other. Two separate problems sit underneath, and only the second
-is serious.
+product says how one becomes the other. Two problems sit underneath, and the resolution reverses
+which of them mattered: the naming looked cosmetic and the key loss looked serious, and it is the
+naming that turns out to be the whole of it.
 
 **The naming.** `serve` writes `<stem>.sp.json` (`server.py`, the download route). The vault stores
 `luz-y-sal.json`. §10.2's third-pass correction settled that **the SP JSON *is* the `songs/*.json`
@@ -1451,7 +1464,8 @@ quietly reintroduces the distinction that correction removed, and it is the reas
 look unrelated on disk. **Suggestion: `SP JSON` stays the name of the format in the vocabulary
 (§10.1) and the extension goes** — the download is `luz-y-sal.json`, because that is what it is.
 
-**The key loss, which is the real problem.** `bombista promote` exists and does the reconciliation —
+**The key loss — real, but not to be fixed where it appears.** `bombista promote` exists and does
+the reconciliation —
 it validates against the v2 contract, checks `linesHash`, backs the target up beside itself, merges,
 and prints a diff:
 
@@ -1469,17 +1483,68 @@ report is in* — and the promote path is that departure. A sign-off that cannot
 nothing. `linesHash` is the same shape of loss: `promote` reads it as a **guard** and then does not
 write it, so the file it produces cannot guard the next promotion.
 
-**Suggestion, in order of size.** Copying the download over the vault file by hand works for the
-pass-through branch, and it is what Jorge did — but it bypasses the backup, the contract validation
-and the `linesHash` check, so it is a workaround and not the answer.
+**Settled 2026-08-16 (Jorge), and it settles the whole entry:** *"I agree to drop the `.sp` part. I
+don't agree with any other kind of reconciliation in Bombista. Bombista doesn't change state of a
+file, it receives one and returns another. It is cleaner in the end this way."*
 
-1. **Small:** `promote` grows a second key set — the three envelope keys stay a unit written or not
-   at all, and `linesHash` / `timelineSignedOff` are written *when the candidate carries them*.
-   They are review facts rather than translator requirements, so they must not join `ENVELOPE_KEYS`
-   and inherit its refusal.
-2. **Right:** **page 3 should not hand you a file to reconcile by hand at all.** `serve` was given
-   the song file; it knows where the timeline belongs. The loop that §1 says closes in the page
-   currently stops one step short — it ends at the Downloads folder, and the last step is a shell
-   command the page never mentions. **A promote from page 3, with the diff shown before it writes,
-   is the honest end of the flow.** Downloading stays, for the cases where the song file is not the
-   destination.
+**So there is no promote-from-page-3, and there is no second key set.** A first pass proposed both;
+both are withdrawn. The rule is the answer, and it is stronger than either fix:
+
+> **Bombista receives a file and returns a file. It does not change the state of one.**
+
+This is invariant 6 (*never write to an input path*) stated as a principle rather than as a guard,
+and it dissolves the key loss rather than patching it. **The returned file already carries all
+five keys and every original field untouched** — §10.2's pass-through — so nothing needs merging
+into the vault. The vault file *is* the returned file. `linesHash` and `timelineSignedOff` only ever
+went missing on a path that took the returned file apart and merged three of its keys into the old
+one; stop doing that and there is nothing to lose.
+
+**Dropping the extension is what makes this obvious rather than clever.** Called `luz-y-sal.sp.json`
+the download looks like an intermediate artifact you must do something with. Called
+`luz-y-sal.json` it is plainly the song file, and *replace the old one with it* is the whole
+procedure. The name was the entire reason the step looked missing.
+
+**One consequence to note, not to act on.** `bombista promote` predates this and does exactly what
+the rule now forbids — it opens a song file, merges three keys, and writes it back. It stays for
+the case it was built for: a **bare timeline envelope** from `--emit timeline`, which is not a song
+file and cannot replace one. It is not the `serve` path and should not become it. If the rule is
+ever written into §4 as a formal invariant, `promote` is the one thing that has to be named as its
+exception, with the reason.
+
+### 12.3 The run said it was transcribing before it was
+
+**Found by CI, 2026-08-16, on the commit that recorded §12.1 and §12.2** — `1 failed, 478 passed`,
+`test_a_run_reports_its_phases_while_it_works`: `assert 'waiting' == 'running'`. It passes on
+Jorge's machine every time. **It is not a flaky test; it is a true report of a real window.**
+
+`Run.__init__` sets `self.state = "transcribing"`. `_begin("transcribe")` — which turns phase 0
+from `waiting` to `running` — is called from `_work`, on the worker thread, *after*
+`staging.mkdir()`. Two writers for one fact, on two threads, and between them the `/api/run` payload
+answers **`state: "transcribing"` with every phase `waiting`**. A fast machine loses that window in
+the scheduler; a loaded CI runner does not.
+
+**The interesting part is that this is §9.4's whole point failing, not a test detail.** §9.4 makes
+the run *a state rather than a spinner* — the phases exist so the fast half is visible as a step
+rather than as a stall. A run whose state claims transcription has begun while its phase list says
+nothing has started **is a spinner with extra rows**. The page would show it. Nobody had looked in
+that window because it is a few milliseconds wide on the machine it was built on.
+
+**The fix is to have one writer.** `start()` calls `_begin("transcribe")` *before* launching the
+thread, and `_work`'s duplicate call goes. `mkdir` then counts inside the transcribe phase's
+elapsed time, which is honest — it is work that phase is doing — and no new state enters the page's
+vocabulary. The invariant it buys is assertable, and should be asserted directly:
+**`state == "transcribing"` implies `phases[0].state == "running"`.**
+
+**The general rule, and it is §11.8's mirror.** §11.8 recorded a test that *passed* for reasons
+unrelated to the code. This one *failed* for a reason unrelated to what it was written to check,
+and both come from the same move: **the test asserted on a proxy for the thing it cared about.** It
+wanted "the run has started transcribing" and polled `state`, which is a different fact set by
+different code on a different thread. When the proxy and the fact can disagree, the test is
+measuring the gap between them — so either close the gap, as here, or assert on the fact.
+
+**Noted, not fixed:** `self.phases` is mutated from the worker and read from request threads with no
+lock. `dict.update(**kwargs)` is not atomic, so a payload can in principle catch `state` updated and
+`started` not yet — it would render one phase's elapsed time as `None` for an instant. Harmless
+today because nothing downstream branches on it. It is the same class of window as the one above,
+and it should be closed with a lock if the phase list ever grows a consumer that does more than
+display it.

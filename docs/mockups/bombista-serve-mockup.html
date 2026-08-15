@@ -420,8 +420,8 @@ pre.json { background: var(--surface); border: 1px solid var(--line-2);
   </div>
 </div>
 
-<p class="hint tablehint">Click any <b>START</b> time to adjust it — line 0 included. Press and
-  hold to move fast; a whole missed word is about a second.</p>
+<p class="hint tablehint">Click a <b>START</b> time to adjust it. Press and
+  hold to move fast — a whole missed word is about a second.</p>
 
 <table id="lines">
   <thead><tr>
@@ -908,7 +908,8 @@ function timingBlock() {
     timelineVersion: 2,
     leadIn: {
       durationSec: round2(lead),
-      source: Math.abs(lead - song.leadIn) < 0.001 ? "measured" : "hand-set",
+      /* 11.11: the v2 contract takes "measured" | "manual" | "none" - NOT "hand-set" */
+      source: Math.abs(lead - song.leadIn) < 0.001 ? "measured" : "manual",
       confidence: "low",
       apply: false
     },

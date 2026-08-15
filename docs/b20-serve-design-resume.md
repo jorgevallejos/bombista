@@ -1,7 +1,25 @@
-# B20 `serve` — resume (2026-08-16, PRs 1/2/4 shipped, page 2 is all that is left)
+# B20 `serve` — HANDOFF (2026-08-16)
 
-**Written so this can continue on a fresh account/session with no context loss.** Everything
-below is already on disk in this repo; nothing lives in Cowork memory.
+> **Start here.** This file is the entry point for a fresh session, on any account. Everything
+> needed is on disk in this repo — **nothing essential lives in Cowork memory**, which does not
+> travel between accounts.
+
+## How to work on this (carry these over — they are not in the repo anywhere else)
+
+- **Jorge works at PM level.** Handle the file edits and supply exact, paste-ready Claude Code
+  prompts. Do not walk him through steps he did not ask for.
+- **Decide, don't escalate.** Only bring him things with a **visible effect** that need his input —
+  a control appearing or disappearing, wording he will read, an irreversible or expensive choice.
+  Internal correctness (timestamps, key names, test structure) gets decided, recorded in the spec,
+  and made reversible. His words: *"unless there is a visible effect that requires my input, you
+  propose a solution and solve it accordingly."*
+- **Read `git log` before "fixing" a missing or inconsistent field.** Several apparent gaps in this
+  repo are decisions with written reasoning — `songs@c5adf65` is the canonical example.
+- **Cowork cannot commit or push** (git over the device bridge is inspect-only and leaves a stuck
+  `.git/index.lock`). Write files, then hand Jorge exact commands. **`#` is not a comment in his
+  interactive zsh** — never put inline comments in shell commands for him.
+- **Repo rule:** branch + PR, never straight to `main`; submodule pointer bumps are his.
+- Deliverables are `.md`; every project lives in `projects/<name>/`.
 
 ## Where things stand
 
@@ -9,27 +27,79 @@ below is already on disk in this repo; nothing lives in Cowork memory.
 |---|---|
 | `docs/bombista-serve-spec.md` | The spec. §1–§7 Jorge's original, amended for naming. **§8 = page 2's visual design.** **§9 = the masthead, the step bar and pages 1, 1.5 and 3.** **§10 = the vocabulary (10.1), the format (10.2) and the ink-predominant skin (10.3).** |
 | `docs/mockups/bombista-serve-mockup.html` | Clickable mockup of the **whole three-step flow**, on pimiento's real 19 lines, in the ink-predominant brutalist skin, using the real metadata and four-language lyrics from `songs/pimiento.json`. Hash-routed: `#1` input, `#1.5` processing, `#2` review, `#3` output. Steps at the top are clickable. On step 1, **Choose file** swaps between the `.sp.json` and `.txt` fixtures. |
-| `docs/b20-serve-code-prompts.md` | **Four** paste-ready Claude Code prompts, one PR each. PR 4 rewritten against the new design. |
+| `docs/b20-serve-code-prompts.md` | **Five** paste-ready Claude Code prompts, one PR each. PRs 1–4 are run; **PR 5 at the end of the file is the only unrun one.** |
 
-## Where the build is
+## Where the build is (2026-08-16)
 
-**PRs 1, 2 and 4 merged** (#22, #23, #24). `main` at `cf7961e`, **389 tests green**. The umbrella
-pointer was bumped to match (`fc9d19e`). Docs merged as #21, so §8/§9/§10 are on `main` — **but
-§11 and everything after it is still only in the working tree and needs a `docs(B20)` commit.**
+**All four pages are standing.** PRs 1, 2 and 4 are **merged** (#22, #23, #24). **Page 2 is PR
+[#26](https://github.com/jorgevallejos/bombista/pull/26), open, on `feat/b20-page2`** — 389 → **457
+collected, 454 passing**; the 3 skips are the opt-in pimiento canary, and all three pass when run
+against the vault. Code drove page 2 in a real browser on the real canary: the stepper, the
+press-and-hold, the debounced re-anchor, the before/after bands and the line-0 move all behave.
 
-**§11.2's action is done** (2026-08-15 19:07): the canary was re-run with `--emit report-json`,
-reproduced **HIGH 18 / REVIEW 1 / FAIL 0**, and `staging/pimiento/pimiento-report.json` now carries
-the provenance §8.2 renders.
+`serve` has eight routes: `/api/session`, `/api/reanchor`, `/api/emit` (PR 2), `/api/run`
+(start/poll/cancel), `/api/lyrics`, `/api/browse`, `/api/download` (PR 4) and `/api/audio` with
+ranges, plus `GET /review/rows` (PR 3).
 
-**Page 2 is the only page left, and PR 3 is now unblocked.** Both of its questions are answered:
-§8.6 (line 0 is not special) and §11.3 (the fixture, two tiers).
+**§11 has grown to nineteen findings across §11.1–§11.12.** Read it before touching anything —
+§11.5 (tempo is whole or absent, checked against Pregonero's `beatScheduler.ts`), §11.8 (a test that
+passed while proving nothing), **§11.11** (what page 2 found) and **§11.12** (how the docs nearly
+lost half of themselves — a process rule, not a code one).
 
-`serve` now has seven routes: `/api/session`, `/api/reanchor`, `/api/emit` (PR 2) and `/api/run`
-(start/poll/cancel), `/api/lyrics`, `/api/browse`, `/api/download` (PR 4).
+**The docs are on GitHub now.** §11.1–§11.10 merged as #25; §11.11 and §11.12 ride on #26.
 
-**§11 has grown to twelve findings.** Read it before touching anything — §11.5 in particular
-(tempo is whole or absent, checked against Pregonero's `beatScheduler.ts`) and §11.8 (a test that
-passed while proving nothing).
+## What page 2 settled (§11.11, 2026-08-16)
+
+1. **`leadIn.source` is `manual`, never `hand-set`.** `docs/timeline-v2-contract.md` is frozen at
+   `"measured" | "manual" | "none"` and Pregonero validates against exactly those; `manual` is the
+   contract's own word for *a human overrode it*. `to_dict` now refuses `hand-set` outright. **This
+   is the one thing §8.6's reversal needed that was written down nowhere** — before it, every
+   lead-in was measured by definition, so `source` had nothing to distinguish. **The mockup and the
+   prompts have been corrected to say `manual`.**
+2. **The debounce fired in the gap before the auto-repeat started.** `HOLD_DELAY` 380 ms,
+   `DEBOUNCE` 250 ms — so a plain debounce commits at t=250 and re-renders the list out from under
+   a cursor still holding the button. §8.5's finding a third time. **The mockup could not have found
+   it**: it re-rendered locally and instantly, with no round trip to land mid-press. Expect more of
+   that class from anything built against the mockup — *its fidelity ends where the network begins.*
+3. **Line 0 is not named in the help copy either.** The mockup said *"…line 0 included"*; §8.2's
+   wording was built instead, and **the mockup now matches**. §8.6 lists three ways line 0 must not
+   be marked; the one sentence of help copy was a fourth it did not think to name.
+4. **Page 2's rows render in `pages.py`, not in the page's JS** — the one deliberate departure from
+   the mockup, so §6's *every row carries its line's text* can be asserted about rows rather than
+   about the spelling of a JS template. The page fetches the same markup back from
+   `GET /review/rows`. One template, not two.
+5. **Many corrections at once, not one.** `anchor_lines` takes a mapping and PR 2's routes already
+   accepted one; limiting the page to a single edit would have been a new restriction. The rail and
+   the divider key off the **earliest** edited line, exactly as §8.9 predicted.
+6. **§6's old clause did not survive the inversion in letter.** Moving line 0 *does* re-anchor — it
+   goes through `anchor_lines` like any other override. What is true and now tested: **no raw onset
+   below it moves, and no band changes.**
+
+## Next actions
+
+1. **Repair and push the branch** — see *The stale docs commit* below. `2cb5af2` is a local,
+   unpushed commit that reverted half the spec; the merged spec is already written to disk and just
+   needs committing over it.
+2. **Merge #26**, then bump the umbrella's `projects/bombista` pointer (Code left it alone rather
+   than point it at an unmerged branch — correct).
+3. **PR 5 (cleanup)** — tempo out, `extractedAt` honest, provenance quiet, **audio findable**.
+   Four items now: §11.11's audio path joined the other three, because it writes the same
+   `asr-words.meta.json` that `extractedAt` needs. Paste-ready at the end of
+   `b20-serve-code-prompts.md`. Run after #26 merges.
+4. **`v1.0.0` ships when `serve` exists and line 3 of pimiento is fixable through it (§7).** After
+   PR 5, that is one acceptance run Jorge does by hand on the real canary — not a thing CI asserts.
+
+## The stale docs commit (2026-08-16) — what happened and how it was fixed
+
+On 2026-08-15 the spec was edited from two directions in the same hour. Cowork wrote the design
+decisions (§8.2, §9.3, §11.5, §11.9, §11.10) into the working tree; Claude Code wrote §11.11 and the
+§6/§8.6/§8.9 closures on `feat/b20-page2`. Both were newer than `main`; **neither contained the
+other.** `2cb5af2` (20:49) wrote its whole file over `886bfa8` (20:42) and reverted §11.11, plus it
+resurrected `docs/_to_delete/`. It survived only because `886bfa8` had already been pushed to #26.
+
+**Reconstructed by three-way merge against `0d4b999`** — one conflict, in a single sentence. The
+spec on disk now carries both halves. Recorded as **§11.12**, with the three rules it earns; the
+first is *a whole-file write is not an edit — diff before writing a doc the branch may have moved.*
 
 ## Design is closed. Prompts in `b20-serve-code-prompts.md`.
 
@@ -96,9 +166,10 @@ passed while proving nothing).
 4. **`linesHash` stays in the song file** (Jorge asked for the judgement). It guards the
    lyrics↔timeline correspondence *in that file*; in a report it is decorative. It should also
    appear in the report for the audit trail.
-5. **Bands, signals, ASR provenance and the hand-set record move to the report.** ⚠ **One open
-   question for Jorge:** whether a single `timelineSignedOff` timestamp stays in the song file. If
-   not, §3's edit-provenance clause has to be struck rather than left unsatisfied. §10.2.
+5. **Bands, signals, ASR provenance and the hand-set record move to the report.** ~~⚠ One open
+   question for Jorge: whether a single `timelineSignedOff` timestamp stays in the song file.~~
+   **Answered 2026-08-15: it stays** — see *Settled last* above. §3's edit-provenance clause is
+   satisfied by that one scalar. §10.2.
 6. ~~Page 3 folds `lyrics` by default.~~ **Reversed in the fourth pass** — the fold control was cut.
 7. **`Download timeline only` yields all five timing keys**, never a bare `timeline` array — a
    timeline without `linesHash` is exactly the unguarded artifact B4 exists to prevent.
@@ -141,7 +212,9 @@ passed while proving nothing).
 3. **The start time is the control.** One stepper in a popup, bounds clamp silently,
    **press-and-hold auto-repeats** (380 ms then 45 ms) — load-bearing, because line 3's error is
    1.22 s = 24 separate presses.
-4. **Line 0's number is the lead-in control** (§8.6). ⚠ **Still needs Jorge's confirmation.**
+4. ~~**Line 0's number is the lead-in control** (§8.6).~~ **Confirmed and then inverted,
+   2026-08-16: line 0 is not special at all** — same stepper as any other line, no lead-in control
+   anywhere. Built in #26. §8.6.
 5. **Signal glosses** move into `anchoring.py` beside the signal names — PR 1.
 6. **`Confirm timeline →` on page 2 goes to page 3.**
 
@@ -164,27 +237,24 @@ lives in the `DATA` object at the bottom of the mockup HTML.
 
 ## Still open
 
-- **Line 0 as the lead-in control** — Jorge to confirm (§8.6).
-- **One correction at a time?** The mockup carries one; `anchor_lines` already takes a mapping. The
-  rail and the divider would have to key off the *earliest* edited line. Decide before PR 3.
-- **Page 1's file pickers** (§9.6). `serve` needs a real filesystem path; a browser
-  `<input type="file">` gives a File object with none. Either a loopback filesystem-browse route or
-  accept-and-stage. Cutting the output-folder picker reduced this from three controls to two.
-  Must be resolved before PR 4.
+Everything that gated a PR is now closed. What is left is genuinely open, and none of it blocks
+`v1.0.0`:
+
+- **`serve <staging>` cannot name its own audio when the staging directory has moved** (§11.11).
+  PR 5 fixes it: `--audio`, then an absolute path in `asr-words.meta.json`, then the recorded
+  relative path, then a loud failure. **Never a substituted file.**
+- **Killing the transcription outright** (§11.6). Cancel currently abandons the worker rather than
+  killing it — the user's experience is correct and the cost is a thread finishing work nobody
+  reads. Not worth a subprocess boundary yet.
 - **Where the SP JSON format is documented** — a Tramoya-tab section on the website is the
   candidate, and page 1's *See an example* link points there. Not a B20 dependency.
 - **`intro`** — it exists in the song format, it is translated like a line, but it is not in
   `lyrics`, so it has no timeline entry and `linesHash` does not cover it. Passed through and
   ignored. If it is ever projected, that is a B4 problem.
-- **The quiet ink skin has had one round of Jorge's direction; the result is unreviewed** (§10.3).
-- Nothing has been committed to git. The three doc files and the mockup are **untracked working-tree
-  files**; they belong on the B20 branch, and that is Jorge's to do (repo rule: branch + PR, never
-  straight to main; submodule pointer bumps are his).
+- **The quiet ink skin was designed but never reviewed on the built pages** (§10.3). It has had one
+  round of Jorge's direction as a mockup; page 2 is now standing in a real browser, so the review
+  can finally be of the thing rather than of a drawing of it.
 
-## Next actions
-
-1. Run **PR 1** (signal glosses) — smallest, independent, unblocks the rest. Nothing gates it.
-2. **PR 2** (server + routes). Nothing gates it either.
-3. **PR 4** (masthead, pages 1, 1.5, 3, the step bar, the shared skin) — unblocked, run it next.
-4. Answer §8.6 (line 0), then **PR 3** (page 2).
-5. `v1.0.0` ships when `serve` exists **and** line 3 of pimiento is fixable through it (§7).
+**Closed since this list was written:** line 0 (§8.6, not special), one-correction-at-a-time (§8.9,
+many), page 1's file pickers (§9.6, `/api/browse`), and *nothing has been committed to git* — the
+docs are on GitHub as #21, #25 and #26.

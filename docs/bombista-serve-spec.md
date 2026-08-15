@@ -1,7 +1,7 @@
 # B20 — `bombista serve`: a local web interface
 
-**Status:** all four PRs shipped 2026-08-16 (#22, #23, #24, and page 2). Jorge's design,
-2026-08-14. Supersedes and absorbs
+**Status:** PRs 1, 2 and 4 merged (#22, #23, #24); **page 2 is PR #26 — open, 454 tests green.**
+One cleanup PR (PR 5) left. Jorge's design, 2026-08-14. Supersedes and absorbs
 **B19** — the editable review page is page 2 of this flow, not a separate item.
 
 ## Where things are in this document
@@ -20,7 +20,7 @@
 | **8** | **page 2 (Review) — what it looks like.** 8.1 stack · 8.2 the page top to bottom · 8.3 the row · 8.4 the stepper · 8.5 how a re-anchor shows · 8.6 line 0 (settled) · 8.7 confirming · 8.8 the fixture · 8.9 open |
 | **9** | **the chrome and the other three pages.** 9.1 masthead · 9.2 step bar · 9.3 page 1 Input · 9.4 page 1.5 Processing · 9.5 page 3 Output · 9.6 open |
 | **10** | **vocabulary, format, skin.** 10.1 names · 10.2 the SP JSON is the song JSON · **10.2.1 the two shapes** · 10.3 the skin |
-| **11** | **what building it found.** 11.1 corrected in place · 11.2 the lyrics argument · **11.3 the fixture** · 11.4 smaller · 11.5–11.10 what PR 4 found · **11.11 what page 2 found** |
+| **11** | **what building it found.** 11.1 corrected in place · 11.2 the lyrics argument · **11.3 the fixture** · 11.4 smaller · 11.5–11.10 what PR 4 found · **11.11 what page 2 found** · **11.12 how the docs nearly lost half of themselves** |
 
 ---
 
@@ -310,11 +310,28 @@ other is live.
 
 ### 8.2 The page, top to bottom
 
-1. **Provenance, open by default** — audio, sha256, model, when, measured lead-in, in two quiet
-   columns of dim mono under a hairline. Jorge, 2026-08-15: collapsed, the summary line was a
-   run-on that *"is not understandable"*. The first pass collapsed it because it was loud; the
-   answer was to make it quiet, not to hide it. A block that recedes can stay open, and open it
-   is legible at a glance. This is the general rule of §10.3 applied: **quiet, not hidden.**
+1. **Provenance — one quiet line, and that is all.** ⚠ **Reduced 2026-08-16.**
+
+   ```
+   Pimiento · pimiento.m4a · faster-whisper medium (es) · measured lead-in 8.92 s
+   ```
+
+   Three passes to get here and the third is Jorge's: *"I would refrain from showing any of this
+   info to the final user."* He is right, and the earlier reasoning was half-right in a way worth
+   recording. Pass one collapsed a full provenance table behind a `<details>` because it was loud.
+   Pass two opened it and made it quiet, on the rule *quiet, not hidden* — which fixed the volume
+   but not the **relevance**. Nothing on this page should be there unless it helps judge a line by
+   ear, and `sha256`, `device`, `toolVersion`, `extractedAt` and the audio duration help with
+   nothing while correcting. They answer questions nobody is asking at that moment.
+
+   What survives is the one question a correcting user does ask — *am I looking at the right
+   song and the right take?* — which is the filename, the model that heard it, and the measured
+   lead-in.
+
+   **Everything removed stays in `<stem>-report.json`.** It is not lost, it is filed. The report is
+   the audit artifact and can be as technical as it likes; the page cannot. §1's claim that *the
+   report's trustworthiness is the entire product* is about the report, and this is the sentence
+   that finally separates the two.
 2. **Sticky: the player, and the three band counts.** Nothing else is pinned.
 3. **One line of instruction, immediately above the table** — *Click a **START** time to adjust it.
    Press and hold to move fast — a whole missed word is about a second.* Jorge, 2026-08-15: it was
@@ -575,14 +592,17 @@ button on the page. *`Align →`* was too quiet for the one control that starts 
 
 - **slug** — derived from the filename, shown read-only.
 - **title** — the one text input on the whole flow.
-- **tempo** — ⚠ **cannot be a dropdown, and should not be a bpm field either. See §11.5.** A
-  dropdown cannot express 66.67; Claude Code correctly built a stepper in PR 4. But a bpm-only
-  block **breaks Pregonero's pulse** — `getBeatsPerBar` needs `numerator` and `denominator` and
-  produces `NaN` without them, while the scaling path keeps working, which is exactly the
-  split-brain failure `songs@c5adf65` deleted the placeholder blocks to avoid. The recommendation
-  in §11.5 is to drop the control entirely. Until that is decided, the text below stands as the
-  original intent: a control starting at *— not set —*, with a warning block beside it in the
-  REVIEW colour: *Tempo is never measured. Bombista answers when a line happens, not in which beat. Type the
+- ~~**tempo**~~ — **the control is removed, decided 2026-08-16. See §11.5.** Bombista emits no
+  `tempo` key at all, on either branch. What remains is a note, in the REVIEW colour, where the
+  control used to be:
+
+  > **Tempo is not Bombista's business.** Bombista answers *when* a line happens, not in which
+  > beat, so the emitted file carries no `tempo` block. Add it by hand from the Ableton project
+  > that produced this audio, where it is exact — all four values together (`bpm`, `numerator`,
+  > `denominator`, `countInBars`), because a partial block breaks Pregonero's pulse.
+
+  The original clause, kept so the removal is legible: a control starting at *— not set —*, with a
+  warning block beside it in the REVIEW colour: *Tempo is never measured. Bombista answers when a line happens, not in which beat. Type the
   value from the Ableton project that produced this audio, where it is exact.* Rules 4 and 5 stand,
   and B14 was dropped for this reason; the UI has to make it obvious this is a value Jorge supplies,
   never one the tool derived. **Left unset, the key is omitted from the emitted file entirely** —
@@ -1044,13 +1064,19 @@ So a bpm-only block gives **correct scaling and a broken pulse** — the same sp
 > **`tempo` is written whole — `bpm`, `numerator`, `denominator`, `countInBars` — or not written at
 > all.** There is no valid partial tempo block.
 
-**Recommendation, needs Jorge's yes: remove the tempo control from page 1 entirely.** Reasons: a
+**Decided 2026-08-16 (Jorge): remove the tempo control from page 1 entirely.** He had assumed it
+was already gone — the mockup's `.sp.json` branch has four rows and no tempo, and the control only
+ever appeared on the `.txt` branch, which is why it was invisible in review. PR 4 shipped it as
+`pages.py`'s `<input type="number" id="tempo">` and `server.py`'s `out["tempo"] = {"bpm": tempo_bpm}`
+— **a bpm-only block, exactly the shape that NaNs `getBeatsPerBar`.** Both come out.
+
+The reasoning that stands: Reasons: a
 whole block needs four fields on a page whose rule is four rows total; tempo is never Bombista's
 business (rules 4 and 5); and Jorge already types these in by hand — `songs@104b1ec` is literally
-*"Add tempo to seven songs (Jorge, typed in by hand)"*. §5's warning stays, as a **note** rather
-than a control: *tempo is never measured — add the block by hand once you have the real number from
-the Ableton project.* The `.txt` branch then emits no `tempo` key at all, which is already what
-§10.2.1 specifies.
+*"Add tempo to seven songs (Jorge, typed in by hand)"*. §5's warning stays as a **note** rather than a
+control, and it now names all four keys, because "add the tempo by hand" is bad advice if it leads
+to a bpm-only block. The `.txt` branch emits no `tempo` key at all, which is already what §10.2.1
+specifies.
 
 ### 11.6 Cancel abandons the worker rather than killing it
 
@@ -1087,11 +1113,14 @@ is *unsound* — it can start passing for reasons unrelated to the code. Redirec
   `cpu/int8`, `lang` `es`, `toolVersion`, plus `linesHash` and `leadIn.durationSec` 8.92. The run
   reproduced the canary exactly — **HIGH 18 / REVIEW 1 / FAIL 0**. `/api/session` will now return a
   populated `provenance` instead of `null`.
-- **§11.5** — Jorge's yes or no on removing the tempo control.
-- **§11.10** — `extractedAt` is stamped at report-write time, not extraction time.
-- **The docs are not on GitHub.** §11 and everything after the 2026-08-15 design rounds exist only
-  in Jorge's working tree. They survived PR 4's branch switches, but they need a `docs(B20)` commit
-  before another session reads them.
+- ~~**§11.5** — Jorge's yes or no on removing the tempo control.~~ **Decided: remove it.**
+- ~~**§11.10** — `extractedAt`.~~ **Decided: not displayed; not invented in the report either.**
+- ~~**The docs are not on GitHub.**~~ **Done.** §11.1–11.10 merged as #25; §11.11 and this
+  amendment ride on #26. **See §11.12 for the accident that nearly lost half of them.**
+- **Three things now ship in one cleanup PR** (PR 5), after page 2: the tempo control out,
+  `extractedAt` honest, and §11.11's audio path. They are one idea — *the page shows what helps you
+  judge a line, the report records what an audit needs, and nothing anywhere states a fact it did
+  not establish.* Prompt is at the end of the code-prompts file.
 
 ### 11.10 `extractedAt` lies on a `--words` re-run
 
@@ -1114,14 +1143,26 @@ correction loop, so most runs will be `--words` runs.
 `asr-words.jsonl` cannot answer this itself — it is bare word records, `{"text","start","end"}`, one
 per line, with no header (and adding one would break every reader).
 
-**Recommended fix, small:** `save_words` writes a sibling `asr-words.meta.json` — `extractedAt`,
-`model`, `device`, `lang`, audio `sha256` — and `--words` reads it back instead of stamping fresh.
-That stays true when the staging directory is copied, which an mtime does not. If the sibling is
-missing (an older staging dir), set `extractedAt: null` and `wordsReused: true` rather than invent
-a time; §8.2 can render *"reused, original run unknown"*, which is the honest sentence.
+**Decided 2026-08-16.** Jorge, on being shown this: *"I find the underlying problem very technical.
+I would refrain from showing any of this info to the final user."* That answers it twice over, and
+the fix is smaller than the original recommendation:
 
-**Not a PR 3 blocker** — page 2's provenance block renders either way. It is a small follow-up PR,
-and it belongs with §11.5's tempo decision in the same cleanup.
+1. **`extractedAt` is no longer displayed anywhere.** §8.2's provenance block is now one line —
+   filename, model, lead-in — and the timestamp is not on it. The user-visible half of the problem
+   is gone by deletion rather than by repair.
+2. **In the report JSON it must still not lie.** `save_words` writes a sibling
+   `asr-words.meta.json` — `extractedAt`, `model`, `device`, `lang`, audio `sha256` and, added
+   2026-08-16 for §11.11, the **absolute** audio path — and `--words` reads it back instead of
+   stamping fresh. A sibling file stays true when the staging directory is copied, which an mtime
+   does not. If it is missing (an older staging dir), **omit `extractedAt` entirely and set
+   `wordsReused: true`** rather than invent a time.
+
+A wrong timestamp in an audit file is worse than an absent one, and absent is cheap. Note the
+asymmetry this settles: *not shown* and *not recorded* are different decisions, and the report gets
+to be as technical as it likes precisely because nobody reads it while working.
+
+**Not a PR 3 blocker.** Ships with §11.5's tempo removal in one cleanup PR — and, since 2026-08-16,
+with §11.11's audio path, which is the same file answering the same kind of question.
 
 ---
 
@@ -1142,8 +1183,8 @@ exactly the fact being recorded. Copying the mockup would have written a file
 
 So `to_dict` grew a `source` argument, `serve` passes `manual` exactly when line 0 carries
 an override, and `"hand-set"` is refused at the serialiser rather than discovered two tools
-downstream. **The mockup should be corrected**; it is the reference implementation and the
-next reader will copy the string.
+downstream. ~~**The mockup should be corrected**~~ — **done 2026-08-16**, it now writes
+`manual`. It is the reference implementation and the next reader will copy the string.
 
 This is the one thing the §8.6 reversal needed that was not written down anywhere. Before
 it, every lead-in in the format was measured by definition, so the field had nothing to
@@ -1175,6 +1216,9 @@ think to name. A line singled out in the instructions is a special line; the poi
 reversal is that it is not one. If a user needs telling that line 0 is clickable, every
 other row has already told them.
 
+**The mockup was corrected to match, 2026-08-16**, along with the `hand-set` string above.
+§8.6 is now a fourth item: *not named in the help copy either.*
+
 ### Page 2 needed a row template the tests can read
 
 **A deliberate departure from the mockup, recorded so it is not "fixed" back.** The mockup
@@ -1204,6 +1248,17 @@ other file). **The fix belongs with §11.10's `asr-words.meta.json`**: both are 
 directory cannot say what it was made from", and an absolute path recorded once would answer
 both. A `--audio` option on `serve` is the smaller half of it.
 
+**Decided 2026-08-16: both halves ship in PR 5**, with §11.5 and §11.10. Reasoning, so it is
+not reopened: `asr-words.meta.json` is being written in that PR anyway, so the absolute path
+costs one key rather than a new file; and `--audio` is not a new concept but the third of
+three arguments page 1 already collects — `serve <staging> <lyrics> --audio <take>` says out
+loud what page 1 says with three pickers. **Resolution order is fixed and must be tested as
+such:** `--audio` if given, else the absolute path in `asr-words.meta.json`, else the run's
+recorded relative path resolved against the staging directory's parent, else fail loudly.
+**Never substitute another file** — an audio route that silently plays the wrong take makes
+every judgement made against it wrong, which is worse than a player that says it cannot find
+the take.
+
 ### The payload had no "before" for a band
 
 Minor, mentioned because it is the sort of thing a spec cannot notice. §8.5 wants a changed
@@ -1212,3 +1267,47 @@ band to show *its before and its after* on the row, and PR 2's `/api/session` ca
 is computed once at load beside the starts, for the same reason they are: re-deriving it
 from a run that already carries corrections would quietly turn the human's answer into the
 machine's.
+
+---
+
+## 11.12 The docs diverged in two places at once
+
+**Recorded because it is a process bug with a repo-shaped fix, and it cost half a spec.**
+
+On 2026-08-15 the spec was being edited from two directions in the same hour. Cowork was writing
+the design decisions — §8.2's provenance reduction, §9.3's tempo removal, §11.5 and §11.10's
+verdicts — into the working tree. Claude Code, on `feat/b20-page2`, was writing §11.11 and closing
+§6, §8.6 and §8.9 against the version of the spec that was on `main` when it branched.
+
+Both were correct. Both were newer than `main`. **Neither contained the other**, and the second
+commit to land wrote its whole file over the first:
+
+| commit | 20:42 `886bfa8` (Code) | 20:49 `2cb5af2` (Cowork's tree) |
+|---|---|---|
+| §11.11, §6/§8.6/§8.9 closures | ✅ | ✗ reverted |
+| §8.2, §9.3, §11.5, §11.9, §11.10 decisions | ✗ absent | ✅ |
+| `docs/_to_delete/` | deleted | ✗ resurrected |
+
+It survived only because `886bfa8` had been pushed to #26 before `2cb5af2` was made locally, so
+the losing half was still recoverable from the remote. **Had the push happened in the other order,
+§11.11 would have been gone with no copy anywhere.** Reconstructed 2026-08-16 by three-way merge
+against `0d4b999` as the base; one conflict, in a single sentence.
+
+**The rules this earns:**
+
+1. **A whole-file write is not an edit.** A session that holds a file in memory and writes it back
+   silently reverts anything committed under it. Diff before writing a doc the branch may have
+   moved: `git diff HEAD -- docs/<file>` should show *your* changes and nothing you do not
+   recognise. A stat line with more deletions than you made is the tell — `2cb5af2` deleted 144.
+2. **The spec is edited by one writer at a time.** Design decisions go in on `main` or on their own
+   docs branch and are merged before a build branch starts; findings from building go in on the
+   build branch. Never both in the same hour.
+3. **A resurrected `_to_delete/` is a stale-tree alarm.** Files deleted two commits ago reappearing
+   means the tree they came from predates the deletion, and whatever else that tree carries is
+   equally old.
+
+The wider point, and the reason this sits in §11 rather than in a commit message: **§11 is the only
+record of most of these decisions.** Losing it loses the reasoning, not the code — and the reasoning
+is what stops a later pass reintroducing a bpm-only tempo block or a lead-in widget. A spec that
+can be silently truncated by a routine `git commit` is a single point of failure for everything
+this document exists to prevent.

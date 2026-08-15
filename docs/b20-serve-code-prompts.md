@@ -1,15 +1,17 @@
 # B20 `serve` — Claude Code prompts
 
-Four PRs. **PRs 1, 2 and 4 shipped 2026-08-16** (#22, #23, #24, all merged). **PR 3 is the last one
-and is now unblocked** — see the note under its heading. Each is paste-ready. House rules
-apply throughout and are restated in each prompt because Code does not carry them between sessions:
-feature branch off `main`, strict red → green → refactor, Conventional Commits,
-`gh pr create --base main`, merge and pull `main` before starting the next.
+Five PRs. **PRs 1, 2 and 4 merged 2026-08-16** (#22, #23, #24). **PR 3 is built and open as #26**
+(454 tests green). **PR 5 is the only unrun prompt** — it is at the end of this file and runs once
+#26 merges. Each is paste-ready. House rules apply throughout and are restated in each prompt
+because Code does not carry them between sessions: feature branch off `main`, strict
+red → green → refactor, Conventional Commits, `gh pr create --base main`, merge and pull `main`
+before starting the next.
 
-**Read §11 first — all of it.** Building PRs 1, 2 and 4 found twelve problems in the spec. Most are
-corrected in place; the ones that change what PR 3 can assume are §11.2 (`serve` takes lyrics as a
-second argument), §11.3 (the fixture, settled), §11.5 (tempo is whole or absent — checked against
-Pregonero) and §11.8 (tests must never touch a real user path).
+**Read §11 first — all of it.** Building PRs 1–4 found nineteen problems in the spec. Most are
+corrected in place; the ones that change what PR 5 can assume are §11.2 (`serve` takes lyrics as a
+second argument), §11.5 (tempo is whole or absent — checked against Pregonero), §11.8 (tests must
+never touch a real user path), §11.10 (`extractedAt` and the `asr-words.meta.json` sibling) and
+§11.11 (`leadIn.source` is `manual`, never `hand-set`; and the audio path).
 
 Reference material Code should read before touching anything: `docs/bombista-serve-spec.md`
 (§3 the four states, §4 invariants, §6 obligations, **§8 page 2's design**, **§9 pages 1/1.5/3**,
@@ -177,7 +179,8 @@ Commit as `feat(serve): local HTTP server and the re-anchor/emit routes`, then
 > at emit no matter how the value got there. It was being defended at the wrong layer.
 >
 > Verified in the mockup: moving line 0 from 8.92 to 9.32 leaves line 1's RAW onset at 18.44
-> (no ripple), sets `leadIn.durationSec` to 9.32 with `source: "hand-set"`, keeps entry 0 at 0.00,
+> (no ripple), sets `leadIn.durationSec` to 9.32 with `source: "manual"` — the v2 contract takes
+> `"measured" | "manual" | "none"` and has no `hand-set`, see §11.11 — keeps entry 0 at 0.00,
 > and shifts every cue-relative value by −0.40. Reproduce that as a test.
 >
 > **§11.3 the fixture — settled: two tiers.** A synthetic fixture, committed, runs in CI and proves
@@ -425,3 +428,100 @@ Commit as `feat(serve): pages 1, 1.5 and 3, and the step bar`, then `gh pr creat
 `v1.0.0` is gated on `serve` shipping **and** line 3 of pimiento being fixable through it (§7).
 PR 3 closes the second half — which is why it runs last now, not first: the gate is an acceptance
 run Jorge does by hand on the real canary, and it wants the whole flow standing.
+
+---
+
+## PR 5 — cleanup: tempo out, `extractedAt` honest, provenance quiet, audio findable
+
+**Branch:** `chore/b20-cleanup` · **Run after #26 merges.** Four unrelated-looking changes that
+are one idea: *the page shows what helps you judge a line; the report records what an audit needs;
+nothing anywhere states a fact it did not establish.* Items 2 and 4 write the same file — do them
+in one pass.
+
+```
+Read docs/bombista-serve-spec.md §8.2, §9.3, §11.5 and §11.10 first, plus CLAUDE.md.
+All four are decisions already taken — this PR implements them, it does not reopen them.
+
+1. REMOVE the tempo control from page 1 (§9.3, §11.5).
+
+   - bombista/pages.py: delete the `<input type="number" id="tempo">` row and the JS that
+     reads it into the request body.
+   - bombista/server.py: delete the tempo_bpm parameter and `out["tempo"] = {"bpm": tempo_bpm}`.
+     Bombista now emits NO tempo key on either branch, ever.
+   - Replace the control with the note in §9.3, which must name ALL FOUR keys — bpm,
+     numerator, denominator, countInBars. "Add the tempo by hand" is bad advice on its own,
+     because it leads to exactly the bpm-only block this PR is deleting.
+
+   WHY, so it does not come back: tempo.bpm is both Pregonero's scaling denominator
+   (performedTempo.ts) and the driver of its visual pulse (beatScheduler.ts). SongTempo declares
+   numerator and denominator as REQUIRED; getBeatsPerBar does `numerator % 3`, so a bpm-only
+   block returns NaN and the pulse and count-in break while the scaling keeps working. That is
+   the same split-brain songs@c5adf65 deleted the placeholder blocks to avoid, one key deeper.
+
+   Tests: assert no emitted file on either branch contains a `tempo` key; assert page 1 has no
+   tempo input; assert nothing in the emit path can construct a partial tempo block.
+
+2. STOP `extractedAt` LYING on a --words re-run (§11.10).
+
+   Today it is stamped when the report is written, so on any --words run — which §9.4 makes THE
+   correction loop, so most runs — it claims the machine listened at a time when transcription
+   was skipped.
+
+   - save_words writes a sibling `asr-words.meta.json`: extractedAt, model, device, lang, and
+     the audio sha256.
+   - --words reads it back and carries those values forward instead of stamping fresh.
+   - If the sibling is missing (an older staging dir), OMIT extractedAt entirely and set
+     `wordsReused: true`. Do not invent a time and do not fall back to an mtime — an mtime does
+     not survive the staging directory being copied.
+
+   Tests: a --words run carries the ORIGINAL extractedAt, not the run time; a --words run
+   against a staging dir with no sibling omits the field rather than inventing one; a normal
+   run writes both the words and the sibling.
+
+3. REDUCE page 2's provenance to one line (§8.2).
+
+   Exactly: `Pimiento · pimiento.m4a · faster-whisper medium (es) · measured lead-in 8.92 s`
+   Quiet mono, dim, one hairline under it. No <details>, no table, no columns.
+
+   Everything removed — sha256, device, toolVersion, extractedAt, audio duration — STAYS in
+   <stem>-report.json. It is filed, not lost. The page is for judging lines by ear; the report
+   is the audit artifact and may be as technical as it likes.
+
+   Test: page 2 contains no sha256, no toolVersion and no ISO timestamp; the report JSON still
+   contains all three.
+
+4. LET A STAGING DIRECTORY NAME ITS OWN AUDIO (§11.11, decided 2026-08-16).
+
+   Page 2's audio route needs the take, and `serve <staging> <lyrics>` has no audio argument,
+   so it falls back to the path the run recorded. `align` stores that AS IT WAS GIVEN, so
+   staging/pimiento holds `../../songs/audio/pimiento.m4a`, which resolves only from the
+   directory that run happened in. Copy the staging dir and the player has nothing.
+
+   Same problem as item 2 and the same fix, so do them together:
+
+   - Add the audio path to `asr-words.meta.json` as an ABSOLUTE path (item 2 writes that
+     file already — this is one more key, not another file).
+   - Add a `--audio <path>` option to `serve`. This is not a new concept: page 1 already
+     collects lyrics, media and language as three pickers.
+   - Resolution order, and TEST IT AS AN ORDER — each step reached only when the one above
+     it yields nothing:
+       1. `--audio` if given
+       2. the absolute path in `asr-words.meta.json`
+       3. the run's recorded relative path, resolved against the staging directory's parent
+       4. fail loudly — the route says the take is not where the run recorded it
+   - NEVER substitute another file, and never fall back to "the only audio file nearby".
+     An audio route that silently plays the wrong take makes every judgement the user made
+     against it wrong, and they will not know. A player that says it cannot find the take is
+     strictly better than one that finds the wrong one.
+
+   Tests: a staging dir with a meta sibling resolves after being MOVED to a new parent; an
+   explicit --audio beats the sibling; an old staging dir with neither still resolves through
+   the relative path when it is run from the original parent; a staging dir whose audio is
+   genuinely gone returns a loud error and not some other file on disk.
+
+Do not change any band, threshold, signal name, or the anchoring itself. Tests must never touch
+a real user path — keep the autouse fixture that redirects the staging root at tmp_path (§11.8).
+
+Commit as `chore(serve): drop the tempo control, and stop the report and the player guessing`,
+then `gh pr create --base main`.
+```

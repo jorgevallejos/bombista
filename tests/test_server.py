@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import ast
 import json
+import shutil
 import threading
 import urllib.error
 import urllib.request
@@ -699,3 +700,91 @@ def test_the_cli_renders_a_session_failure_as_a_click_error(tmp_path):
     assert result.exit_code != 0
     assert "asr-words.jsonl" in result.output
     assert "Traceback" not in result.output
+
+
+# ---------------------------------------------------------------------------
+# §11.11 — a staging directory names its own audio, in a fixed order
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def take(tmp_path: Path) -> Path:
+    """The take a session's timings were measured against."""
+    audio = tmp_path / "media" / "numeros.m4a"
+    audio.parent.mkdir()
+    audio.write_bytes(b"\x00" * 64)
+    return audio
+
+
+def _with_meta(staging: Path, **meta) -> None:
+    (staging / "asr-words.meta.json").write_text(json.dumps(meta), encoding="utf-8")
+
+
+def test_an_explicit_audio_argument_beats_the_sibling(staging, take, tmp_path):
+    """Step 1 of the order. `serve <staging> <lyrics> --audio <take>` says
+    out loud what page 1 says with three pickers, and what the user names
+    wins over what a previous run recorded."""
+    other = tmp_path / "media" / "other.m4a"
+    other.write_bytes(b"\x00" * 64)
+    _with_meta(staging, audio=str(other))
+    session = server.load_session(
+        staging, staging.parent / "numeros.json", lang="es", audio_path=take
+    )
+
+    assert server.audio_path_for(session) == take
+
+
+def test_the_sibling_resolves_the_take_after_the_staging_dir_is_moved(
+    staging, take, tmp_path, monkeypatch
+):
+    """Step 2, and the reason the path in the sibling is absolute. `align`
+    records the media path as it was given, so a relative one resolves only
+    from the directory that run happened in — copy the staging directory
+    somewhere else and the player has nothing."""
+    _with_meta(staging, audio=str(take))
+    moved = tmp_path / "elsewhere" / "staging"
+    moved.parent.mkdir()
+    shutil.copytree(staging, moved)
+    shutil.copyfile(staging.parent / "numeros.json", moved.parent / "numeros.json")
+    monkeypatch.chdir(tmp_path / "elsewhere")
+
+    session = server.load_session(moved, moved.parent / "numeros.json", lang="es")
+
+    assert server.audio_path_for(session) == take.resolve()
+
+
+def test_the_recorded_relative_path_is_only_reached_when_the_sibling_says_nothing(
+    staging, take, tmp_path, monkeypatch
+):
+    """Step 3 — an older staging directory, written before the sibling
+    existed. It still resolves, from the directory the run happened in."""
+    (staging / "numeros-report.json").write_text(
+        json.dumps({"source": {"audio": "media/numeros.m4a", "lang": "es"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    session = server.load_session(staging, staging.parent / "numeros.json", lang="es")
+
+    assert not (staging / "asr-words.meta.json").exists()
+    assert server.audio_path_for(session) == take.resolve()
+
+
+def test_a_take_that_is_genuinely_gone_is_said_plainly_not_substituted(
+    staging, take, tmp_path, monkeypatch
+):
+    """Step 4. There is another audio file right there and it is not
+    offered: an audio route that silently plays the wrong take makes every
+    judgement the user made against it wrong, and they will not know."""
+    _with_meta(staging, audio=str(tmp_path / "media" / "vanished.m4a"))
+    (staging / "numeros-report.json").write_text(
+        json.dumps({"source": {"audio": "media/vanished.m4a", "lang": "es"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    session = server.load_session(staging, staging.parent / "numeros.json", lang="es")
+
+    with pytest.raises(ValueError) as excinfo:
+        server.audio_path_for(session)
+
+    assert "vanished.m4a" in str(excinfo.value)
+    assert take.exists(), "the fixture's real take is still on disk"

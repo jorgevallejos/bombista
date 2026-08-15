@@ -11,6 +11,16 @@ streaming/real-time candidate).
 `save_words` / `load_words` round-trip a `list[Word]` to JSONL so the CLI
 can cache a transcription run (a `medium`-model pass over a full song is
 tens of seconds) instead of re-running the model on every invocation.
+
+`save_words` also files a sibling `asr-words.meta.json` — the facts the
+word stream cannot state about itself (B20 §11.10, §11.11). The JSONL is
+bare `{"text","start","end"}` records with no header, and adding one
+would break every reader, so *when* the machine listened, *which* model
+heard it and *where* the take actually is go in a file beside it. A file
+rather than an mtime, because an mtime does not survive the staging
+directory being copied. This module builds neither dict: it writes what
+it is handed and reads it back, so `provenance.py` stays the one place
+that decides what a run recorded.
 """
 from __future__ import annotations
 
@@ -52,13 +62,62 @@ def transcribe_words(
     ]
 
 
-def save_words(words: Sequence[Word], path: Path) -> None:
-    """Write *words* to *path* as JSONL, one `{"text", "start", "end"}` object per line."""
+WORDS_META_FILENAME = "asr-words.meta.json"
+"""The sibling `save_words` files beside the stream. Named for the stream
+rather than for the song, because it describes the transcription and
+travels with it — copy the one and the other comes along."""
+
+
+def words_meta_path(words_path: Path) -> Path:
+    """The sibling that belongs to *words_path*."""
+    return Path(words_path).with_name(WORDS_META_FILENAME)
+
+
+def save_words(words: Sequence[Word], path: Path, *, meta: dict | None = None) -> None:
+    """Write *words* to *path* as JSONL, one `{"text", "start", "end"}` object per line.
+
+    *meta*, when given, is written verbatim to the sibling
+    `asr-words.meta.json` — `provenance.words_meta` builds it. Omitted, no
+    sibling is written: a stream saved with nothing to say about itself
+    should not leave a file claiming otherwise.
+    """
     lines = (
         json.dumps({"text": w.text, "start": w.start, "end": w.end}, ensure_ascii=False)
         for w in words
     )
     Path(path).write_text("\n".join(lines) + ("\n" if words else ""), encoding="utf-8")
+    if meta is not None:
+        save_words_meta(meta, path)
+
+
+def save_words_meta(meta: dict, words_path: Path) -> None:
+    """Write *meta* to the sibling beside *words_path*.
+
+    Separate from `save_words` because `align --words` copies a stream it
+    did not transcribe: the words are copied, and the facts about them
+    have to travel with the copy or the new staging directory is the
+    older-staging-directory case one run later.
+    """
+    words_meta_path(words_path).write_text(
+        json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+
+
+def load_words_meta(words_path: Path) -> dict | None:
+    """The sibling beside *words_path*, or None when there is none to read.
+
+    None covers every way this can fail — no sibling (a staging directory
+    written before they existed), unreadable, or not an object — because
+    the caller does the same thing in all of them: omit the field rather
+    than invent a value. A half-written sibling is not better evidence
+    than no sibling.
+    """
+    path = words_meta_path(words_path)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def load_words(path: Path) -> list[Word]:

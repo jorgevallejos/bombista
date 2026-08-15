@@ -197,22 +197,26 @@ def test_page_1_offers_the_three_models_with_their_cost(page1):
     assert "~50 s" in models
 
 
-def test_the_tempo_control_is_a_stepper_and_starts_unset(page1):
-    """§9.3 calls it a dropdown, but a dropdown cannot express 66.67 —
-    pimiento's real bpm. §3's own list allows a stepper, which a number
-    input is, and which can. Starts empty: unset means the key is omitted."""
-    tempo = re.search(r'<input[^>]*id="tempo"[^>]*>', page1).group(0)
+def test_page_1_has_no_tempo_control_at_all(page1):
+    """§9.3 and §11.5, decided 2026-08-16: the control comes out. PR 4
+    shipped it as a stepper that could only ever produce `{"bpm": …}`, and
+    a bpm-only block NaNs Pregonero's `getBeatsPerBar` — correct scaling,
+    broken pulse. A control that cannot ask for a whole tempo block should
+    not ask for part of one."""
+    assert 'id="tempo"' not in page1
+    assert not re.search(r"<input[^>]*tempo", page1, re.I)
 
-    assert 'type="number"' in tempo
-    assert 'value=""' in tempo
-    assert 'placeholder="— not set —"' in tempo
 
-
-def test_page_1_warns_that_tempo_is_never_measured(page1):
+def test_page_1_says_tempo_is_not_bombistas_business_and_names_all_four_keys(page1):
+    """The note that replaces the control (§9.3). It must name all four
+    keys: *add the tempo by hand* is bad advice on its own, because it
+    leads to exactly the bpm-only block this note exists to prevent."""
     text = visible_text(page1)
 
-    assert "Tempo is never measured" in text
+    assert "Tempo is not Bombista's business" in text
     assert "Ableton" in text
+    for key in ("bpm", "numerator", "denominator", "countInBars"):
+        assert key in text, f"the note does not name {key}"
 
 
 def test_page_1_shows_the_slug_read_only(page1):

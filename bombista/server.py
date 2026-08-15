@@ -58,11 +58,11 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from . import pages
-from .aligner import load_words, save_words, transcribe_words
+from .aligner import load_words, load_words_meta, save_words, transcribe_words
 from .anchoring import SIGNAL_GLOSSES, anchor_lines, parse_anchor_overrides
 from .models import Word
 from .pipeline import build_timeline, lyric_lines, normalize_to_lead_in
-from .provenance import build_provenance, compute_lines_hash
+from .provenance import build_provenance, compute_lines_hash, words_meta
 from .readers import read_lyrics_input
 from .report import band_counts, render_qa_report
 from .serializer import to_dict
@@ -165,37 +165,32 @@ def _input_paths(staging_dir: Path, lyrics_path: Path, stem: str) -> frozenset[P
     return frozenset(path.resolve() for path in paths)
 
 
-def _from_scratch_song(
-    song: dict, *, lang: str, title: str | None, tempo_bpm: float | None
-) -> dict:
+def _from_scratch_song(song: dict, *, lang: str, title: str | None) -> dict:
     """§10.2.1's from-scratch shape — a `.txt` came in, so the song file
     does not exist yet and Bombista writes one with only what a plain text
     plus step 1 can honestly supply.
 
-    **`tempo` is omitted, never a null scaffold.** `songs@c5adf65` removed
-    placeholder tempo blocks *"outright — not replaced with a flag or a
-    null"*: `tempo.bpm` is both Pregonero's scaling denominator and its
-    visual pulse, and an invented number cannot serve both, so there is no
-    setting that corrects for it. Pregonero degrades safely when the key is
-    absent. `null` is not neutral once a consumer reads it.
-
-    **Only `bpm` is written, and only when a human typed one.** Page 1 asks
-    for the number from the Ableton project that produced the audio, where
-    it is exact. It does not ask for the meter, and Bombista will not
-    invent `4/4` to fill the block out — that is the same mistake as the
-    null, one key further in.
+    **There is no meter here, and that is the point** (§11.5, decided
+    2026-08-16). An earlier pass wrote `{"bpm": <a number page 1 asked
+    for>}`. Checked against Pregonero: `performedTempo.ts` degrades
+    perfectly without a tempo block, but `beatScheduler.ts` declares
+    `numerator` and `denominator` as required and does `numerator % 3`, so
+    a bpm-only block returns NaN and the visual pulse and count-in break
+    while the scaling keeps working. That is the same split brain
+    `songs@c5adf65` deleted the placeholder blocks to avoid, one key
+    deeper. So: **`tempo` is written whole or not at all**, Bombista
+    cannot write it whole — it never measures a meter and will not invent
+    `4/4` — and therefore it does not write it. Jorge types these in by
+    hand from the Ableton project, where they are exact.
     """
     resolved_title = title or song.get("title") or ""
-    out: dict = {
+    return {
         "title": resolved_title,
         "artist": "",
         "notes": "",
         "title_translations": {lang: resolved_title},
+        "lyrics": song.get("lyrics", []),
     }
-    if tempo_bpm is not None:
-        out["tempo"] = {"bpm": tempo_bpm}
-    out["lyrics"] = song.get("lyrics", [])
-    return out
 
 
 def _find_provenance(staging_dir: Path, stem: str) -> dict | None:
@@ -207,9 +202,16 @@ def _find_provenance(staging_dir: Path, stem: str) -> dict | None:
     moment, not the run whose timings are on screen, and would make booting
     a session wait on a hash of a file the routes never otherwise touch.
 
-    Returns None when the staging directory holds neither carrier (the
-    default `--emit timeline` writes a bare envelope, which by contract
-    cannot carry provenance). The caller says so rather than inventing one.
+    Three carriers, richest first: the report JSON, an `--emit songjson`
+    output's `_bombista.source`, and — added with §11.10 — the
+    `asr-words.meta.json` sibling. The sibling carries less (no duration,
+    no tool version) but it is always there after a transcription, which
+    the other two are not: the default `--emit timeline` writes a bare
+    envelope, which by contract cannot carry provenance. It is also the
+    only one a run started from page 1 leaves behind.
+
+    Returns None when the directory holds none of the three. The caller
+    says so rather than inventing one.
     """
     report_json = staging_dir / f"{stem}-report.json"
     if report_json.exists():
@@ -225,7 +227,7 @@ def _find_provenance(staging_dir: Path, stem: str) -> dict | None:
         if isinstance(bombista, dict) and isinstance(bombista.get("source"), dict):
             return bombista["source"]
 
-    return None
+    return load_words_meta(staging_dir / WORDS_FILENAME)
 
 
 def load_session(
@@ -236,7 +238,6 @@ def load_session(
     audio_path: Path | None = None,
     model_size: str = "medium",
     title: str | None = None,
-    tempo_bpm: float | None = None,
 ) -> Session:
     """Boot a session from a staging directory and the lyrics it was
     aligned against.
@@ -259,7 +260,7 @@ def load_session(
     normalised = read_lyrics_input(lyrics_path, lang=lang)
     from_scratch = normalised.bombista.get("completeness") == "partial"
     song = (
-        _from_scratch_song(normalised.song, lang=lang, title=title, tempo_bpm=tempo_bpm)
+        _from_scratch_song(normalised.song, lang=lang, title=title)
         if from_scratch
         else normalised.song
     )
@@ -468,10 +469,10 @@ def build_sp_json(
     which are objects keyed by language and would lose every translation if
     they were ever flattened.
 
-    `timelineSignedOff` is `None` until a JSON download is taken. That is
-    not a placeholder in the sense `tempo` is: the key belongs in the file
-    and its value is the fact being recorded, so a preview showing `null`
-    is telling the truth — this run has not been signed off yet.
+    `timelineSignedOff` is `None` until a JSON download is taken, and that
+    is not a null scaffold: the key belongs in the file and its value is
+    the fact being recorded, so a preview showing `null` is telling the
+    truth — this run has not been signed off yet.
 
     Bands, signals and the per-line hand-set record are NOT in here. They
     belong to the report (§10.2): a song file is a song, and every consumer
@@ -536,10 +537,28 @@ def render_report(session: Session) -> str:
         model_size=session.model_size,
         lang=session.lang,
         staging_dir=session.staging_dir,
-        provenance=session.provenance or _unknown_provenance(session),
+        provenance=_report_provenance(session),
         stripped_lines=session.stripped_lines,
         hand_set=hand_set,
     )
+
+
+def _report_provenance(session: Session) -> dict:
+    """The provenance the markdown report renders, complete by construction.
+
+    The report reads every key; a session's provenance may carry only some
+    of them. `asr-words.meta.json` is the case that made this necessary
+    (§11.10): it is a real carrier and always present after a
+    transcription — the only one a run started from page 1 leaves behind —
+    but it records what the transcription established and no more, so it
+    has no duration and no tool version.
+
+    So the unknowns are laid down first and what the run actually recorded
+    is laid over them. An audit document that says `unknown` is telling
+    the truth; one that cannot render at all tells the user nothing, and
+    one that guessed would be worse than both.
+    """
+    return {**_unknown_provenance(session), **(session.provenance or {})}
 
 
 def _unknown_provenance(session: Session) -> dict:
@@ -693,7 +712,24 @@ class Run:
                 )
                 if self.cancelled:
                     return
-                save_words(words, words_path)
+                # The sibling is filed here and nowhere else on this path:
+                # a run started from page 1 writes no report JSON, so
+                # without it the staging directory could say neither when
+                # the machine listened nor where the take is (§11.10,
+                # §11.11). `build_provenance` streams the audio's sha256,
+                # which is the same work `align` does once per run.
+                save_words(
+                    words,
+                    words_path,
+                    meta=words_meta(
+                        build_provenance(
+                            media,
+                            model_size=self.request["model"],
+                            lang=self.request["lang"],
+                        ),
+                        media,
+                    ),
+                )
                 self._finish("transcribe")
 
             if self.cancelled:
@@ -708,7 +744,6 @@ class Run:
                 audio_path=media,
                 model_size=self.request["model"],
                 title=self.request.get("title"),
-                tempo_bpm=self.request.get("tempo"),
             )
             if self.cancelled:
                 return
@@ -774,7 +809,6 @@ def start_run(holder: Holder, body: dict) -> dict:
         "model": model,
         "staging": str(staging),
         "title": body.get("title"),
-        "tempo": body.get("tempo"),
     }
     holder.session = None
     holder.run = Run(holder, request)
@@ -850,13 +884,34 @@ def audio_path_for(session: Session) -> Path:
 
     **The audio-clock rule is why this is fussy** (CLAUDE.md): a timeline
     is only meaningful against the take it was measured from, so the wrong
-    file is worse than no file. The provenance path is stored as `align`
-    received it, which may be relative to the directory that run happened
-    in, so it is tried against the plausible roots and then given up on —
-    never swapped for some other audio that happens to be nearby.
+    file is worse than no file.
+
+    **Four steps, in this order, each reached only when the one above it
+    yields nothing** (§11.11, fixed 2026-08-16):
+
+    1. what the user named — `serve --audio`, or page 1's media picker;
+    2. the absolute path in `asr-words.meta.json`, which is what makes a
+       staging directory that has been moved or copied still findable;
+    3. the run's own recorded path, which `align` stores **as it was
+       given** — `staging/pimiento` holds `../../songs/audio/pimiento.m4a`
+       — so it is tried against the roots that spelling could have been
+       relative to, the directory the run happened in included;
+    4. fail loudly.
+
+    **Never substitute another file.** An audio route that silently plays
+    the wrong take makes every judgement the user made against it wrong,
+    and they will not know. A player that says it cannot find the take is
+    strictly better than one that finds the wrong one — so there is no
+    "the only audio file nearby" step, and there must not be.
     """
     if session.audio_path and session.audio_path.is_file():
         return session.audio_path
+
+    filed = (load_words_meta(session.staging_dir / WORDS_FILENAME) or {}).get("audio")
+    if isinstance(filed, str) and filed:
+        candidate = Path(filed)
+        if candidate.is_file():
+            return candidate.resolve()
 
     recorded = (session.provenance or {}).get("audio")
     if isinstance(recorded, str) and recorded:
@@ -865,10 +920,11 @@ def audio_path_for(session: Session) -> Path:
             if candidate.is_file():
                 return candidate
 
+    named = filed or recorded or "unrecorded"
     raise ValueError(
-        "no audio for this run — the media source is not where the run "
-        f"recorded it ({recorded or 'unrecorded'}). Start again at step 1 "
-        "and choose it, or the player has nothing to play."
+        "no audio for this run — the take is not where the run recorded it "
+        f"({named}). Pass `--audio <file>`, or start again at step 1 and "
+        "choose it. The player will not play a different take."
     )
 
 

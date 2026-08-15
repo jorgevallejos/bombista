@@ -109,6 +109,66 @@ def build_provenance(
     }
 
 
+WORDS_META_KEYS = ("extractedAt", "model", "device", "lang", "sha256")
+"""What `asr-words.meta.json` carries out of a provenance block, beside
+the absolute audio path. Everything a later run cannot re-establish about
+the transcription that produced the stream."""
+
+REUSED_KEYS = ("extractedAt", "model", "device", "lang")
+"""What a `--words` run takes back from the sibling (B20 §11.10).
+
+Exactly the four facts about *when and how the machine listened*, which a
+run that skipped transcription did not establish. `sha256`, `durationSec`
+and `audio` are NOT among them: that run did hash the file it was pointed
+at, and those three are one coherent description of one file on disk —
+which is the whole of what B1 exists to record. Overwriting a live
+description with a recorded one would split it across two runs.
+"""
+
+
+def words_meta(provenance: dict, audio_path: Path) -> dict:
+    """The `asr-words.meta.json` sibling's content, from a run's provenance.
+
+    The audio path is stored **absolute**, and this is the one place the
+    two differ. `provenance["audio"]` is the path as `align` was given it,
+    which is the honest record of the invocation but resolves only from
+    the directory that run happened in — `staging/pimiento` holds
+    `../../songs/audio/pimiento.m4a`. Copy the staging directory and the
+    player has nothing (B20 §11.11). The sibling answers *where the take
+    is*, so it says so in full.
+    """
+    meta = {key: provenance[key] for key in WORDS_META_KEYS if key in provenance}
+    meta["audio"] = str(Path(audio_path).resolve())
+    return meta
+
+
+def provenance_for_reused_words(provenance: dict, meta: dict | None) -> dict:
+    """A `--words` run's provenance: what this run established, plus what
+    the run that actually transcribed recorded (B20 §11.10).
+
+    `extractedAt` is a claim about **when the machine listened**, and on a
+    `--words` run faster-whisper never runs — so stamping it fresh makes
+    the report say the machine listened at the moment the report was
+    written. §9.4 makes reusing the word stream *the* correction loop, so
+    that is most runs, not an edge case.
+
+    With no sibling (an older staging directory) the field is **omitted**
+    and `wordsReused` says why. A wrong timestamp in an audit file is
+    worse than an absent one, and absent is cheap. Never an mtime: it does
+    not survive the directory being copied, which is the failure the
+    sibling exists to avoid.
+    """
+    carried = dict(provenance)
+    carried["wordsReused"] = True
+    if meta is None:
+        carried.pop("extractedAt", None)
+        return carried
+    for key in REUSED_KEYS:
+        if key in meta:
+            carried[key] = meta[key]
+    return carried
+
+
 def compute_lines_hash(lines: Sequence[str]) -> str:
     """`linesHash` — B4 (docs/bombista-product-backlog.md §1, §4).
 

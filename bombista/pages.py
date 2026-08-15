@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 from html import escape as html_escape
+from pathlib import Path
 
 __all__ = [
     "STYLESHEET",
@@ -223,20 +224,11 @@ pre.json { background: var(--surface); border: 1px solid var(--line-2);
 .band-REVIEW { color: var(--review); }
 .band-FAIL { color: var(--fail); }
 
-/* ---------- page 2 — provenance: open by default, quiet enough to be (§8.2) ---------- */
-details.prov { margin: 1.2rem 0 0; font-size: .8rem;
-               border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-details.prov > summary { cursor: pointer; padding: .5rem 0; list-style: none;
-                         font: 400 .72rem/1.45 var(--mono); color: var(--dim);
-                         text-transform: uppercase; letter-spacing: .11em; }
-details.prov > summary::-webkit-details-marker { display: none; }
-details.prov > summary:hover { color: var(--paper); }
-details.prov ul { list-style: none; margin: 0; padding: 0 0 .7rem;
-                  font: 400 .72rem/1.7 var(--mono); color: var(--dimmer);
-                  columns: 2; column-gap: 2.5rem; }
-details.prov li { break-inside: avoid; overflow-wrap: anywhere; }
-details.prov li b { color: var(--dim); font-weight: 400; display: inline-block;
-                    min-width: 8.5rem; }
+/* ---------- page 2 — provenance: one quiet line, one hairline (§8.2) ---------- */
+p.prov { margin: 1.2rem 0 0; padding: 0 0 .55rem;
+         border-bottom: 1px solid var(--line);
+         font: 400 .72rem/1.7 var(--mono); color: var(--dimmer);
+         overflow-wrap: anywhere; }
 
 /* ---------- page 2 — the sticky player, and nothing else is pinned ---------- */
 .sticky { position: sticky; top: 0; z-index: 20; background: var(--bg);
@@ -450,7 +442,6 @@ _INPUT_JS = """\
   }
 
   document.getElementById("process").addEventListener("click", function () {
-    var tempo = document.getElementById("tempo").value;
     var body = {
       lyrics: state.lyrics,
       media: state.media,
@@ -459,7 +450,6 @@ _INPUT_JS = """\
     };
     if (state.branch === "txt") {
       body.title = document.getElementById("title").value;
-      if (tempo) { body.tempo = parseFloat(tempo); }
     }
     fetch("/api/run", {
       method: "POST",
@@ -955,35 +945,44 @@ def render_rows(payload: dict) -> str:
 
 
 def _provenance(payload: dict) -> str:
-    """§8.2, item 1: open by default, in two quiet columns of dim mono.
+    """§8.2, item 1: **one quiet line**, and that is all.
 
-    Collapsed, its summary line was a run-on that *"is not understandable"*.
-    The first pass hid it because it was loud; the answer was to make it
-    recede. **Quiet, not hidden** — a block that recedes can stay open, and
-    open it is legible at a glance.
+    Three passes to get here, and the third is Jorge's — *"I would refrain
+    from showing any of this info to the final user."* Pass one collapsed a
+    full provenance table behind a `<details>` because it was loud; pass
+    two opened it and made it recede, on the rule *quiet, not hidden*,
+    which fixed the volume but not the **relevance**. Nothing on this page
+    belongs here unless it helps judge a line by ear, and `sha256`,
+    `device`, `toolVersion`, `extractedAt` and the audio duration help
+    with nothing while correcting.
+
+    What survives is the one question a correcting user does ask — *am I
+    looking at the right song and the right take?* Everything removed
+    stays in `<stem>-report.json`: it is filed, not lost. The report is
+    the audit artifact and can be as technical as it likes; the page
+    cannot.
+
+    **The file name, never the path** — the same rule page 1's picker
+    follows (§9.3, decision 1). And the lead-in is labelled by
+    `leadIn.source`, not by the word *measured* hardcoded: since §8.6 line
+    0 can be hand-set, and a line that says *measured* about a value a
+    human typed is the kind of small lie this whole PR is deleting.
     """
     source = payload.get("provenance") or {}
-    duration = source.get("durationSec")
-    items = [
-        ("Song", payload.get("title") or "—"),
-        ("Media source", source.get("audio") or "—"),
-        ("Media sha256", source.get("sha256") or "—"),
-        ("Media duration", "—" if duration is None else f"{duration:.2f} s"),
-        ("Model", f'{source.get("model") or "—"} · {source.get("device") or "—"}'),
-        ("Language", payload.get("lang") or "—"),
-        ("Transcribed at", source.get("extractedAt") or "—"),
-        ("Tool version", source.get("toolVersion") or "—"),
-        ("Lines hash", payload.get("linesHash") or "—"),
-        ("Measured lead-in", f'{payload["leadIn"]["durationSec"]:.2f} s'),
-    ]
-    body = "".join(
-        f"<li><b>{label}</b> <span>{html_escape(str(value))}</span></li>"
-        for label, value in items
-    )
-    return (
-        '<details class="prov" open><summary>Provenance — this run</summary>'
-        f"<ul>{body}</ul></details>"
-    )
+    lead_in = payload["leadIn"]
+    parts = [payload.get("title") or "—"]
+
+    audio = source.get("audio")
+    if audio:
+        parts.append(Path(str(audio)).name)
+
+    model = source.get("model")
+    if model:
+        parts.append(f'{str(model).replace(":", " ")} ({payload.get("lang") or "—"})')
+
+    parts.append(f'{lead_in.get("source", "measured")} lead-in {lead_in["durationSec"]:.2f} s')
+
+    return f'<p class="prov">{html_escape(" · ".join(parts))}</p>'
 
 
 def render_review(payload: dict) -> str:
@@ -1109,19 +1108,14 @@ def render_input(*, home: str = "") -> str:
       <p class="hint">The one text field in the whole flow. A <code>.txt</code> carries no
         title.</p>
     </div>
-    <div class="frow">
-      <label class="flabel">Tempo</label>
-      <div class="ctl">
-        <input type="number" id="tempo" step="0.01" min="1" value="" placeholder="— not set —">
-        <span class="aside">BPM</span>
-      </div>
-    </div>
   </div>
   <div class="warnbox">
-    <b>Tempo is never measured</b>
-    Bombista answers <i>when</i> a line happens, not in which beat. Take the value from the
-    Ableton project that produced this audio, where it is exact. Leave it unset and the key is
-    left out of the file entirely — an invented tempo is worse than a missing one.
+    <b>Tempo is not Bombista's business</b>
+    Bombista answers <i>when</i> a line happens, not in which beat, so the file it writes
+    carries no <code>tempo</code> block. Add it by hand from the Ableton project that produced
+    this audio, where it is exact — all four values together (<code>bpm</code>,
+    <code>numerator</code>, <code>denominator</code>, <code>countInBars</code>), because a
+    partial block breaks Pregonero's pulse.
   </div>
   <p class="hint pageoff" id="stripped"></p>
 </div>
@@ -1177,9 +1171,9 @@ _CAPTION_PASS = (
 _CAPTION_NEW = (
     "There was no song file, so this is a new <b>Song Performance JSON</b> built from your "
     "<code>.txt</code>. It carries only what a plain text plus step 1 can honestly supply: "
-    "<code>artist</code> and <code>notes</code> are empty for you to fill in, <code>tempo</code> "
-    "is <b>absent rather than blank</b> — an invented tempo is worse than none, so the key only "
-    "appears once it is real — and <code>lyrics</code> carries the one language you chose. Add "
+    "<code>artist</code> and <code>notes</code> are empty for you to fill in, there is no "
+    "<code>tempo</code> block — Bombista never measures one, and a partial one breaks "
+    "Pregonero's pulse — and <code>lyrics</code> carries the one language you chose. Add "
     "the other languages later; <code>linesHash</code> will catch it if the line count changes."
 )
 

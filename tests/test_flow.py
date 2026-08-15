@@ -383,15 +383,72 @@ def test_a_failed_run_says_why_and_does_not_wedge_the_process(serve_client, libe
 
 
 def test_no_module_that_touches_audio_or_lyrics_mentions_a_tempo(monkeypatch):
-    """Rules 4 and 5, and B14 was dropped for this. The only source of a
-    bpm in this package is the number a human typed on page 1 — so no
-    module on the path from audio or lyric text to a timeline may so much
-    as name one."""
+    """Rules 4 and 5, and B14 was dropped for this. Nothing on the path
+    from audio or lyric text to a timeline may so much as name a bpm."""
     package = Path(server.__file__).parent
 
     for module in ("aligner", "anchoring", "pipeline", "provenance", "serializer", "report"):
         source = (package / f"{module}.py").read_text(encoding="utf-8")
         assert "bpm" not in source, f"{module}.py names a bpm"
+
+
+def test_nothing_in_the_emit_path_can_construct_a_tempo_block():
+    """§11.5: `tempo` is written whole — `bpm`, `numerator`, `denominator`,
+    `countInBars` — or not at all, and Bombista can never write it whole,
+    because it never measures a meter and will not invent one. So the
+    emit path must carry no code that names a tempo at all.
+
+    Structural rather than a grep: the reasoning above lives in
+    `server.py`'s own docstrings and should, so this reads the executable
+    source only — literals, names, attributes and arguments. What it
+    guards against is a later pass helpfully putting `{"bpm": …}` back.
+    """
+    tree = ast.parse(Path(server.__file__).read_text(encoding="utf-8"))
+    # Every bare string statement: a module/class/function docstring, or
+    # the attribute docstring this file uses under a constant. All prose.
+    prose = {
+        node.value.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+    }
+
+    named = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if node.value not in prose:
+                named.add(node.value)
+        elif isinstance(node, ast.Name):
+            named.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            named.add(node.attr)
+        elif isinstance(node, ast.arg):
+            named.add(node.arg)
+
+    offenders = [name for name in named if "tempo" in name.lower() or "bpm" in name.lower()]
+    assert offenders == [], f"server.py still handles a tempo: {offenders}"
+
+
+def test_a_txt_run_ignores_a_tempo_offered_in_the_request_body(
+    serve_client, libertad, tmp_path
+):
+    """The control is gone from page 1, and the route does not honour one
+    posted by hand either — otherwise the bpm-only block comes back
+    through the door §11.5 closed."""
+    client = serve_client(None)
+    txt = tmp_path / "cancion.txt"
+    txt.write_text("uno dos\ntres cuatro\n", encoding="utf-8")
+
+    with mock.patch.object(
+        server, "transcribe_words", return_value=words_for(["uno dos", "tres cuatro"])
+    ):
+        _start(client, libertad, lyrics=str(txt), title="Canción", tempo=66.67)
+        wait_for(client, "done")
+
+    _, payload, _ = client.get("/api/download?kind=song", raw=True)
+
+    assert "tempo" not in json.loads(payload)
 
 
 def test_a_txt_run_with_no_tempo_emits_no_tempo_key(serve_client, libertad, tmp_path):
@@ -411,25 +468,6 @@ def test_a_txt_run_with_no_tempo_emits_no_tempo_key(serve_client, libertad, tmp_
     emitted = json.loads(payload)
 
     assert "tempo" not in emitted
-
-
-def test_a_txt_run_writes_the_tempo_it_was_given_and_nothing_it_was_not(
-    serve_client, libertad, tmp_path
-):
-    client = serve_client(None)
-    txt = tmp_path / "cancion.txt"
-    txt.write_text("uno dos\ntres cuatro\n", encoding="utf-8")
-
-    with mock.patch.object(
-        server, "transcribe_words", return_value=words_for(["uno dos", "tres cuatro"])
-    ):
-        _start(client, libertad, lyrics=str(txt), title="Canción", tempo=66.67)
-        wait_for(client, "done")
-
-    _, payload, _ = client.get("/api/download?kind=song", raw=True)
-    emitted = json.loads(payload)
-
-    assert emitted["tempo"] == {"bpm": 66.67}
 
 
 def test_a_passed_through_tempo_is_never_rewritten(client, libertad):
@@ -679,3 +717,35 @@ def test_serve_starts_at_step_1_with_no_arguments():
 
     assert result.exit_code == 0, result.output
     assert create.call_args.args[0] is None
+
+
+def test_the_report_download_renders_from_a_staging_dir_that_only_has_the_sibling(
+    serve_client, libertad
+):
+    """`asr-words.meta.json` is now a provenance carrier (§11.10), and it
+    is a PARTIAL one — no duration, no tool version, because a
+    transcription does not establish them in the way the report's other
+    carriers do. The report has to render what it was given plus a stated
+    unknown for the rest, not fall over on a missing key. A run started
+    from page 1 leaves exactly this shape behind."""
+    (libertad["staging"] / "asr-words.meta.json").write_text(
+        json.dumps(
+            {
+                "extractedAt": "2026-08-14T20:55:00+02:00",
+                "model": "faster-whisper:medium",
+                "device": "cpu/int8",
+                "lang": "es",
+                "sha256": "ab" * 32,
+                "audio": str(libertad["audio"]),
+            }
+        ),
+        encoding="utf-8",
+    )
+    session = server.load_session(libertad["staging"], libertad["song_path"], lang="es")
+
+    status, report, _ = serve_client(session).get("/api/download?kind=report", raw=True)
+
+    assert status == 200
+    assert "2026-08-14T20:55:00+02:00" in report
+    assert "ab" * 32 in report
+    assert "unknown" in report, "the keys the sibling does not carry are said, not guessed"

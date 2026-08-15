@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from unittest import mock
 
 import pytest
 from click.testing import CliRunner
@@ -19,6 +20,7 @@ from bombista.aligner import save_words
 from bombista.cli import main
 from bombista.models import Word
 from bombista.provenance import compute_lines_hash
+from bombista.server import load_session
 from bombista.writers import ENVELOPE_KEYS
 
 
@@ -1420,3 +1422,153 @@ def test_printed_rerun_command_uses_the_primary_verb(workspace):
     rerun = next(ln for ln in report.splitlines() if "Re-run" in ln)
     assert "bombista align" in rerun
     assert "bombista extract" not in rerun
+
+
+# ---------------------------------------------------------------------------
+# §11.10 — a --words re-run does not claim the machine listened just now
+# ---------------------------------------------------------------------------
+
+
+def _report_source(staging: Path, stem: str = "cancion-de-prueba") -> dict:
+    return json.loads((staging / f"{stem}-report.json").read_text(encoding="utf-8"))["source"]
+
+
+def test_a_normal_run_writes_the_word_stream_and_its_sibling(workspace):
+    """The sibling is the whole fix: `asr-words.jsonl` is bare word
+    records with no header, and adding one would break every reader."""
+    with mock.patch("bombista.cli.transcribe_words", return_value=WORDS):
+        result = run_align_transcribing(workspace, "--emit", "report-json")
+
+    assert result.exit_code == 0, result.output
+    staging = workspace["staging"]
+    assert (staging / "asr-words.jsonl").exists()
+
+    meta = json.loads((staging / "asr-words.meta.json").read_text(encoding="utf-8"))
+    source = _report_source(staging)
+
+    assert meta["extractedAt"] == source["extractedAt"]
+    assert meta["model"] == source["model"] == "faster-whisper:medium"
+    assert meta["sha256"] == source["sha256"]
+    assert Path(meta["audio"]).is_absolute()
+    assert "wordsReused" not in source
+
+
+def test_a_words_run_carries_the_original_extracted_at_rather_than_the_run_time(
+    workspace, tmp_path
+):
+    """The bug §11.10 found on the canary: `extractedAt` said 19:07 on a
+    run where faster-whisper never ran, and the stream it reused was
+    transcribed the previous evening. §9.4 makes this path *the*
+    correction loop, so it is most runs."""
+    with mock.patch("bombista.cli.transcribe_words", return_value=WORDS):
+        assert run_align_transcribing(workspace, "--emit", "report-json").exit_code == 0
+    first = _report_source(workspace["staging"])["extractedAt"]
+
+    again = tmp_path / "again"
+    result = CliRunner().invoke(
+        main,
+        [
+            "align", str(workspace["audio"]), str(workspace["song"]),
+            "-o", str(again),
+            "--words", str(workspace["staging"] / "asr-words.jsonl"),
+            "--model-size", "tiny",
+            "--emit", "report-json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    source = _report_source(again)
+    assert source["extractedAt"] == first
+    assert source["model"] == "faster-whisper:medium", "the model that produced the stream"
+    assert source["wordsReused"] is True
+
+
+def test_a_words_run_copies_the_sibling_into_the_new_staging_directory(workspace, tmp_path):
+    """`--words` from another staging directory copies the stream; the
+    facts about it travel with it, or the copy is the older-staging-dir
+    case one run later."""
+    with mock.patch("bombista.cli.transcribe_words", return_value=WORDS):
+        run_align_transcribing(workspace)
+
+    again = tmp_path / "again"
+    result = CliRunner().invoke(
+        main,
+        [
+            "align", str(workspace["audio"]), str(workspace["song"]),
+            "-o", str(again),
+            "--words", str(workspace["staging"] / "asr-words.jsonl"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads((again / "asr-words.meta.json").read_text(encoding="utf-8")) == (
+        json.loads((workspace["staging"] / "asr-words.meta.json").read_text(encoding="utf-8"))
+    )
+
+
+def test_a_words_run_with_no_sibling_omits_the_time_rather_than_inventing_one(workspace):
+    """An older staging directory, written before the sibling existed. A
+    wrong timestamp in an audit file is worse than an absent one, and
+    absent is cheap. Never an mtime — an mtime does not survive the
+    staging directory being copied."""
+    result = run_extract(workspace, "--emit", "report-json")
+
+    assert result.exit_code == 0, result.output
+    source = _report_source(workspace["staging"])
+
+    assert "extractedAt" not in source
+    assert source["wordsReused"] is True
+
+
+def test_the_markdown_report_says_the_time_is_unrecorded_rather_than_crashing(workspace):
+    """The report is the audit artifact — it has to render the absence."""
+    run_extract(workspace)
+
+    report = (workspace["staging"] / "cancion-de-prueba-qa-report.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Extracted at" in report
+    assert "not recorded" in report
+
+
+def run_align_transcribing(ws, *extra):
+    """`align` without `--words` — the transcribing path, with the model
+    patched out (CLAUDE.md: never the whisper model in a unit test)."""
+    return CliRunner().invoke(
+        main,
+        ["align", str(ws["audio"]), str(ws["song"]), "-o", str(ws["staging"]), *extra],
+    )
+
+
+# ---------------------------------------------------------------------------
+# §11.11 — `serve --audio`, the smaller half of "name your own take"
+# ---------------------------------------------------------------------------
+
+
+def test_serve_takes_an_audio_option(workspace):
+    """`serve <staging> <lyrics> --audio <take>` says out loud what page 1
+    says with three pickers. Without it a session booted into a review has
+    no way to name the take its timings are only meaningful against."""
+    result = CliRunner().invoke(main, ["serve", "--help"])
+
+    assert result.exit_code == 0
+    assert "--audio" in result.output
+
+
+def test_serve_passes_the_audio_it_was_given_to_the_session(workspace):
+    run_extract(workspace)
+    take = workspace["audio"]
+
+    with mock.patch("bombista.cli.create_server", side_effect=RuntimeError("stop")) as create:
+        with mock.patch("bombista.cli.load_session", wraps=load_session) as load:
+            CliRunner().invoke(
+                main,
+                [
+                    "serve", str(workspace["staging"]), str(workspace["song"]),
+                    "--audio", str(take),
+                ],
+            )
+
+    assert load.call_args.kwargs["audio_path"] == take
+    assert create.called

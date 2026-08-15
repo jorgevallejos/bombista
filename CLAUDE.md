@@ -39,7 +39,7 @@ bombista promote <staging>/<song>-timeline.json <song.json>
 
 # The three-step interface in a browser, on this machine only (B20):
 bombista serve                                        # start at step 1
-bombista serve <staging-dir> <song.json|lyrics.txt>   # boot into the review
+bombista serve <staging-dir> <song.json|lyrics.txt> [--audio <take>]  # boot into the review
 
 # One-off, for songs timed before timeline v2 (B13) — not part of the loop:
 bombista migrate <song.json> [--dry-run]
@@ -82,7 +82,13 @@ bombista/
                    + a _bombista block (completeness, filledLang, missing, strippedLines).
                    Structural only — stdlib, no network, no LLM. Bombista times; it
                    does not translate.
-  aligner.py     — faster-whisper transcription → list[Word]; JSONL save/load
+  aligner.py     — faster-whisper transcription → list[Word]; JSONL save/load, plus
+                   the sibling `asr-words.meta.json` (B20 §11.10/§11.11): when the
+                   machine listened, with which model, and the ABSOLUTE path of the
+                   take. The JSONL is bare records with no header and adding one
+                   would break every reader, so the facts go beside it — in a file,
+                   not an mtime, because an mtime does not survive a copy. This
+                   module builds neither dict; provenance.py does
   anchoring.py   — pure, stdlib-only: fuzzy line-onset anchoring (forward-only) +
                    named-signal confidence bands (HIGH/REVIEW/FAIL); --anchor overrides,
                    including parse_anchor_overrides (LINE=SECONDS text -> the mapping
@@ -91,7 +97,14 @@ bombista/
                    start, last line = last word end + 1.0 s pad, FAIL lines interpolated
                    so the candidate stays emittable) + normalize_to_lead_in
   provenance.py  — per-run audio identity (path, streamed sha256, duration, model, device,
-                   lang, extractedAt, toolVersion) + linesHash over the canonical lines
+                   lang, extractedAt, toolVersion) + linesHash over the canonical lines.
+                   `extractedAt` is a claim about WHEN THE MACHINE LISTENED, so a
+                   `--words` run — which §9.4 makes the correction loop, i.e. most
+                   runs — carries it forward from the sibling instead of stamping
+                   fresh, and OMITS it (with `wordsReused: true`) when there is no
+                   sibling to read. Never an invented time, never an mtime.
+                   `sha256`/`durationSec`/`audio` stay this run's own: it did hash
+                   the file it was given, and those three describe one file
   report.py      — markdown QA report (per-line band, ASR context, signals, fix hints)
   serializer.py  — the frozen timeline v2 envelope, and nothing else
   writers.py     — everything downstream of the canonical CP form: songjson, report-json,
@@ -116,7 +129,13 @@ bombista/
                    template, which the page fetches back after a re-anchor rather than
                    keeping a second copy of. Line 0 is an ordinary row — no special
                    colour, no lead-in label, no popup caption, and no lead-in control
-                   anywhere (§8.6). String composition,
+                   anywhere (§8.6). Page 2's provenance is ONE QUIET LINE — song,
+                   media file NAME (never the path), model, lead-in — and nothing
+                   else; sha256, device, toolVersion, extractedAt and duration are
+                   filed in <stem>-report.json, which is the audit artifact (§8.2).
+                   Page 1 has NO TEMPO CONTROL: tempo is written whole or not at
+                   all, Bombista cannot write it whole, so it writes none (§11.5).
+                   String composition,
                    stdlib only, inline CSS/JS, no build step, NO WEBFONT. STYLESHEET is
                    the whole of §10.3's skin and is defined ONCE — page 2 inherits it
                    rather than being retrofitted. §10.1's vocabulary is enforced by
@@ -135,13 +154,18 @@ bombista/
                    browser File object has none), the three downloads, which hand
                    over bytes and write nothing, and the audio route page 2 plays
                    from (ranges honoured — a transport that cannot seek cannot judge
-                   a line by ear). NO line is refused: line 0 moves like any other
+                   a line by ear). The take is resolved in a FIXED ORDER, each step
+                   reached only when the one above yields nothing: --audio, the
+                   absolute path in asr-words.meta.json, the run's recorded relative
+                   path, then a loud failure. NEVER another file — a player that
+                   silently plays the wrong take makes every judgement made against
+                   it wrong (§11.11). NO line is refused: line 0 moves like any other
                    and `leadIn.source` says `manual` when a human set it (§8.6)
   cli.py         — click CLI: align / promote / migrate / serve, and nothing else. Wiring only:
                    options, help text, and translating ValueError into ClickException /
                    BadParameter. `extract` is a registered alias of `align` (B11) — the
                    same Command object, so the two cannot drift
-tests/           — 454 tests; all fast except one tiny-model integration test on a
+tests/           — 479 tests; all fast except one tiny-model integration test on a
                    committed 12 s fixture (tests/fixtures/). The `serve` acceptance
                    case runs in two tiers (B20 §11.3): a committed synthetic 19-line
                    fixture in CI, and the pimiento canary opt-in behind

@@ -1,8 +1,9 @@
 # B20 `serve` — Claude Code prompts
 
-Five PRs. **PRs 1, 2 and 4 merged 2026-08-16** (#22, #23, #24). **PR 3 is built and open as #26**
-(454 tests green). **PR 5 is the only unrun prompt** — it is at the end of this file and runs once
-#26 merges. Each is paste-ready. House rules apply throughout and are restated in each prompt
+Five PRs. **All five are built.** PRs 1, 2, 4 and 3 merged 2026-08-16 (#22, #23, #24, #26);
+**PR 5, the cleanup, is built on `chore/b20-cleanup`** — 479 tests green, and what it found is
+**§11.13** of the spec. Nothing here is left to run. Each is paste-ready. House rules apply
+throughout and are restated in each prompt
 because Code does not carry them between sessions: feature branch off `main`, strict
 red → green → refactor, Conventional Commits, `gh pr create --base main`, merge and pull `main`
 before starting the next.
@@ -432,6 +433,12 @@ run Jorge does by hand on the real canary, and it wants the whole flow standing.
 ---
 
 ## PR 5 — cleanup: tempo out, `extractedAt` honest, provenance quiet, audio findable
+
+> **Built 2026-08-16 on `chore/b20-cleanup`, 454 → 479 tests.** Two clauses below did not survive
+> contact and are corrected in **§11.13**, not here, so the prompt stays readable as what was
+> asked: §9.3's note wording used *"emitted"*, which §10.1 forbids on a page; and *"no emitted
+> file on either branch contains a `tempo` key"* had to become *Bombista never **constructs** one*,
+> because §10.2 passes an existing `tempo` through untouched.
 
 **Branch:** `chore/b20-cleanup` · **Run after #26 merges.** Four unrelated-looking changes that
 are one idea: *the page shows what helps you judge a line; the report records what an audit needs;

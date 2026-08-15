@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Sequence
 
-from .anchoring import LineAnchor
+from .anchoring import SIGNAL_GLOSSES, LineAnchor
 from .models import TimelineEntry
 
 AUDIO_CLOCK_RULE = (
@@ -161,6 +161,14 @@ def render_qa_report(
                 f"`--words {quoted_words}` "
                 f"to skip re-transcription{near}."
             )
+            # The token above the table says which check fired; this says
+            # what it means and where to listen (B20 §8.3). Signals with
+            # nothing to say gloss to "" and print nothing — they never
+            # reach this list anyway, since neither flags a line.
+            for signal in anchor.signals:
+                gloss = SIGNAL_GLOSSES.get(signal, "")
+                if gloss:
+                    parts.append(f"  - `{signal}` — {gloss}")
     else:
         parts.append("None — every line anchored HIGH.")
     parts.append("")

@@ -27,6 +27,7 @@ from .models import Word
 
 __all__ = [
     "LineAnchor",
+    "SIGNAL_GLOSSES",
     "anchor_lines",
     "parse_anchor_overrides",
     "normalize_token",
@@ -119,6 +120,48 @@ GAP_OUTLIER_MIN_SAMPLES = 2
 """Prior gaps required before the gap-outlier check applies (avoids noisy
 flags on the first couple of anchors, when there's no established rhythm
 to compare against)."""
+
+SIGNAL_GLOSSES: dict[str, str] = {
+    "lead-fallback": (
+        "the first word was not recognised, so this line was anchored on its "
+        "second word — the start is usually late by one word"
+    ),
+    "uncorroborated": (
+        "only this line's first word was recognised where it was placed, and "
+        "nothing else from its opening turned up just after — this may be that "
+        "same word somewhere else in the song"
+    ),
+    "ambiguous": (
+        "the word this line was anchored on is sung again a moment later — if "
+        "the line sounds early, its true start is that second time round"
+    ),
+    "gap-outlier": (
+        "the space before this line is much longer or shorter than this song's "
+        "usual spacing — either this line or the one before it is in the wrong "
+        "place"
+    ),
+    "no-anchor": (
+        "none of this line's opening words were heard anywhere after the "
+        "previous line, so nothing was timed here — listen for the line and set "
+        "its start by hand"
+    ),
+    "clean-anchor": "",
+    "override": "",
+}
+"""One plain sentence per signal `anchor_lines` can emit, for a reader who
+has never opened this file: what was observed and where to listen, never
+what the code did.
+
+They live here, beside the signal names, because three surfaces print the
+same tokens — the markdown QA report, the report JSON and B16's HTML
+review page — and B20's page 2 will be the fourth. A copy in any one
+writer is a copy that drifts.
+
+`clean-anchor` and `override` map to `""` on purpose and are the only two
+that do: one says nothing happened, the other says a human already
+decided. Neither has anything to tell anyone, and inventing a sentence for
+them would put words on eighteen of pimiento's nineteen rows to say
+"nothing to see" (§8.3)."""
 
 
 @dataclass(frozen=True)

@@ -59,11 +59,23 @@ fourth segment would say the flow has four steps when it has three."""
 # The format's five Bombista-owned keys, in the order §10.2 fixes them.
 TIMING_KEYS = ("linesHash", "timelineSignedOff", "timelineVersion", "leadIn", "timeline")
 
-FORMAT_DOC_URL = "https://github.com/jorgevallejos/bombista/blob/main/docs/bombista-serve-spec.md"
-"""§9.6 is explicit that the SP JSON has no canonical home yet and that
-this link may point at the repo until it does. It is an anchor the reader
-may click, never a resource the page loads — nothing here reaches off the
-machine on its own."""
+FORMAT_DOC_URL = "https://changopepper.com/tramoya/song-performance-json"
+"""§9.6's canonical home for the Song Performance JSON, live since
+2026-08-16. It replaces the placeholder that pointed at this repo's
+1,100-line `serve` spec — the reader who clicks *See an example* on page 1
+is a musician looking for a sample file, not a maintainer reading a design
+document.
+
+**This URL is permanent and must never be renamed.** Every installed copy
+of Bombista carries it as a literal and follows it forever: a released tool
+cannot be asked to update its own links, so the copy running on someone
+else's machine a year from now still points here. If the page ever moves,
+that address redirects — it does not change. The site shipped before this
+PR for exactly this reason, so the constant could be set once to something
+already true.
+
+It is an anchor the reader may click, never a resource the page loads —
+nothing here reaches off the machine on its own."""
 
 STYLESHEET = """\
 /* bombista serve — brutalist, ink ground, quiet register (B20 §10.3).

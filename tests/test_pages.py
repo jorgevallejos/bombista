@@ -210,6 +210,28 @@ def test_page_1_captions_say_what_9_3_requires(page1):
     assert "Song Performance" in text
 
 
+def test_the_example_link_points_at_the_formats_canonical_home(page1):
+    """§9.6's address, pinned to the character.
+
+    This is not a style assertion. `FORMAT_DOC_URL` is baked into every
+    installed copy of Bombista and followed forever by tools nobody can
+    reach to update, so it is a promise to the outside rather than a
+    detail of the page — the URL is permanent, and a page that moves
+    redirects rather than renames. Pinning the literal here makes the
+    promise something a commit has to break on purpose.
+
+    It asserts the anchor too: a correct constant that page 1 stopped
+    interpolating would leave the reader with a dead *See an example*,
+    which is the failure this whole change exists to close.
+    """
+    assert pages.FORMAT_DOC_URL == "https://changopepper.com/tramoya/song-performance-json"
+
+    anchor = re.search(r'<a href="([^"]+)">See an example</a>', page1)
+
+    assert anchor, "page 1 has no 'See an example' link"
+    assert anchor.group(1) == pages.FORMAT_DOC_URL
+
+
 def test_the_language_caption_does_not_explain_the_constraint(page1):
     """§9.3, decision 5 — the dropdown enforces the rest by disabling what
     it cannot offer; a caption teaching an exception is a caption too many."""
@@ -394,7 +416,7 @@ def test_no_page_references_anything_external(name, rendered):
     must not do is LOAD anything off the machine — no font CDN, no CSS
     host, no remote image. A hyperlink the reader may click is not a
     resource the page fetches, which is what lets §9.3's *See an example*
-    point at the repo until the format has a canonical home (§9.6)."""
+    point at the format's canonical home on changopepper.com (§9.6)."""
     html = rendered[name]
 
     resources = re.findall(r'<(?:link|script|img|iframe)\b[^>]*(?:src|href)="([^"]+)"', html)

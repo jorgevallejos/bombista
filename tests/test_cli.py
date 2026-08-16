@@ -1315,6 +1315,54 @@ def test_migrate_dry_run_writes_nothing(migrate_ws):
 
 
 # ---------------------------------------------------------------------------
+# `--version` — the first thing a bug report needs
+#
+# Until now the only place the tool stated its version was the `serve`
+# masthead: a page on your own machine could tell you what you were running
+# and the CLI could not. The answer is deliberately the SAME STRING that
+# lands in `toolVersion`, so a version quoted from a song file and a version
+# read off the terminal can be compared without anyone having to know they
+# are two spellings of one fact.
+# ---------------------------------------------------------------------------
+
+
+def test_version_flag_prints_the_installed_version():
+    from importlib.metadata import version
+
+    result = CliRunner().invoke(main, ["--version"])
+
+    assert result.exit_code == 0
+    assert result.output.strip() == f"bombista {version('bombista')}"
+
+
+def test_version_flag_answers_exactly_what_provenance_stamps():
+    """`toolVersion` in a song's `_bombista` block and `bombista --version`
+    are one fact. If they can be spelled differently, a report that quotes
+    one cannot be matched against the other."""
+    from bombista.provenance import tool_version
+
+    result = CliRunner().invoke(main, ["--version"])
+
+    assert result.output.strip() == tool_version()
+
+
+def test_version_flag_is_listed_in_the_group_help():
+    result = CliRunner().invoke(main, ["--help"])
+
+    assert result.exit_code == 0
+    assert "--version" in result.output
+
+
+def test_module_entry_point_reports_the_version_too():
+    """The no-console-script path is the one a broken install falls back
+    to — which is precisely when someone needs to ask what version it is."""
+    result = _run_module("--version")
+
+    assert result.returncode == 0
+    assert result.stdout.strip().startswith("bombista ")
+
+
+# ---------------------------------------------------------------------------
 # `python -m bombista.cli` — the documented no-console-script path
 #
 # Without an `if __name__ == "__main__"` guard the module imports, defines

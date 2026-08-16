@@ -36,6 +36,7 @@ from .provenance import (
     build_provenance,
     compute_lines_hash,
     provenance_for_reused_words,
+    tool_version,
     words_meta,
 )
 from .readers import read_lyrics_input
@@ -65,6 +66,11 @@ Timeline times are only meaningful relative to the audio you feed in.
 
 
 @click.group()
+@click.version_option(
+    version=tool_version(),
+    message="%(version)s",
+    help="Show the version and exit — the same string that lands in toolVersion.",
+)
 def main() -> None:
     """Derive a lyric timeline from audio via forced alignment."""
 

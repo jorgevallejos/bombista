@@ -1069,7 +1069,7 @@ class _Handler(BaseHTTPRequestHandler):
         )
         out = body.get("out")
         out_path = (
-            Path(out) if out else session.staging_dir / f"{session.lyrics_path.stem}.sp.json"
+            Path(out) if out else session.staging_dir / f"{session.lyrics_path.stem}.json"
         )
         return emit_sp_json(session, overrides, out_path)
 
@@ -1155,7 +1155,7 @@ class _Handler(BaseHTTPRequestHandler):
         self._html(
             pages.render_output(
                 sp_json,
-                filename=f"{session.lyrics_path.stem}.sp.json",
+                filename=f"{session.lyrics_path.stem}.json",
                 from_scratch=session.from_scratch,
             )
         )
@@ -1185,7 +1185,7 @@ class _Handler(BaseHTTPRequestHandler):
         sign_off(session)
         sp_json, _ = build_sp_json(session)
         payload = sp_json if kind == "song" else timing_block(sp_json)
-        name = f"{stem}.sp.json" if kind == "song" else f"{stem}-timeline.sp.json"
+        name = f"{stem}.json" if kind == "song" else f"{stem}-timeline.json"
         self._attachment(
             (json.dumps(payload, indent=2, ensure_ascii=False) + "\n").encode("utf-8"),
             name,

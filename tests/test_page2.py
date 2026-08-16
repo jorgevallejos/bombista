@@ -113,17 +113,30 @@ def test_no_lead_in_control_anywhere_on_the_page(page2):
 # ---------------------------------------------------------------------------
 
 
-def test_the_popup_contains_exactly_one_stepper_and_no_other_control(page2):
-    """No bounds text, no delta readout, no explanation, no buttons. A
-    stated bound is one more sentence on a page that should have almost
-    none — the bounds are enforced by silently clamping instead."""
-    popup = re.search(r"POPUP\s*=\s*'(.*?)';", page2, re.S)
+@pytest.fixture
+def popup_markup(page2):
+    """The popup's markup, built in one place in the page's JS."""
+    found = re.search(r"POPUP\s*=\s*'(.*?)';", page2, re.S)
 
-    assert popup, "the popup's markup is not built in one place"
-    markup = popup.group(1)
-    assert len(re.findall(r"<button", markup)) == 2, "one stepper is two buttons and no more"
-    assert re.findall(r'data-step="([^"]+)"', markup) == ["-0.05", "0.05"]
-    assert "class=\"cap\"" not in markup, "no popup caption (§8.6)"
+    assert found, "the popup's markup is not built in one place"
+    return found.group(1)
+
+
+def js(page2: str, name: str) -> str:
+    """One function's body, as the page ships it."""
+    found = re.search(r"function " + name + r"\([^)]*\) \{(.*?)\n  \}", page2, re.S)
+
+    assert found, f"no function {name} on the page"
+    return found.group(1)
+
+
+def test_the_popup_contains_one_stepper_and_no_second_control(popup_markup):
+    """§8.4's stepper is untouched by §12.1: two step buttons and no
+    more. What the popup grew is a FIELD — the number itself became
+    typeable — not another control beside the stepper."""
+    assert len(re.findall(r"<button", popup_markup)) == 2, "one stepper is two buttons and no more"
+    assert re.findall(r'data-step="([^"]+)"', popup_markup) == ["-0.05", "0.05"]
+    assert "class=\"cap\"" not in popup_markup, "no popup caption (§8.6)"
 
 
 def test_the_stepper_step_is_finer_than_the_correction_loop(page2):
@@ -135,20 +148,29 @@ def test_the_stepper_step_is_finer_than_the_correction_loop(page2):
     assert step == 0.05
 
 
-def test_the_bounds_are_the_neighbouring_lines_and_clamp_silently(page2):
+def test_the_bounds_are_the_neighbouring_lines(page2):
     """§8.4: the real allowed interval is the neighbouring lines,
-    recomputed live — a fixed range is not it. Nothing states the bound;
-    the stepper simply stops, because a stated bound is one more sentence
-    on a page that should have almost none.
+    recomputed live — a fixed range is not it.
 
     Line 0's floor is the start of the audio because there is no line
     above it. That is arithmetic, not the special case §8.6 struck."""
-    bounds = re.search(r"function boundsFor\(i\) \{(.*?)\n  \}", page2, re.S).group(1)
-    nudge = re.search(r"function nudge\(d\) \{(.*?)\n  \}", page2, re.S).group(1)
+    bounds = js(page2, "boundsFor")
 
     assert "all[i - 1]" in bounds and "all[i + 1]" in bounds
     assert "(i === 0) ? 0" in bounds
-    assert "b.lo" in nudge and "b.hi" in nudge
+
+
+def test_one_clamp_holds_the_bound_for_every_way_of_setting_a_value(page2):
+    """The stepper stops at `lo + 0.01` / `hi - 0.01`, exclusive of the
+    neighbours. §12.1 adds a second way to set the value and NOT a second
+    answer about what the allowed interval is: the typed commit clamps
+    through the same function, so the two cannot drift apart."""
+    clamp = js(page2, "clamp")
+
+    assert "round2(b.lo + 0.01)" in clamp and "round2(b.hi - 0.01)" in clamp
+    assert "boundsFor(i)" in clamp
+    assert "clamp(" in js(page2, "nudge")
+    assert "clamp(" in js(page2, "commitTyped")
 
 
 def test_press_and_hold_auto_repeats(page2):
@@ -195,6 +217,134 @@ def test_the_struck_through_previous_value_always_has_its_line_reserved(page2, p
     cursor."""
     for row in rows_of(page2):
         assert '<span class="was mono">' in row
+
+
+# ---------------------------------------------------------------------------
+# §12.1 — type to arrive, nudge to land
+# ---------------------------------------------------------------------------
+#
+# The stepper was calibrated on a 1.22 s error: 24 presses, a held second
+# crosses it. A phrase the ASR did not recognise leaves the line with
+# nothing to anchor to, so where it lands has no relation to where it
+# belongs and the error is unbounded by construction — 47 s of it in Luz y
+# Sal, about 940 presses. Jorge, 2026-08-16: it is not the rare case.
+#
+# BOTH controls, because they answer different questions. The typed number
+# ARRIVES — getting near the right place must not be a distance problem.
+# The stepper LANDS — the exact onset is found by ear with the player, and
+# by-ear work is nudge-and-listen, which a text field cannot do.
+
+
+def test_the_number_itself_is_typeable(popup_markup):
+    """The value span becomes a field. Everything else in the popup is
+    what §8.4 already had."""
+    assert re.search(r'<input[^>]+id="popval"', popup_markup), "the value is not a field"
+    assert len(re.findall(r"<input", popup_markup)) == 1
+    assert 'class="val"' in popup_markup
+
+
+def test_a_typed_value_commits_on_enter_and_on_blur(page2):
+    """Enter is the deliberate commit; blur is the one the hand makes on
+    the way to the player or the next line, and a value typed and then
+    abandoned would otherwise be silently lost."""
+    assert re.search(r'ev\.key === "Enter"[^\n]*commitTyped\(\)', js(page2, "fieldKey"))
+    assert re.search(r'addEventListener\("blur", commitTyped\)', page2)
+
+
+def test_escape_still_closes_the_popup_without_committing(page2):
+    """Unchanged from §8.4, and it has to survive the field: the way out
+    of a value you did not mean to type is the way out that already
+    existed."""
+    escape = [line for line in js(page2, "fieldKey").splitlines() if "Escape" in line]
+
+    assert len(escape) == 1
+    assert "closePopup()" in escape[0] and "commitTyped" not in escape[0]
+
+
+def test_the_arrows_do_caret_work_while_the_typed_value_is_uncommitted(page2):
+    """A number being typed is text, and moving through it is what those
+    keys do everywhere else. Nudging resumes once the value is committed —
+    that is the by-ear pass, and it is the half a field cannot do."""
+    field_key = js(page2, "fieldKey")
+
+    assert "dirty()" in field_key, "the field does not know whether it holds uncommitted text"
+    assert re.search(r"if \(dirty\(\)\) \{ return; \}", field_key)
+    assert "nudge(" in field_key, "a committed field still nudges"
+    assert 'ev.target.id === "popval"' in page2, "the field's keys never reach the page's handler"
+
+
+def test_a_typed_value_takes_the_same_debounced_re_anchor_path_as_a_nudge(page2):
+    """One re-anchor mechanism (§8.5), not two. A typed value is
+    scheduled and debounced exactly as a press is, which is also what
+    puts it behind the held-button guard below."""
+    commit_typed = js(page2, "commitTyped")
+
+    assert "schedule(" in commit_typed
+    assert "fetch(" not in commit_typed, "a second commit path"
+    assert len(re.findall(r'fetch\("/api/reanchor"', page2)) == 1
+
+
+def test_a_typed_commit_cannot_fire_while_a_step_button_is_held(page2):
+    """§11.11's finding a fourth time: the commit re-renders the row
+    list, and a re-render mid-press moves the button out from under the
+    cursor. The typed value goes through the SAME `schedule`/`fire` pair,
+    so it is the same guard rather than a second one."""
+    assert "holdTimer || repeatTimer" in js(page2, "fire")
+    assert len(re.findall(r"holdTimer \|\| repeatTimer", page2)) == 2, (
+        "the guard is `fire` and `placePopup`, and no third copy"
+    )
+
+
+def test_a_non_numeric_entry_keeps_the_last_good_value_and_says_nothing(page2):
+    """No error state, no red field, no message. The value the field
+    goes back to is the one that was already committed."""
+    commit_typed = js(page2, "commitTyped")
+
+    assert re.search(r"if \(!isFinite\(typed\)\) \{ show\(value\); return; \}", commit_typed)
+    assert "error" not in commit_typed.lower()
+
+
+def test_a_typed_value_is_rounded_to_two_decimals_and_never_snapped_to_the_step(page2):
+    """0.05 is coarser than what the user typed, and invariant 2 forbids
+    only what is coarser than 0.07 s. 0.01 granularity is correct and is
+    what the stepper already lands on."""
+    commit_typed = js(page2, "commitTyped")
+
+    assert "round2(typed)" in commit_typed
+    assert "STEP" not in commit_typed, "a typed value must not be snapped to the stepper's grid"
+
+
+def test_the_popup_states_the_allowed_interval(page2, popup_markup):
+    """§8.4 clamps silently because you FEEL a stepper stop. You do not
+    feel a text field clamp: type 13, get 30.20, and nothing on screen
+    explains it. §12.1 authorises the departure — the interval, dim and
+    small, with no label, under the field."""
+    bounds = js(page2, "showBounds")
+
+    assert re.search(r'<div class="bounds" id="popbounds">', popup_markup)
+    assert 'b.lo.toFixed(2) + " – " + b.hi.toFixed(2)' in bounds
+    assert ".pop .bounds" in pages.STYLESHEET
+    assert "var(--dimmer)" in re.search(r"\.pop \.bounds \{(.*?)\}", pages.STYLESHEET, re.S).group(1)
+
+
+def test_the_stated_interval_is_the_bound_and_carries_no_label(page2):
+    """One line. It says two numbers and a dash, because a label on it
+    would be the second sentence this page has spent since the design
+    closed rather than the first."""
+    bounds = js(page2, "showBounds")
+    stated = [line.strip() for line in bounds.splitlines() if ".textContent" in line]
+
+    assert "boundsFor(open)" in bounds
+    assert stated == ['el.textContent = b.lo.toFixed(2) + " – " + b.hi.toFixed(2);']
+
+
+def test_the_bound_is_restated_after_the_rows_are_re_rendered(page2):
+    """A re-anchor moves the neighbours, so it moves the interval. The
+    popup stays open across the round trip and would otherwise state a
+    bound that is no longer true."""
+    commit = js(page2, "commit")
+
+    assert "showBounds()" in commit
 
 
 # ---------------------------------------------------------------------------

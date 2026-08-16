@@ -96,6 +96,44 @@ def test_correcting_the_flagged_line_leaves_every_line_below_it_alone(client):
     assert bands(after)[:FLAGGED_LINE] == bands(before)[:FLAGGED_LINE]
 
 
+def test_a_typed_correction_re_anchors_exactly_as_a_nudged_one_does(client):
+    """§12.1: *type to arrive, nudge to land.* The two controls set one
+    number and there is one re-anchor mechanism under them (§8.5), so a
+    value that arrived by typing and a value that arrived by stepping are
+    the same request and cannot produce different timelines.
+
+    On the canary's numbers — pimiento's line 3, machine 37.54, true
+    onset 36.32 — 24 presses of − 0.05 land on 36.34 and typing lands on
+    36.32. Both sit inside §8.8's quiet range, where any correction
+    leaves all fifteen lines below identical, so the two agree about
+    every line but the one that was corrected."""
+    nudged_to = round(MACHINE_START - 24 * 0.05, 2)
+
+    _, typed, _ = client.post("/api/reanchor", {"overrides": {str(FLAGGED_LINE): TRUE_ONSET}})
+    _, nudged, _ = client.post("/api/reanchor", {"overrides": {str(FLAGGED_LINE): nudged_to}})
+
+    assert typed["lines"][FLAGGED_LINE]["start"] == TRUE_ONSET
+    assert nudged["lines"][FLAGGED_LINE]["start"] == nudged_to
+    assert typed["bands"] == nudged["bands"] == {"HIGH": LINE_COUNT, "REVIEW": 0, "FAIL": 0}
+    assert starts(typed)[FLAGGED_LINE + 1:] == starts(nudged)[FLAGGED_LINE + 1:]
+    assert bands(typed) == bands(nudged)
+
+
+def test_a_correction_the_stepper_could_barely_reach_is_one_request(client):
+    """The failure §12.1 is answering: a phrase the ASR did not recognise
+    leaves the line with nothing to anchor to, so the error is unbounded
+    by construction — 47 s in Luz y Sal, about 940 presses and 42 seconds
+    of continuous hold. Line 14 has 16 s of room between its neighbours;
+    crossing 15.08 s of it is 302 presses by stepper and one number
+    typed. The route takes it whole either way."""
+    far = 130.00
+
+    _, payload, _ = client.post("/api/reanchor", {"overrides": {"14": far}})
+
+    assert round(far - 114.92, 2) == 15.08, "the fixture's own distance"
+    assert payload["lines"][14]["start"] == far
+
+
 def test_a_correction_too_late_flips_the_next_line_to_review(client):
     """The other half of §8.8, and the most useful signal on the page: an
     edit recomputes the bands below it, and a HIGH line may come back
@@ -114,8 +152,8 @@ def test_moving_line_0_is_the_global_shift(client, tmp_path):
     `leadIn`, keeps entry 0 at `0.00`, and shifts every cue-relative value
     by exactly −0.40. One control, no special case, and B6's global nudge
     obtained for free."""
-    machine_out = tmp_path / "machine.sp.json"
-    moved_out = tmp_path / "moved.sp.json"
+    machine_out = tmp_path / "machine.json"
+    moved_out = tmp_path / "moved.json"
 
     _, before, _ = client.get("/api/session")
     _, after, _ = client.post("/api/reanchor", {"overrides": {"0": MOVED_LEAD_IN}})
@@ -148,7 +186,7 @@ def test_the_corrected_run_reaches_a_correct_output_file(client, tmp_path):
     Tramoya reads — every key Bombista does not own passed through
     untouched, all languages included, entry 0 at 0.00 and the offset in
     `leadIn`."""
-    out = tmp_path / "out.sp.json"
+    out = tmp_path / "out.json"
 
     client.post("/api/reanchor", {"overrides": {str(FLAGGED_LINE): TRUE_ONSET}})
     status, payload, _ = client.post("/api/emit", {"out": str(out)})
@@ -249,7 +287,7 @@ def test_canary_moving_line_0_shifts_the_song_and_nothing_else(canary, tmp_path)
     assert after["lines"][1]["start"] == 18.44
     assert after["bands"] == before["bands"]
 
-    machine_out, moved_out = tmp_path / "a.sp.json", tmp_path / "b.sp.json"
+    machine_out, moved_out = tmp_path / "a.json", tmp_path / "b.json"
     canary.post("/api/emit", {"overrides": {}, "out": str(machine_out)})
     canary.post("/api/emit", {"overrides": {"0": 9.32}, "out": str(moved_out)})
     machine = json.loads(machine_out.read_text(encoding="utf-8"))

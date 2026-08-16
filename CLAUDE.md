@@ -29,7 +29,10 @@ never read it for what the tool produces today.
 ```bash
 pip install -e ".[dev]"     # Install in editable mode with dev deps
 python -m pytest            # Run all tests (includes one tiny-whisper integration test)
-bombista --help   # CLI entry point
+bombista --help             # CLI entry point
+bombista --version          # `bombista <version>` — the SAME string that lands in
+                            # a run's `toolVersion`, so a version quoted out of a
+                            # song file and one read off the terminal compare directly
 
 # The workflow (align stages, promote applies):
 bombista align <audio.wav> <song.json|lyrics.txt> -o <staging-dir> \
@@ -98,6 +101,9 @@ bombista/
                    so the candidate stays emittable) + normalize_to_lead_in
   provenance.py  — per-run audio identity (path, streamed sha256, duration, model, device,
                    lang, extractedAt, toolVersion) + linesHash over the canonical lines.
+                   `tool_version()` is public because `--version` answers with it:
+                   one resolution, one spelling, and the flag inherits the
+                   pyproject fallback for a checkout never installed as a dist.
                    `extractedAt` is a claim about WHEN THE MACHINE LISTENED, so a
                    `--words` run — which §9.4 makes the correction loop, i.e. most
                    runs — carries it forward from the sibling instead of stamping

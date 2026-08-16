@@ -59,13 +59,21 @@ def _duration_sec(path: Path) -> float | None:
 TOOL_NAME = "bombista"
 
 
-def _tool_version() -> str:
+def tool_version() -> str:
     """`<tool name> <version>` — the name is part of the string because this
     block is embedded in other people's files (a song JSON's `_bombista`
     block), where a bare version number says nothing. The version comes from
     the installed distribution, falling back to parsing `pyproject.toml`
     directly (via `tomllib`) when the package isn't installed as one, so it
-    is never hardcoded in two places."""
+    is never hardcoded in two places.
+
+    Public because `cli.py` answers `--version` with it. That is the point
+    of the flag: the string a bug report quotes out of a song file and the
+    string read off the terminal are then the same string, rather than two
+    spellings of one fact that someone has to know how to reconcile. It also
+    means `--version` inherits the fallback — a checkout that was never
+    installed as a distribution still answers, instead of raising the
+    RuntimeError `click.version_option(package_name=...)` would."""
     try:
         from importlib.metadata import version
 
@@ -105,7 +113,7 @@ def build_provenance(
         "device": DEVICE_STRING,
         "lang": lang,
         "extractedAt": now.isoformat(timespec="seconds"),
-        "toolVersion": _tool_version(),
+        "toolVersion": tool_version(),
     }
 
 

@@ -40,7 +40,16 @@ __all__ = [
     "render_output",
 ]
 
-VERSION = "v0.9.0"
+VERSION = "v1.0.0"
+"""The masthead's version string — the package version with a `v` in front.
+
+It is a second copy of what `pyproject.toml` declares, and a second copy
+drifts: nothing about editing one file makes anyone edit the other, so the
+public page kept saying `v0.9.0` while the tool it belongs to had moved on.
+The copy stays (the masthead is a string, and importing distribution
+metadata to render a header would be its own kind of wrong), but it is
+guarded — `tests/test_pages.py` fails when the two disagree, which turns a
+silent drift into a red test at bump time."""
 
 STEPS = (("1", "Input", "/input"), ("2", "Review", "/review"), ("3", "Output", "/output"))
 """§9.2 — one hard-bordered strip, three segments, every one of them a

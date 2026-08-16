@@ -101,6 +101,37 @@ def test_every_page_carries_the_masthead(name, rendered):
     assert "Chango Pepper" in html
 
 
+def test_the_masthead_version_is_the_package_version():
+    """The masthead's `v0.9.0` and `pyproject.toml`'s `0.9.0` are one fact
+    written twice, and the second copy is the one nobody remembers to edit —
+    which is how the page went on announcing 0.9.0 after the tool had moved.
+
+    `pages.VERSION` is a plain string on purpose (a header should not go
+    reading distribution metadata to render itself), so the duplication is
+    kept and *guarded* instead: this fails the moment the two disagree, so
+    the next bump is a red test at bump time rather than a wrong number on a
+    page anyone can open.
+    """
+    from importlib.metadata import version
+
+    assert pages.VERSION == f"v{version('bombista')}", (
+        f"pages.VERSION is {pages.VERSION!r} but the installed package is "
+        f"{version('bombista')!r} — bump both, or re-run `pip install -e \".[dev]\"` "
+        "if you have just edited pyproject.toml in an editable checkout."
+    )
+
+
+@pytest.mark.parametrize("name", ALL_PAGES)
+def test_the_masthead_shows_that_version(name, rendered):
+    """§9.1 puts the version in the masthead, so the guard above is only
+    worth anything if the guarded string is what every page actually
+    prints."""
+    masthead = re.search(r'<header class="mast".*?</header>', rendered[name], re.S)
+
+    assert masthead, "no masthead"
+    assert pages.VERSION in masthead.group(0)
+
+
 @pytest.mark.parametrize("name", ALL_PAGES)
 def test_every_page_carries_the_step_bar_and_reaches_every_step(name, rendered):
     html = rendered[name]

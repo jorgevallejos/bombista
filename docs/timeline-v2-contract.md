@@ -1,6 +1,6 @@
 # Timeline v2 — the contract between Bombista and Pregonero
 
-**Created 2026-08-13.** Canonical copy lives in `projects/bombista/docs/`; an identical copy sits in `projects/live-lyric-translator/docs/`. Spec rationale is in `projects/bombista/docs/bombista-product-backlog.md` §2.
+**Created 2026-08-13.** Canonical copy lives in `projects/bombista/docs/`; an identical copy sits in `projects/pregonero/docs/`. Spec rationale is in `projects/bombista/docs/bombista-product-backlog.md` §2.
 
 Bombista and Pregonero are being built **in parallel, in separate sessions**. Neither may wait on the other. This file is the single shared truth: Bombista asserts it **produces** the fixture below; Pregonero asserts it **consumes** it. Do not invent your own shape — if something here is wrong or insufficient, stop and raise it with Jorge rather than diverging.
 

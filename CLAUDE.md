@@ -13,9 +13,10 @@ it never edits lyric text.
 
 The live output contract is `docs/timeline-v2-contract.md` — shared with Pregonero, and
 carrying the golden fixture both sides test against. Do not change the interchange format
-without coordinating with the translator side. `docs/output-contract.md` is the **superseded
-v1** spec, kept for the type derivation and the `videoCueLookup` / `media.offset` background;
-never read it for what the tool produces today.
+without coordinating with the translator side. An earlier v1 spec covered the type derivation
+and the `videoCueLookup` / `media.offset` background; it is superseded and removed — those
+facts now live in this file (see "Relationship to Live Lyric Translator" below) and in
+`timeline-v2-contract.md`, never in a separate v1 document.
 
 > **The audio-clock rule (critical):** timeline times are only meaningful relative to the
 > audio you feed in. For **Video-mode** songs, extract the audio from the linked animation
@@ -182,7 +183,6 @@ tests/           — 479 tests; all fast except one tiny-model integration test 
 docs/
   timeline-v2-contract.md           — THE live contract with the translator (Pregonero).
                                       Shared, amended by either side; do not diverge from it.
-  output-contract.md                — v1 interface spec; superseded by timeline-v2-contract.md
   acceptance-tragedia-2026-07-03.md — v1 acceptance record (calibration + promote diff)
   bombista-product-backlog.md       — the v2 spec (§2 is the architecture and timing model)
   bombista-serve-spec.md            — B20: `bombista serve`, the local web interface.
@@ -237,7 +237,7 @@ stdlib-only by design — test it with synthetic `Word` lists, never with the wh
   `13.1 - 7.26 == 5.840000000000001` in IEEE floats.
 - Alignment knobs (`offset`, `trimStart`) live on the song's `media` block — not here.
 - **`docs/timeline-v2-contract.md` is the live contract** and carries the golden fixture both
-  sides test against. `docs/output-contract.md` is the superseded v1 spec.
+  sides test against — the only interface spec in this repo.
 
 ## Relationship to Live Lyric Translator
 

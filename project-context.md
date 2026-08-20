@@ -34,6 +34,61 @@ These were tested against real proposals and hold as rules, established 2026-08-
 
 **Why B14 (derive BPM from the aligned onsets) was rejected, 2026-08-14 — read before proposing anything like it again.** A timestamp is a fact about time; tempo and meter are a musical interpretation layered on top of time, owned by the performer, and pulling them back down into the timing tool mixes two levels of abstraction the suite otherwise keeps clean. The tell: making the feature safe would have required guarding against problems it invented (octave ambiguity, meter judgment calls no signal-processing result can supply) — elaborate guardrails around a derived value are evidence the value should not be derived here. The premise also failed numerically: an onset fit would decline to propose on every song in the catalogue, and the obvious fallback (audio autocorrelation) lands at ±2–3%, 1.5–4.4 s of drift across a song. Two independent reasons to drop it, and neither is "not built yet." Tempo is data Jorge types in by hand from the Ableton projects — a data-entry task, not a build, and explicitly **no Ableton `.als` reader, ever.**
 
+## Proposed direction (unbuilt, undecided) — an orchestrator over Bombista's confidence output
+
+*Folded in 2026-08-20 from a retired separate project. Working name during that project was
+**Apuntador** — a candidate never confirmed, not a name of record. This section is durable design
+thinking only: nothing below is decided, scheduled, or built, and no dates here mark progress.*
+
+**The core idea.** A second tool, separate from Bombista and calling it rather than modifying it,
+that does the judgment work Bombista deliberately refuses: reads a confidence report, decides which
+flagged lines are actually wrong, and proposes a correction. It would never write to a song file and
+would never produce the sign-off — the human still presses Bombista's own download, which is the
+structural moment that certifies a timeline. Its entire action surface, as proposed, is expressible
+as a list of `--anchor LINE=SECONDS` flags plus a reason in prose: nothing it produces could not
+already be typed by hand.
+
+**Why this stayed a separate tool rather than a Bombista feature.** Bombista's own boundaries (above)
+already settle this: it is a triage tool, not an automation tool, and "receives a file, returns a
+file, does not change the state of one" is the property the whole suite rests on. Deciding which
+flagged line is actually wrong is judgment, not measurement — the same category of thing rule 4
+("Bombista answers 'when,' not 'in which beat'") and the B14 rejection (tempo is a musical
+interpretation layered on top of a timestamp, not a fact recoverable from one) already refuse to pull
+into Bombista itself. An orchestrator that did this work would sit in its own tool, call Bombista's
+existing CLI/flags, and leave Bombista's own repo at zero commits from the work — consistent with,
+not an exception to, the design boundaries above.
+
+**Also proposed to double as a rehearsal for Corilus.** The autonomy ladder, the proposes-never-
+decides rule, confidence as a first-class output, and evals as the thing that decides whether it
+works all have a direct twin in `projects/corilus-onboarding/strategic-brief.md`. The rationale for
+doing this here first, if it is ever done: solo, reversible, with a real corpus and no regulator,
+before arriving at Corilus having only read about these mechanisms rather than built one.
+
+**Seven open questions — none decided.** These were the deliverables of a design session that never
+produced them:
+1. Name — "Apuntador" was the leading candidate, never confirmed; alternatives raised were
+   Traspunte and Utilero.
+2. The one-sentence purpose.
+3. The autonomy ceiling, with reasoning — the proposed answer, to argue with rather than accept, was
+   rung 2 ("draft — prepares, you approve") and never higher, on the reasoning that Bombista's own
+   download is the sign-off and the agent must be structurally unable to press it.
+4. The "must never" list — candidates raised: never writes to a song file (inherited), never
+   produces the sign-off, never re-implements alignment or confidence banding, never proposes
+   anything not expressible as an existing Bombista flag, never derives tempo, never translates.
+5. The proposal object — its fields, what evidence it may read (word-level timings, the six
+   signals and their glosses, full lyric text, neighbour spacing; whether it may hear the audio at
+   all was left open), and what makes a reason legitimate (must point at evidence, not intuition).
+6. The eval — three candidate metrics (accuracy, harm rate, calibration), explicitly not
+   band-improvement (rejected as trivially gameable), plus a candidate acceptance canary on the
+   Luz y Sal 47-second line.
+7. Local model or hosted API — flagged as the same data-residency question Corilus will ask, at a
+   fraction of the stakes, with the added concern that a hosted call would cost the Tramoya suite its
+   "offline" property.
+
+**Status: proposed only.** No code exists, no session has produced answers to the seven questions
+above, and nothing here is a plan of record. If this is ever picked up, `context/current-priorities.md`
+gets a row and this section stops being the only place it's described.
+
 ## How it works (method)
 
 The shipped method (forced alignment, adopted 2026-07-03 — see "History" below for how it got here):

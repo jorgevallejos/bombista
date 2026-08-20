@@ -1,8 +1,7 @@
 # B20 — `bombista serve`: a local web interface
 
-**Status: built.** All five PRs merged 2026-08-16 (#22, #23, #24, #26, #27), **479 tests green.**
-What remains is §7's acceptance run, not code. Jorge's design, 2026-08-14. Supersedes and absorbs
-**B19** — the editable review page is page 2 of this flow, not a separate item.
+Jorge's design, 2026-08-14. Landed across five PRs (#22, #23, #24, #26, #27), merged 2026-08-16.
+Supersedes and absorbs **B19** — the editable review page is page 2 of this flow, not a separate item.
 
 ## Where things are in this document
 

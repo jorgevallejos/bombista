@@ -83,7 +83,7 @@ Eighteen lines Bombista is confident about. **Two to look at.** That number is t
 
 ### 2. Read the report
 
-`staging/rio-de-sal/rio-de-sal-qa-report.md` opens with the provenance of the run — which audio file, its sha256, the model, the language — then gets to the point:
+The QA report opens with the provenance of the run — which audio file, its sha256, the model, the language — then gets to the point:
 
 ```markdown
 ## Needs attention
@@ -192,7 +192,7 @@ Strict red → green → refactor; tests green before every commit.
 python -m pytest
 ```
 
-263 tests. All fast except one integration test that runs the tiny Whisper model against a committed 12-second fixture.
+All fast except one integration test that runs the tiny Whisper model against a committed 12-second fixture.
 
 ## License
 

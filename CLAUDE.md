@@ -172,7 +172,7 @@ bombista/
                    options, help text, and translating ValueError into ClickException /
                    BadParameter. `extract` is a registered alias of `align` (B11) — the
                    same Command object, so the two cannot drift
-tests/           — 479 tests; all fast except one tiny-model integration test on a
+tests/           — all fast except one tiny-model integration test on a
                    committed 12 s fixture (tests/fixtures/). The `serve` acceptance
                    case runs in two tiers (B20 §11.3): a committed synthetic 19-line
                    fixture in CI, and the pimiento canary opt-in behind
@@ -241,7 +241,7 @@ stdlib-only by design — test it with synthetic `Word` lists, never with the wh
 
 ## Relationship to Live Lyric Translator
 
-- Consumer: `projects/live-lyric-translator-dev/` — `TimelineEntry` type lives in
+- Consumer: `projects/pregonero/` — `TimelineEntry` type lives in
   `src/songState.ts`; cue lookup is `videoCueLookup` in `src/videoCueLookup.ts`.
 - Song JSONs live in `~/Chango Pepper/songs/`; linked animation videos in
   `~/Chango Pepper/animations/<song-id>/`.

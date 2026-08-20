@@ -1,136 +1,107 @@
-# Project Context — Timeline Extractor
+# Project Context — Bombista
 
 _Project-specific Cowork context. Read this **after** `~/Chango Pepper/personal-context.md` (and any relevant `~/Chango Pepper/disciplines/<topic>.md`). Acknowledge briefly ("Context loaded. Ready.") and wait for Jorge to describe what's on his plate. At the end of the session, propose updates if anything important changed._
 
-> **Stub created 2026-06-24**, spun out of the Live Lyric Translator D-wire round 3. The engineering counterpart for Claude Code lives in `CLAUDE.md` at the repo root (`projects/bombista/CLAUDE.md`). Stack, output contract, and interchange format are now decided (see Build state) — the sections below are kept as the method/contract record.
-
----
-
-## Build state — v2 "Bombista" BUILT on `feat/bombista-v2` (2026-08-13), not yet merged
-
-**Six of seven backlog items done, one gated.** Branch `feat/bombista-v2`, **196 tests green**
-(verified baseline at the branch point was 60 green / 0 failing, checked in an isolated
-worktree — the "60 tests" figure recorded below was accurate). Built in order, one commit per
-item, per `docs/bombista-v2-kickoff.md`:
-
-- **B3** — section-marker support deleted. Lyrics arrays carry sung lines only; a non-lyric
-  entry fails loudly naming its index. This closes the "known contract wrinkle" flagged in the
-  v1 build state below.
-- **B12** — timelines are now **relative to a start cue**: entry 0 at `0.00`, `raw[0].start`
-  banked in `leadIn {durationSec, source, confidence, apply}`, stamped `timelineVersion: 2`.
-  Bombista never decides whether to apply it — that is a playback decision.
-- **B1** — provenance: audio path + streamed sha256 + duration, model, device, lang,
-  extractedAt, toolVersion, on every run. This is the item that would have caught the ~17 s
-  Tragedia error.
-- **B5** — `readers.py`: plain text or CP song JSON in, canonical CP song dict out, normalised
-  at the boundary. The core pipeline is untouched. Structural only — no network, no LLM.
-- **B2** — `--emit timeline|songjson|report-json|srt|lrc`, all reading the canonical CP form;
-  one shared merge path with `promote`.
-- **B4** — `linesHash` guard: `promote` warns loudly (never blocks) when the target's lyrics
-  moved since extraction.
-- **B13 (migration of the two live song files) — GATED**, deliberately not run. See below.
-
-**The shared contract is `docs/timeline-v2-contract.md`**, co-owned with Pregonero
-(live-lyric-translator) and amended by either side mid-flight. Bombista reproduces its golden
-Libertad fixture exactly.
-
-**Two things not to forget:**
-1. **B13 waits on Pregonero P3.** Migrating the data before the app can reject a version it
-   doesn't understand means a v1-aware app reads v2 files and fires every line ~7 s early with
-   no error.
-2. **Migrating Tragedia will not fix Tragedia.** Its stored timeline is the known ~17 s-late
-   one, produced from the wrong audio source; migration faithfully migrates a wrong timeline.
-   The fix is a **re-extraction** from audio pulled out of the animation video
-   (`ffmpeg -i video.mp4 -vn -ac 1 -ar 16000 audio.wav`) — a post-merge data job.
-
-## Build state — v1 SHIPPED (2026-07-03, forced-alignment pivot complete)
-
-**v1 is built, accepted, and live.** The alignment-pivot run (`docs/alignment-pivot-kickoff-2026-07-03.md`, Block A) went end-to-end in one session: PRs #5–#9, #11 merged to `main`, 60 tests green. Pipeline: audio + song JSON → faster-whisper `medium` (word timestamps, ~50 s/song, model cached) → forward-only fuzzy anchoring of each line's opening tokens → `{"timeline": [...]}` per the frozen contract, with a per-line HIGH/REVIEW/FAIL markdown QA report and a `--anchor <line>=<seconds>` hand-fix loop (`--words` reuses the transcription, re-runs in <0.1 s). `extract` stages, `promote` applies (backup + diff, touches only `timeline`). **The audio-clock rule** is documented in the CLI help and repo CLAUDE.md: feed the linked video's audio for Video-mode songs, the master recording for Auto-mode songs.
-
-**Acceptance (Tragedia, `docs/acceptance-tragedia-2026-07-03.md`):** exact convergence with the spike's derived ground truth (Δ = 0.000 on all 29 lines after two documented hand anchors: line 0 = 0.96 — whisper clamps the first word to 0.0; line 13 = 58.5 — the known misheard line, FAIL→override). vs the card reference: median −0.36 s / stdev 0.70 (cards lag sung onsets) → a **`--lead` knob is proposed, not built** — Jorge decides if cards-style timing is wanted. The regenerated timeline is **promoted into `songs/tragedia-de-cerdo-asado.json`** (backup: `tragedia-de-cerdo-asado.json.backup-20260703-112259`); only real change vs the spike-derived values: line 28's end now 160.48 (last word + 1.0 s pad). Jorge's in-app test (Auto + Video modes) closes v1.
-
-**Re-run on new recordings:** `bombista align <audio.wav> <song.json> -o <staging>` then `promote` — no code changes needed; see repo CLAUDE.md.
-
-**Known contract wrinkle (translator-side) — RESOLVED 2026-08-13 by B3; markers no longer exist on either side.** Original note: the translator's `validateTimeline` (`songState.ts`) has no exemption for zero-length `{0,0}` entries in its monotonic check, so any song with **mid-song section markers** would fail import. The extractor's validator exempts them (PR #9). Resolve translator-side before a marker-carrying song needs a timeline.
-
-**Incident log (2026-07-03):** S4's PR #10 merged into `chore/scaffold-cli-and-output-contract` because that stale branch was still GitHub's **default branch** and the `gh pr create` omitted `--base`. Fixed: re-merged as PR #11 to `main`, default branch switched to `main`, scaffold branch force-reset to its pre-merge commit. Repo CLAUDE.md now mandates explicit `--base main`.
-
-## Superseded build state (2026-06-25 — video-OCR track, parked)
-
-**Spike RAN and PASSED — reference signed off (2026-06-25).** Claude Code ran the spike on a merged-green `main`; all 29 lyric lines got exactly one monotonic window, 0 unmatched, written through the real `serializer.write_timeline`. `docs/spike-candidate-timeline.json` is now the **signed-off reference** (Jorge + Cowork hand-verified lines 0, 11, 17, 20, 21, 28 against the video).
-
-**Opus design pass DONE (2026-06-25) — `docs/assignment-qa-design.md`.** Architecture for assignment + human-QA settled with Jorge. Key decisions: (1) assignment is a **global DP alignment** (cards↔lines, monotonic, ops MATCH/MERGE≤3/SKIP-CARD/SKIP-LINE/SPLIT), replacing the spike's greedy walk; merge-vs-split decided by the file's **newline count = expected card count** vs cards the video shows. (2) **Video rules on structure, file rules on wording.** Splits + adds (video shows more phrasing) are **auto-applied and reported, no confirmation**; removals + hard FAILs still gate; wording mismatches (e.g. lines 11/20 defects) are flagged only, never auto-overwritten. (3) Auto-applied structural edits re-split the es/fr/nl variants via an **LLM-assisted apply step** kept separate from the deterministic core — **deferred** in the build (not on the Tragedia acceptance path); lyrics file is backed up + diffed so any auto-edit reverts. (4) Confidence = named signals → HIGH/REVIEW/FAIL bands; QA artifact = markdown report + `qa-frames/` thumbnails; CLI is two steps, `extract` (staging, never writes song JSON) → `promote`. (5) Fixed bottom-band crop (`crop=1620:320:0:760`) is the v1 standard (no position auto-detect). v1 DoD = Tragedia end-to-end, start ±0.20 s vs reference, plays in Auto mode.
-
-**Resume at Sonnet build-out** — paste `docs/build-plan-prompt.md` into Claude Code (bombista repo). 9-step plan, TDD; check in after step 2 (alignment) and step 9 (acceptance).
-
-**Spike result detail:** 24 lines matched 1:1; 5 two-card lyric lines (6, 14, 20, 24, 25) reconciled as merges; the intra-text pixel-diff splitter correctly split the no-gap pair at line 6 (~25.66s). End times = brightness falling edges (full card display duration).
-
-**Source-video text defects found by OCR-verify (fix in the subtitle master, NOT the extractor — timeline carries timing only, so unaffected):**
-- Line 11 displays a burned-in glitch `so I may seem deli, i, i, i, i, i, ighted.` (canonical: "so I may seem delighted.").
-- Line 20 second card displays a duplicated fragment `and the oven door left hanging half open.` (canonical: "left hanging half open.").
-- (Line 21 was a benign tesseract apostrophe quirk — video is correct; not a defect.)
-- These may self-resolve when the master is regenerated after the producer re-record (see `animations/.../notes.md` provisional flag). **Lesson worth keeping: OCR-verify earns its place precisely by catching video↔canonical-lyric divergence — treat mismatches as human-QA flags, not failures.**
-
-- **Stack: Python CLI (`click`)** — decided, no longer open. Output format kept language-agnostic so a later Node/in-app caller is unaffected.
-- **Interchange format: JSON, locked 2026-06-24.** `{ "timeline": [...] }` envelope deserializing straight into the translator's `TimelineEntry[]`; parallel-array contract preserved (one entry per song item, section markers as `start == end == 0`). **SRT rejected** (carries cue text that duplicates the song JSON's source-of-truth lyric order, and can't represent section markers). An optional `.srt` export may be added later as a human-QA debug convenience only — never the canonical contract. This is mirrored in the translator's `project-context.md` so Prompt 16 (the A+ import button) conforms.
-- **Scaffold shipped** (PR `chore/scaffold-cli-and-output-contract`, on `main`): `docs/output-contract.md` (frozen interface extracted from `songState.ts` — `TimelineEntry = {start, end}`, half-open `[start, end)`, parallel-array semantics, `videoCueLookup` quoted, `offset`/`trimStart` documented as living on `media`), `pyproject.toml`, `bombista/` package, `click` CLI entrypoint stub (`extract <video> <lyrics> -o <out>` — validates args only), `models.py` (frozen `TimelineEntry` dataclass, non-negative guard), `serializer.py` stubs, `tests/`, `CLAUDE.md`, `.gitignore`, `.claude/`.
-- **Serializer greened** (PR branch `feat/green-serializer`, **pushed, open — merge next session**): `to_dict` / `write_timeline` implemented, round-trip tests pass.
-
-**Git state (verified 2026-06-25 — both housekeeping items still OPEN):**
-- `feat/green-serializer` is **NOT merged.** Local `main` is checked out and clean, but still carries the stub serializer (`to_dict` raises `NotImplementedError`); the green impl lives only on `feat/green-serializer` (2 commits ahead of `main`). After the PR merges: `git checkout main && git pull && git push && git branch -d feat/green-serializer`.
-- `project-context.md` loose end **resolved** — committed to `main` (`50863cb docs: track project-context`), per the earlier recommendation. **But that commit is local-only (1 ahead of `origin/main`, unpushed)** — the `git push` above covers it.
-- Stray `feat/timeline-import-button` in the **translator** repo is **still present** — delete it there: `git checkout main && git branch -d feat/timeline-import-button`.
-
-**Spike findings (2026-06-25 — important, they correct the method):**
-- Input is `animations/tragedia-de-cerdo-asado/Master Sequence only subtitles.mp4`: 1620×1080, 25fps, 160.32s, **white text on pure black, English (`.en`)**, bottom band (`crop=1620:320:0:760`).
-- ffmpeg's whole-frame `scene` filter finds nothing (text too few pixels). **Working primitive = region brightness-edge:** crop band → `signalstats` YAVG → threshold (blank≈16, text≈18–19.5) → rising/falling edges. OCR (tesseract on `negate,format=gray`) is near-perfect.
-- **Cards ≠ lyric lines 1:1 — the "assign N lines to N change-points in order" method is wrong for real data.** Brightness found **33 cards vs 29 lyric lines.** Two causes: (a) brightness misses text→text changes with no dark gap (consecutive cards merge — needs an intra-text signature/SSIM/hash split); (b) song `lyrics` entries 6, 14, 20, 24, 25 carry an embedded `\n` and display as two cards each. Assignment must **reconcile cards→lines via OCR fuzzy-match**, not blind ordinal mapping. → This is the genuine Opus design moment (assignment + QA loop, agenda #4/#5).
-- **Reference now exists** (resolved 2026-06-25): the song JSON `timeline` was only an even-spaced scaffold; the spike's reconciled `docs/spike-candidate-timeline.json` is the hand-verified ground truth. (The scaffold in the song JSON can be replaced by this once v1 ships.)
-
-**Workflow note (incident 2026-06-24):** the JSON-confirmation prompt was first pasted into the *translator* Claude Code by mistake, which spun up the stray empty `feat/timeline-import-button` branch (zero commits, == `main`, harmless). Lesson: keep two clearly-rooted VS Code windows (one per repo) and check the repo path Claude Code echoes before pasting.
+> Spun out of the Live Lyric Translator (now Pregonero) D-wire round in June 2026. The engineering counterpart for Claude Code lives in `CLAUDE.md` at the repo root (`projects/bombista/CLAUDE.md`). This file is the reasoning record; `docs/bombista-product-backlog.md` and `docs/bombista-serve-spec.md` hold the detailed specs.
 
 ---
 
 ## What this project is
 
-A tool that **derives a lyric/subtitle timeline from a "lyrics-only" video** — a video that shows just the lyric phrases burned in at the correct times. Output: a `timeline` (cue start times mapped to lyric lines) that the **Live Lyric Translator** app imports per song.
+**Bombista** is a **forced-alignment triage tool**, part of the **Tramoya** suite: give it a recording and the text of what's sung in it, and it works out when each line happens — and tells you which lines it isn't sure about, so you check three instead of proofing forty.
 
-It exists because lyric timing and animation should be **decoupled**: the translator's animation video is an optional visual; the timeline is independent song data. The translator's **A+ timeline-import button** (Prompt 16 in `projects/live-lyric-translator-dev/docs/d-wire-triage-and-prompts.md`) consumes the output of this tool. Until this project ships, timelines are authored offline by Cowork (the "#6 DATA task" path in that same doc) — this project automates that path.
+It is deliberately **not** an automation tool. Forced aligners already exist (aeneas, Montreal Forced Aligner, whisperX) and hand back timings with no opinion about them, so on a deadline you either trust the lot or re-check the lot. What Bombista adds is the review loop: per-line confidence bands (`HIGH` / `REVIEW` / `FAIL`) with named reasons (`clean-anchor`, `ambiguous`, `lead-fallback`, `uncorroborated`, `gap-outlier`, `no-anchor`, `override`); a report that says which lines to check and why; and a correction pass that re-runs in about 0.07 s because the transcription is cached.
+
+Runs entirely **offline** — no API keys, no GPU, no network — via faster-whisper `medium` (~1.4 GB, CPU int8, ~50 s per song). This is a property worth protecting; see "Design boundaries" below.
+
+**Positioned generically** (no Chango Pepper specifics in the tool itself): subtitling video, lyric-video and karaoke makers, accessibility captioning, educators building synced read-along texts, audiobook↔ebook sync, and — fittingly for the suite name — theatre surtitles, which is this exact job done by opera houses with worse tools. Output feeds **Pregonero**'s timeline import.
+
+**The design property worth naming: the timeline is language-independent.** Bombista's native artifact is an ordered list of `{start, end}` spans, matched to lines by position, containing no words. Retranslate every line into Dutch and the timings still hold — the words change, when they land does not. This is precisely why it feeds a translation-aware performance tool well. Its cost is positional fragility: insert one line into the lyrics and every timestamp after it is silently wrong — this is exactly what the `linesHash` guard (B4) exists to catch.
 
 ## Why it's a separate project (not in the translator repo)
 
-Deriving a timeline from video is a real subsystem (video decode, subtitle-region change detection, OCR verification, a progress/QA loop) with its own dependencies and failure modes. Bundling it into the Electron app would bloat the app and mix concerns. Keeping it standalone lets it run as a CLI/batch tool now and, later, be wrapped into the app (or invoked by it) once it's proven. Decided 2026-06-24.
+Deriving a timeline from a recording is a real subsystem (transcription, alignment, confidence scoring, a review/QA loop) with its own dependencies and failure modes. Bundling it into the Electron app would bloat the app and mix concerns. Keeping it standalone lets it run as a CLI/local-web tool and be wrapped into the app later (or invoked by it) once it's proven. Decided 2026-06-24.
 
-## How it should work (method — from the #6 DATA-task approach)
+## Design boundaries — what Bombista will not do
 
-1. **Input:** a lyrics-only video + the song's ordered lyric lines (the fixed phrase list).
-2. **Change detection:** with `ffmpeg`, sample frames and detect the timestamps where the burned-in subtitle **region changes** (the moments a new phrase appears). This yields an ordered list of change-point timestamps.
-3. **Assignment:** ~~because lyric order is fixed, assign the N lyric lines to the N change points in order (line *i* starts at change-point *i*).~~ **Revised 2026-06-25 — naive 1:1 doesn't hold.** Detected display cards ≠ lyric lines (Tragedia: 33 cards vs 29 lines): some lyric entries span two cards (embedded `\n`), and consecutive no-gap cards must be split. Assignment must **reconcile cards→lines by OCR fuzzy-match**, with a human-QA pass on splits/mismatches. (Design this at Opus level — see Build state findings.)
-4. **OCR verification (only):** run OCR (e.g. Tesseract) on each region **just to verify** the assignment matched the expected line — not as the primary signal. Flag mismatches for human review.
-5. **Output:** write the `timeline` in the translator's expected shape (see Output contract) — either a standalone timeline JSON/SRT the A+ button imports, or written directly into the song JSON.
+These were tested against real proposals and hold as rules, established 2026-08-14:
+
+1. **No `tempo` block → no Auto mode.** Tempo is a prerequisite in Pregonero, not a nicety, and it is never derived — filled by hand from the Ableton project that produced the audio.
+2. **The pulse and the timeline are separate clocks.** A constant offset between them is fine; what must match is the *rate*, so any shift stays consistent instead of accumulating.
+3. **The timeline measures the recording; the performance is a playback-side transform.** Anything describing how a song is played on a given night — lead-in application, performed tempo — is applied by Pregonero at playback and never written back over the measured values. Bombista measures and records; the consumer decides.
+4. **Bombista answers "when," not "in which beat."** Its output is time: line *i* happens at *t*. Tempo, meter and any other musical structure are performer-owned metadata, entered by a human and consumed by Pregonero — never inferred from the timings.
+5. **Bombista's inputs are the audio recordings and the lyrics JSON. Nothing else.** No DAW project files, no `.als` parsing in any form, no session metadata. If a fact is not in the audio or the lyrics, it is not Bombista's to know — a human supplies it.
+
+**Why B14 (derive BPM from the aligned onsets) was rejected, 2026-08-14 — read before proposing anything like it again.** A timestamp is a fact about time; tempo and meter are a musical interpretation layered on top of time, owned by the performer, and pulling them back down into the timing tool mixes two levels of abstraction the suite otherwise keeps clean. The tell: making the feature safe would have required guarding against problems it invented (octave ambiguity, meter judgment calls no signal-processing result can supply) — elaborate guardrails around a derived value are evidence the value should not be derived here. The premise also failed numerically: an onset fit would decline to propose on every song in the catalogue, and the obvious fallback (audio autocorrelation) lands at ±2–3%, 1.5–4.4 s of drift across a song. Two independent reasons to drop it, and neither is "not built yet." Tempo is data Jorge types in by hand from the Ableton projects — a data-entry task, not a build, and explicitly **no Ableton `.als` reader, ever.**
+
+## How it works (method)
+
+The shipped method (forced alignment, adopted 2026-07-03 — see "History" below for how it got here):
+
+1. **Input:** an audio recording (or a video's audio track) + the song's ordered lyric lines.
+2. **Transcription:** faster-whisper `medium` transcribes the whole recording with word-level timestamps.
+3. **Anchoring:** a forward-only fuzzy match anchors each line's opening tokens against the word stream — the scan position only ever advances, so a hand correction re-derives every following line by re-matching against the audio rather than by a rigid arithmetic shift. This is deliberate: a ripple/delta shift would displace lines that were measured correctly. **Never implement a ripple.**
+4. **Confidence banding:** each line gets `HIGH` / `REVIEW` / `FAIL` with a named signal, plus a QA report that says which lines to check and why.
+5. **Correction:** `--anchor <line>=<seconds>` (CLI) re-anchors from that point using the cached transcription (`--words`), so a fix costs ~0.07 s, not another 50-second run. `bombista serve` (below) puts this loop in a page instead of a shell command.
+6. **Output:** `align` stages a timeline (never writing the input); `promote` merges it into the target song JSON (backup + diff, touches only the timing keys).
+
+## The review loop, and why `bombista serve` exists
+
+**Interface decision, 2026-08-14 — no dedicated Bombista GUI, at first.** Considered and declined: Bombista was expected to run only a handful of times over a couple of weeks and then go quiet, and a real GUI only pays off if the generic positioning above (theatre surtitles, captioning, karaoke) is a bet actually being placed. The friction was never the CLI — it's that judging a `REVIEW` line means *hearing* the audio at a candidate timestamp, which meant opening the file elsewhere and scrubbing. **`--emit html` (B16)** captured most of that value cheaply: one offline, self-contained review page with the audio embedded, a seek-and-play button per line, and the `--anchor` command pre-written beside each flagged line — no Electron, no packaging, no second app. A third option — building the timing UI *inside* Pregonero, which already has the library, the audio and an Electron shell — was named and rejected: it fuses two stations the Tramoya framing keeps separable, and drags Bombista's language-independence into an app that is entirely about language.
+
+**The pimiento canary is what closed the gap B16 left open.** Jorge ran Bombista by hand on the real `pimiento.json` + its audio, 2026-08-15: alignment was fine (18 of 19 lines `HIGH`, none failed), but he had no way to *act* on the one flagged line — the report told him which line and why, not how to judge and fix it in the same place. He promoted the timeline with that line still unresolved. **That gap — a correction loop that identifies but cannot resolve — is the entire reason `bombista serve` (B20) exists.** It is not a reversal of the no-GUI decision; every option that decision rejected (a hosted service, a second aligner, Electron/packaging) is still rejected. What B20 adds is the B16 shape carried one step further: a flag on the existing CLI serving stdlib HTTP on `127.0.0.1`, so a correction can be *applied* in the page instead of judged in a browser and retyped as a shell command. The first public release ended up gated on two things: `serve` shipping, and pimiento's flagged line being fixable through it, not merely identifiable.
+
+**What `serve` is not, and must never become** (bound to `127.0.0.1` explicitly, never `0.0.0.0`):
+- **Not a hosted service on changopepper.com.** Holding other people's audio is a legal posture Jorge doesn't want, and it would make him a data controller — nothing leaves the machine, so the question doesn't arise rather than being answered.
+- **Not a second aligner** (no WASM/transformers.js reimplementation). Two implementations of the confidence banding would drift, and the report's trustworthiness is the entire product; the real quality bar (`--model-size medium`) doesn't fit in a browser anyway.
+- **Not Electron, not a packaged app, not a second codebase.** It's a flag on the existing CLI serving HTML with the stdlib.
+- **Not a place tempo gets derived** — design boundary rules 4 and 5 stand inside `serve` exactly as they do in the CLI.
+
+**Design decisions worth carrying forward:**
+- **A correction re-anchors; it never ripples.** Same rule as the CLI's `--anchor` (see "How it works" above) — edits below a correction re-derive against the audio, lines above stay untouched.
+- **Line 0 is not special, settled 2026-08-16.** It gets the same control as any other line. The normaliser banks its onset into `leadIn` and writes entry 0 as `0.00` at emit time regardless of how the value got there — the v2 contract is enforced by the normaliser, not by refusing the edit. *Lead-in* is a performance concept, meaningful the moment someone counts a band in; that distinction belongs to Pregonero at performance time, not to a timing tool.
+- **The Song Performance JSON (SP JSON) is not a new format — it is `songs/*.json`, named.** An early pass invented a shape from scratch; Jorge caught it ("not connected at all") and the fix wasn't a tweak, it was recognising the existing Chango Pepper song format already carried everything needed. Bombista owns exactly five keys and passes everything else through byte-for-byte: `linesHash`, `timelineSignedOff`, `timelineVersion`, `leadIn`, `timeline`. `tempo` is read, never written, per the design boundaries above — and on the plain-text branch, where a value is supplied by hand, it is **omitted rather than null-scaffolded** when not given (a null is not neutral once a consumer reads it — Pregonero already degrades safely on absence: no pulse, no count-in, scale pinned to 1).
+- **B21 — both the stepper and a typed value, not either.** The stepper alone doesn't scale: pimiento's error was 1.22 s (24 presses), but Luz y Sal produced a 47 s one (~940 presses). Found by using the tool, not by building it — an unrecognised phrase leaves a line with nothing to anchor to, so an unbounded landing is not the rare case it first looked like.
+- **B22 — withdrawn.** A plan to drop the `.sp` suffix from the download's filename was superseded by a cleaner rule, Jorge's: *"Bombista doesn't change the state of a file, it receives one and returns another."* The returned file already carries every original field plus the five timing keys, so the vault file **is** the returned file — replacing the old one with the download is the entire procedure, and the extension question dissolves rather than needing a decision.
+
+## Going public (B18) — the decision, not just the fact
+
+Bombista and Pregonero are both public, MIT-licensed repos. The decision (2026-08-14) was weighed, not automatic: going public meant Bombista's fixtures and worked example would expose real Chango Pepper lyrics and a real master-recording excerpt. Two things were swapped before publishing — not for rights reasons, but for **positioning**: a repo whose fixtures and worked example are one artist's own songs reads as that artist's private tool, which undercuts the generic captioning/surtitles positioning above. The test audio fixture became synthesised speech; the worked example became an invented song (*Río de Sal*), faithful in shape and field names but explicitly not real measurements.
+
+**History was left untouched — deliberately.** No rewrite, no force-push; the pre-swap commits are still reachable. That was accepted rather than overlooked: author rights are established by registration, not by secrecy, and the lyrics involved are already published on changopepper.com by Jorge's own choice, so the repo isn't the first disclosure of the work. The one genuinely new exposure — a 12 s master-recording excerpt (neighbouring rights, SIMIM territory) — stays reachable in history as a reviewed, accepted trade-off; the mitigation is filing with SIMIM (tracked in `projects/song-registration/`), not deleting the commit. A history rewrite remains possible if ever wanted, and gets costlier with every fork that appears.
 
 ## Output contract (what the translator expects)
 
-- The translator stores a per-song `timeline: TimelineEntry[]`; the cue lookup logic is `videoCueLookup` and the type is `TimelineEntry` in `projects/live-lyric-translator-dev/src/songState.ts` — **that code is the source of truth for the exact shape.** Confirm fields there before building the writer.
-- Alignment knobs live on the song's `media` block, not the timeline: `offset` (whole-song subtitle shift, seconds) and `trimStart` (skip blank lead-in). See `projects/live-lyric-translator-dev/docs/subtitle-format.md`.
-- Import surface: the A+ button (Prompt 16) imports a timeline JSON or SRT and parses it to `TimelineEntry[]`. Decide the interchange format with that prompt so producer and consumer agree.
+- The translator (Pregonero) stores a per-song `timeline: TimelineEntry[]`; the cue lookup logic is `videoCueLookup` and the type is `TimelineEntry` in `projects/pregonero/src/songState.ts` — **that code is the source of truth for the exact shape.**
+- **The shared contract is `docs/timeline-v2-contract.md`**, co-owned with Pregonero and amended by either side mid-flight. A timeline is relative to a start cue (line 0 at `0.00`, the lead-in banked separately) rather than absolute against the audio file — see "Design decisions" above for why.
+- **Interchange format: JSON, locked 2026-06-24.** A `{ "timeline": [...] }` envelope deserializing straight into `TimelineEntry[]`, parallel-array contract preserved. **SRT was rejected**: it carries cue text that duplicates the song JSON's source-of-truth lyric order, and can't represent section markers (which the format no longer carries anyway, per B3). An optional `.srt` export exists as a human-QA debug convenience only — never the canonical contract.
 
-## Tech stack (DECIDED 2026-06-24 — Python CLI; see Build state)
+## Tech stack (decided 2026-06-24)
 
-~~Open: Python vs Node.~~ **Resolved: Python CLI (`click`).** Rationale retained below.
-- **Python** is the natural fit for the CV/OCR pipeline (`ffmpeg`, OpenCV/Pillow for region diffing, `pytesseract` for OCR) and stays cleanly separate as a CLI.
-- **Node/TypeScript** would ease a later in-app integration (Electron is Node; `ffmpeg-static` + `tesseract.js` exist) and shares language with the translator.
-Recommendation to revisit at kickoff: start as a **Python CLI** for the pipeline, keep the output format language-agnostic (JSON/SRT) so an eventual Node/in-app caller is unaffected.
+**Python CLI (`click`).** The natural fit for the alignment pipeline (`faster-whisper`, audio handling) and stays cleanly separate. Node/TypeScript would have eased a later in-app integration and shared language with Pregonero, but the output format is language-agnostic (JSON) so an eventual Node/in-app caller is unaffected either way.
 
 ## Relationship to other projects
 
-- **Consumer:** `projects/live-lyric-translator-dev/` — imports the timeline via the A+ button (Prompt 16). Don't duplicate the translator's schema here; reference `songState.ts`.
-- **Shared data:** song lyric lines + JSON live in the root `songs/` library. This tool reads lyric order from there and may write the `timeline` back into a song JSON.
+- **Consumer:** `projects/pregonero/` — imports the timeline via the timeline-v2 contract. Don't duplicate the translator's schema here; reference `songState.ts`.
+- **Shared data:** song lyric lines + JSON live in the root `songs/` library. This tool reads lyric order from there and writes the timing keys back into a song JSON via `promote` (CLI) or the `serve` download.
 
-## Open questions / next steps (kickoff agenda)
+## History — how the method got here
 
-All five kickoff items closed (contract, stack, prototype, QA loop, DoD) — v1 shipped 2026-07-03 via the forced-alignment pivot; see Build state. What remains is Jorge's in-app test and, per new-recording batch, a plain re-run of `extract`/`promote`. Open decisions parked for later: the proposed `--lead` knob (card-style visual lead vs sung onsets), and the translator-side marker-monotonicity wrinkle.
+Bombista shipped its forced-alignment method (above) on 2026-07-03, but it started as a different tool entirely.
+
+**Video-OCR change-detection (parked 2026-06-25) — the original method.** The plan was to derive a timeline from a "lyrics-only" video: `ffmpeg` region-brightness-edge detection to find subtitle-card change points, OCR to verify each card against the expected line, and a DP-alignment reconciliation step (cards ↔ lyric lines don't map 1:1 — Tragedia showed 33 cards vs 29 lyric lines, because some lines span two cards and consecutive no-gap cards need splitting). A spike ran and passed on Tragedia — 24 of 29 lines matched 1:1, the rest resolved as merges/splits, OCR near-perfect — and an Opus design pass settled the assignment architecture (global DP alignment, video rules on structure / file rules on wording, confidence bands, a two-step `extract`/`promote` CLI). **Superseded, not because it failed its own spike, but because it depended on an input most songs don't have** — a specially prepared lyrics-only subtitle video — where forced alignment needs only an audio recording and the lyrics text, which every song already has. This is also why design boundary rule 5 above (audio + lyrics JSON, nothing else) reads as a hard-won constraint rather than an arbitrary one: the OCR approach's dependency on video was exactly the kind of extra input source the current method refuses to reintroduce.
+
+**The pivot (2026-07-03).** Dispatched from an ASR-following spike run in Pregonero's repo: that spike found live streaming ASR too slow for driving a lyric pointer in real time, but its side finding — faster-whisper `medium` batch-aligning a whole song near-verbatim in under a minute — became Bombista's core mechanism. `align` (the CLI verb; `extract` is a kept alias of the same command so the two cannot drift) replaced the OCR pipeline in one session, green end to end; the acceptance run against Tragedia converged exactly with the spike's hand-verified ground truth after two documented hand anchors.
+
+**Timeline v2 (B12, 2026-08-13–14).** The timeline moved from absolute-against-audio to relative-against-a-start-cue: line 0 always at `0.00`, the seconds before the first sung word banked in `leadIn {durationSec, source, confidence, apply}`, stamped `timelineVersion: 2`. Bombista never decides whether to apply the lead-in — Auto mode defaults `apply: false` (the performer starts the lyrics live, so any intro length is fine) and Video mode defaults `apply: true` (the video is the fixed clock). This is the fix for the single least reliable number Bombista produces: faster-whisper has a known quirk that clamps the first sung word toward `0.0`, and isolating it means that one bad number no longer contaminates every timestamp in the song. `timelineVersion: 2` exists so a v1-aware app reading a v2 file fails loudly rather than firing every line early with no error. **B13 (migrating Libertad and Tragedia's stored timelines to v2) is done** — both migrated and committed, Libertad reproduces the contract's golden fixture exactly. Migrating Tragedia's timeline did not fix Tragedia: its stored timeline was measured from the wrong audio source (the master, not the linked animation's own audio) and stayed ~17 s late until re-extracted from the correct source — a reminder that a timeline is only meaningful relative to the exact audio it was measured from (this is what the provenance block, B1, exists to make visible).
+
+**Lyrics arrays carry sung lines only (B3).** Section markers were deleted from the contract entirely rather than kept as a `{0,0}` exemption — no song ever used one, so nothing broke, and Pregonero doesn't need the matching exemption either.
+
+## Open questions
+
+- **The proposed `--lead` knob** (a card-style visual-lead offset vs. sung onsets) is parked, not built. Jorge decides if cards-style timing is ever wanted; the acceptance run's Tragedia comparison found a median −0.36 s / stdev 0.70 gap between forced-alignment onsets and the card reference.
+- **Re-running on new recordings** is a plain `bombista align <audio.wav> <song.json> -o <staging>` then `promote` — no code changes needed; see the repo `CLAUDE.md`.
 
 ## Model picks
 
-General rule in `personal-context.md`. For this project: **Opus** for the initial pipeline/architecture framing (CV + assignment + QA design), then **Sonnet** for build-out and iteration.
+General rule in `personal-context.md`. For this project: **Opus** for the initial pipeline/architecture framing (alignment + confidence-band + review-loop design), then **Sonnet** for build-out and iteration.

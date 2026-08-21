@@ -1,5 +1,7 @@
 # Bombista
 
+[![PyPI](https://img.shields.io/pypi/v/bombista)](https://pypi.org/project/bombista/)
+
 **You have a recording, and you have the text of what's said or sung in it. Bombista works out when each line happens — and tells you which lines it isn't sure about, so you check three instead of proofing forty.**
 
 > **Heads up:** the first run downloads the faster-whisper `medium` model (~1.4 GB) and caches it locally. Every run after that is offline.
@@ -37,7 +39,29 @@ This is a property worth protecting, and it is why **Bombista times but does not
 
 ## Install
 
-Bombista needs **Python 3.11 or newer** and expects to live in a virtual environment.
+Bombista needs **Python 3.11 or newer**.
+
+```bash
+pip install bombista
+```
+
+That is the whole install. [pipx](https://pipx.pypa.io/) is the tidier choice for a command-line tool, because it keeps Bombista and its dependencies in an environment of their own instead of in whichever one happens to be active:
+
+```bash
+pipx install bombista
+```
+
+Verify:
+
+```bash
+bombista --help
+```
+
+If `bombista` is not on your PATH — an unactivated venv, a `pip install --user` — every command below also works as `python -m bombista.cli`.
+
+### From source
+
+Only if you mean to change Bombista or run its tests. **`pip install` gives you the wheel, and the wheel carries no tests**, so `python -m pytest` needs the checkout.
 
 ```bash
 git clone https://github.com/jorgevallejos/bombista.git
@@ -55,8 +79,6 @@ Verify:
 bombista --help
 python -m pytest
 ```
-
-If `bombista` is not on your PATH — an unactivated venv, a `pip install --user` — every command below also works as `python -m bombista.cli`.
 
 ---
 

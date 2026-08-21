@@ -125,6 +125,28 @@ Bombista and Pregonero are both public, MIT-licensed repos. The decision (2026-0
 
 **History was left untouched — deliberately.** No rewrite, no force-push; the pre-swap commits are still reachable. That was accepted rather than overlooked: author rights are established by registration, not by secrecy, and the lyrics involved are already published on changopepper.com by Jorge's own choice, so the repo isn't the first disclosure of the work. The one genuinely new exposure — a 12 s master-recording excerpt (neighbouring rights, SIMIM territory) — stays reachable in history as a reviewed, accepted trade-off; the mitigation is filing with SIMIM (tracked in `projects/song-registration/`), not deleting the commit. A history rewrite remains possible if ever wanted, and gets costlier with every fork that appears.
 
+## On PyPI (2026-08-21)
+
+Published as **`bombista`** at https://pypi.org/project/bombista/, MIT, alongside the public GitHub
+repo. Install is now `pip install bombista` rather than a clone.
+
+**What this was for, so it is not mistaken for a launch.** Three things, in order: it **claims the
+name** permanently, which was free and is not free later; it **removes a contradiction in the
+positioning**, because a tool sold as generic captioning and surtitles infrastructure whose only
+install path is "clone this musician's repo" reads as a private script; and it is a **portfolio
+artifact** with Jorge's name on it. What it is explicitly **not** is distribution. Nobody browses
+PyPI for a forced-alignment triage tool, and the measured lesson from the Instagram work applies
+unchanged: the direct, hand-sent channel beat the passive one roughly 30 to 1. If Bombista is ever
+meant to be *used*, that comes from posting it where subtitlers and surtitle operators actually
+talk, not from the index. Expect zero installs and treat any as a surprise.
+
+**Two irreversible properties of the index, worth remembering before the next release.** A version
+number is spent the moment it is uploaded, even if the release is later deleted or yanked, and the
+metadata of an uploaded version can never be edited. This is why `1.0.1` exists as a git tag and was
+never published: its classifiers understated the supported Python versions, and correcting them
+before uploading cost one small PR, where correcting them afterwards would have been impossible.
+The tag list therefore shows a gap that the PyPI page does not.
+
 ## Output contract (what the translator expects)
 
 - The translator (Pregonero) stores a per-song `timeline: TimelineEntry[]`; the cue lookup logic is `videoCueLookup` and the type is `TimelineEntry` in `projects/pregonero/src/songState.ts` — **that code is the source of truth for the exact shape.**

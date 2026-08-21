@@ -180,8 +180,8 @@ def _from_scratch_song(song: dict, *, lang: str, title: str | None) -> dict:
     `songs@c5adf65` deleted the placeholder blocks to avoid, one key
     deeper. So: **`tempo` is written whole or not at all**, Bombista
     cannot write it whole — it never measures a meter and will not invent
-    `4/4` — and therefore it does not write it. Jorge types these in by
-    hand from the Ableton project, where they are exact.
+    `4/4` — and therefore it does not write it. The performer supplies
+    these values and types them in by hand, where they are exact.
     """
     resolved_title = title or song.get("title") or ""
     return {

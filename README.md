@@ -2,6 +2,8 @@
 
 **You have a recording, and you have the text of what's said or sung in it. Bombista works out when each line happens — and tells you which lines it isn't sure about, so you check three instead of proofing forty.**
 
+> **Heads up:** the first run downloads the faster-whisper `medium` model (~1.4 GB) and caches it locally. Every run after that is offline.
+
 Bombista is not an automation tool. It is a **triage** tool.
 
 Forced aligners already exist — [aeneas](https://github.com/readbeyond/aeneas), the [Montreal Forced Aligner](https://montreal-forced-aligner.readthedocs.io/), [whisperX](https://github.com/m-bain/whisperX) — and they all hand you timings with no opinion about them. So you either trust the lot or re-check the lot, and on a deadline you re-check the lot.

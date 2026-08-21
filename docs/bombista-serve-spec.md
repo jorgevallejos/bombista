@@ -199,9 +199,11 @@ it — as controls, not free text where avoidable:
 
 - **slug** — derived from the filename, shown for confirmation.
 - **title**, **language**.
-- **tempo** — a **clearly marked placeholder**, never derived. Rules 4 and 5 stand, and B14 was
-  dropped precisely because tempo comes from the Ableton project that produced the audio, where it
-  is exact. The UI must make it obvious this is a value Jorge fills in by hand, not a measurement.
+- **tempo** — **supplied by the performer or omitted entirely, never derived and never scaffolded
+  with a placeholder value.** Rules 4 and 5 stand, and B14 was dropped precisely because tempo is a
+  performer-owned fact, exact at its source and unrecoverable from the audio. The UI must make it
+  obvious this is a value a human fills in, not a measurement, and leaving it empty must produce a
+  file with no `tempo` key rather than a null or a stand-in number.
 - **stripped meta lines** — shown before the run, not after.
 
 ---
@@ -611,8 +613,8 @@ button on the page. *`Align →`* was too quiet for the one control that starts 
   control used to be:
 
   > **Tempo is not Bombista's business.** Bombista answers *when* a line happens, not in which
-  > beat, so the file it writes carries no `tempo` block. Add it by hand from the Ableton project
-  > that produced this audio, where it is exact — all four values together (`bpm`, `numerator`,
+  > beat, so the file it writes carries no `tempo` block. Add it by hand from the source that
+  > produced this audio, where it is exact: all four values together (`bpm`, `numerator`,
   > `denominator`, `countInBars`), because a partial block breaks Pregonero's pulse.
 
   ⚠ *"the emitted file"* until 2026-08-16 — **§10.1 forbids "emit" in a user-facing string**, and
@@ -620,7 +622,7 @@ button on the page. *`Align →`* was too quiet for the one control that starts 
 
   The original clause, kept so the removal is legible: a control starting at *— not set —*, with a
   warning block beside it in the REVIEW colour: *Tempo is never measured. Bombista answers when a line happens, not in which beat. Type the
-  value from the Ableton project that produced this audio, where it is exact.* Rules 4 and 5 stand,
+  value from the source that produced this audio, where it is exact.* Rules 4 and 5 stand,
   and B14 was dropped for this reason; the UI has to make it obvious this is a value Jorge supplies,
   never one the tool derived. **Left unset, the key is omitted from the emitted file entirely** —
   see §10.2.1 and `songs@c5adf65`.

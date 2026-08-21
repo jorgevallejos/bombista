@@ -4,17 +4,33 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bombista"
-version = "1.0.0"
+version = "1.0.1"
 description = "Forced-alignment triage for lyric and subtitle timelines"
 requires-python = ">=3.11"
 readme = "README.md"
 license = "MIT"
 authors = [{ name = "Jorge Vallejos" }]
 keywords = ["forced-alignment", "subtitles", "captions", "surtitles", "lyrics", "timeline", "whisper", "srt", "lrc"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Text Processing :: Linguistic",
+]
 dependencies = [
     "click>=8.1",
     "faster-whisper>=1.0",
 ]
+
+[project.urls]
+Homepage = "https://changopepper.com/tramoya/bombista"
+Source = "https://github.com/jorgevallejos/bombista"
+Issues = "https://github.com/jorgevallejos/bombista/issues"
 
 [project.optional-dependencies]
 dev = [

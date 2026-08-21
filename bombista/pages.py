@@ -40,7 +40,7 @@ __all__ = [
     "render_output",
 ]
 
-VERSION = "v1.0.0"
+VERSION = "v1.0.1"
 """The masthead's version string — the package version with a `v` in front.
 
 It is a second copy of what `pyproject.toml` declares, and a second copy
@@ -1247,8 +1247,8 @@ def render_input(*, home: str = "") -> str:
   <div class="warnbox">
     <b>Tempo is not Bombista's business</b>
     Bombista answers <i>when</i> a line happens, not in which beat, so the file it writes
-    carries no <code>tempo</code> block. Add it by hand from the Ableton project that produced
-    this audio, where it is exact — all four values together (<code>bpm</code>,
+    carries no <code>tempo</code> block. Add it by hand from the source that produced
+    this audio, where it is exact: all four values together (<code>bpm</code>,
     <code>numerator</code>, <code>denominator</code>, <code>countInBars</code>), because a
     partial block breaks Pregonero's pulse.
   </div>

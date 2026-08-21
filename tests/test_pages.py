@@ -267,7 +267,7 @@ def test_page_1_says_tempo_is_not_bombistas_business_and_names_all_four_keys(pag
     text = visible_text(page1)
 
     assert "Tempo is not Bombista's business" in text
-    assert "Ableton" in text
+    assert "Add it by hand from the source that produced" in text
     for key in ("bpm", "numerator", "denominator", "countInBars"):
         assert key in text, f"the note does not name {key}"
 

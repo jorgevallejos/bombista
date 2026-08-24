@@ -40,7 +40,7 @@ __all__ = [
     "render_output",
 ]
 
-VERSION = "v1.0.2"
+VERSION = "v1.1.0"
 """The masthead's version string — the package version with a `v` in front.
 
 It is a second copy of what `pyproject.toml` declares, and a second copy
@@ -337,6 +337,23 @@ tr.divider td { background: var(--bg); border-bottom: none;
 .pop .bounds { margin: .32rem .1rem 0; text-align: right; color: var(--dimmer);
                font: 400 .68rem/1 var(--mono); font-variant-numeric: tabular-nums; }
 .confirm { margin: 1.7rem 0 0; }
+
+/* ---------- page 2 — tempo, typed in (round A; §11.5's removal reversed) ----------
+   Quiet register on purpose: this is a fact about the song, so it sits with
+   the provenance line rather than competing with the flagged row for the
+   contrast budget. Four fields, because a control that cannot ask for a
+   whole block should not ask for part of one. */
+.tempo { padding: .65rem 0 .7rem; border-bottom: 1px solid var(--line); }
+.tempo .trow { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.tempo .tlabel { font: 400 .7rem/1 var(--mono); text-transform: uppercase;
+                 letter-spacing: .14em; color: var(--dim); margin-right: .25rem; }
+.tempo label { display: inline-flex; align-items: center; gap: .35rem;
+               font: 400 .7rem/1 var(--mono); color: var(--dimmer); }
+.tempo input[type="number"] { width: 5.4rem; }
+.tempo .tstate { font: 400 .72rem/1.5 var(--mono); color: var(--dimmer);
+                 flex: 1 1 14rem; }
+.tempo .tstate.bad { color: var(--fail); }
+.tempo .tstate.ok { color: var(--high); }
 """
 
 _PICKER_JS = """\
@@ -946,6 +963,53 @@ _REVIEW_JS = """\
     }
   });
 
+  /* Tempo (round A). The four fields go up together and the SERVER
+     decides — this deliberately does not pre-judge the block, because a
+     second opinion about what a valid tempo is is exactly what §11.5's
+     rule exists to prevent. A blank field is simply left out, so the
+     refusal names it. */
+  var T_FIELDS = { bpm: "t-bpm", numerator: "t-numerator",
+                   denominator: "t-denominator", countInBars: "t-countinbars" };
+  var tstate = document.getElementById("t-state");
+
+  function tsay(text, kind) {
+    tstate.textContent = text;
+    tstate.className = "tstate" + (kind ? " " + kind : "");
+  }
+
+  function postTempo(body) {
+    return fetch("/api/tempo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }).then(function (r) {
+      return r.json().then(function (data) { return { ok: r.ok, data: data }; });
+    });
+  }
+
+  function tfield(key) { return document.getElementById(T_FIELDS[key]); }
+
+  document.getElementById("t-set").addEventListener("click", function () {
+    var block = {}, key, raw;
+    for (key in T_FIELDS) {
+      raw = tfield(key).value.trim();
+      if (raw !== "") { block[key] = Number(raw); }
+    }
+    tsay("Checking\u2026", "");
+    postTempo({ tempo: block }).then(function (res) {
+      if (res.ok) { tsay("Set.", "ok"); }
+      else { tsay(res.data.error || "Refused.", "bad"); }
+    });
+  });
+
+  document.getElementById("t-clear").addEventListener("click", function () {
+    postTempo({ tempo: null }).then(function (res) {
+      if (!res.ok) { tsay(res.data.error || "Refused.", "bad"); return; }
+      for (var key in T_FIELDS) { tfield(key).value = ""; }
+      tsay("No tempo block \u2014 no pulse, no count-in.", "");
+    });
+  });
+
   document.getElementById("confirm").addEventListener("click", function () {
     location.href = "/output";
   });
@@ -1120,6 +1184,70 @@ def _provenance(payload: dict) -> str:
     return f'<p class="prov">{html_escape(" · ".join(parts))}</p>'
 
 
+def _tempo_value(value: object) -> str:
+    """A stored tempo value as the field should show it: `66.67`, `4`, `0`.
+
+    Read back verbatim, never reformatted into something else — the number
+    was typed by the performer from the source that produced the audio, and
+    a control that rounds it is a control that quietly edits it.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+_TEMPO_FIELDS = (
+    ("bpm", "bpm", "any", "0"),
+    ("numerator", "beats", "1", "1"),
+    ("denominator", "per", "1", "1"),
+    ("countInBars", "count-in bars", "1", "0"),
+)
+
+
+def _tempo(payload: dict) -> str:
+    """The tempo control (round A), and the four fields are the design.
+
+    **§11.5 removed this control from page 1 on 2026-08-16 and this
+    reverses that, narrowly.** The half that changed: Pregonero loses
+    tempo ownership later in the Tramoya integration, so Bombista becomes
+    the only remaining home for typing one in, and the review page is
+    where the timeline is visible while it is being changed. The half that
+    did not: a block is written **whole or not at all** — `beatScheduler`
+    needs `numerator` and `denominator` and computes `numerator % 3`, so a
+    bpm-only block gives a broken pulse while the scaling keeps working,
+    with no error anywhere. Hence four fields, one Set, and a server that
+    refuses anything less.
+
+    **Nothing here proposes a value.** The fields start empty on a song
+    that has no tempo, rather than at a plausible 120/4/4 — a placeholder
+    that looks real is the bug `songs@c5adf65` deleted ten of.
+    """
+    block = payload.get("tempo") or {}
+    fields = "".join(
+        f'<label>{html_escape(label)} <input type="number" id="t-{key.lower()}" '
+        f'step="{step}" min="{minimum}" autocomplete="off" '
+        f'value="{html_escape(_tempo_value(block.get(key)))}"></label>'
+        for key, label, step, minimum in _TEMPO_FIELDS
+    )
+    return f"""
+<div class="tempo">
+  <div class="trow">
+    <span class="tlabel">Tempo</span>
+    {fields}
+    <button type="button" id="t-set">Set</button>
+    <button type="button" id="t-clear">Clear</button>
+    <span class="tstate" id="t-state"></span>
+  </div>
+  <p class="hint">Bombista never measures a tempo — type it from the source that produced
+    this audio, where it is exact. <b>All four together, or none:</b> a partial block
+    breaks Pregonero's pulse while its scaling keeps working, which is worse than
+    leaving it out.</p>
+</div>
+"""
+
+
 def render_review(payload: dict) -> str:
     """Page 2 — Review (§8). The heart of B20, and B19 absorbed.
 
@@ -1143,6 +1271,8 @@ def render_review(payload: dict) -> str:
 <p class="lede">{len(payload["lines"])} lines · raw audio-clock seconds</p>
 
 {_provenance(payload)}
+
+{_tempo(payload)}
 
 <div class="sticky">
   <audio id="audio" controls preload="metadata" src="/api/audio"></audio>
@@ -1176,6 +1306,13 @@ def render_input(*, home: str = "") -> str:
     No output-folder picker and no *also write* checkboxes — both cut
     2026-08-15. Step 3 offers downloads and the app does not choose where
     they land.
+
+    **Still no tempo control**, and round A did not give it one back. The
+    control that came off here in §11.5 reappeared on the review page
+    instead: a whole block needs four fields, this page's rule is four rows
+    total, and step 2 is where the timeline is visible while it is being
+    changed. What stands here is the note, now pointing at step 2 rather
+    than at a text editor.
     """
     body = f"""
 <h1>Input song</h1>
@@ -1245,12 +1382,12 @@ def render_input(*, home: str = "") -> str:
     </div>
   </div>
   <div class="warnbox">
-    <b>Tempo is not Bombista's business</b>
-    Bombista answers <i>when</i> a line happens, not in which beat, so the file it writes
-    carries no <code>tempo</code> block. Add it by hand from the source that produced
-    this audio, where it is exact: all four values together (<code>bpm</code>,
-    <code>numerator</code>, <code>denominator</code>, <code>countInBars</code>), because a
-    partial block breaks Pregonero's pulse.
+    <b>Tempo is typed in, never measured</b>
+    Bombista answers <i>when</i> a line happens, not in which beat, so it never works one
+    out for you. Type it on <b>step 2</b>, from the source that produced this audio, where
+    it is exact: all four values together (<code>bpm</code>, <code>numerator</code>,
+    <code>denominator</code>, <code>countInBars</code>), because a partial block breaks
+    Pregonero's pulse.
   </div>
   <p class="hint pageoff" id="stripped"></p>
 </div>
@@ -1299,17 +1436,20 @@ _CAPTION_PASS = (
     "keys filled in. Bombista wrote five: <code>linesHash</code>, "
     "<code>timelineSignedOff</code>, <code>timelineVersion</code>, <code>leadIn</code>, "
     "<code>timeline</code>. Entry 0 is <code>0.00</code> and the lead-in is banked. Everything "
-    "above them is passed through untouched, all four languages included. Bands, signals and "
-    "the record of what you set by hand are in the <b>report</b>, not here."
+    "above them is passed through untouched, all four languages included — the one exception "
+    "is a <code>tempo</code> you typed on step 2, which comes from you rather than from the "
+    "audio. Bands, signals and the record of what you set by hand are in the <b>report</b>, "
+    "not here."
 )
 
 _CAPTION_NEW = (
     "There was no song file, so this is a new <b>Song Performance JSON</b> built from your "
     "<code>.txt</code>. It carries only what a plain text plus step 1 can honestly supply: "
-    "<code>artist</code> and <code>notes</code> are empty for you to fill in, there is no "
-    "<code>tempo</code> block — Bombista never measures one, and a partial one breaks "
-    "Pregonero's pulse — and <code>lyrics</code> carries the one language you chose. Add "
-    "the other languages later; <code>linesHash</code> will catch it if the line count changes."
+    "<code>artist</code> and <code>notes</code> are empty for you to fill in, and "
+    "<code>lyrics</code> carries the one language you chose. A <code>tempo</code> block is "
+    "here only if you typed one on step 2 — Bombista never measures one, and a partial one "
+    "breaks Pregonero's pulse. Add the other languages later; <code>linesHash</code> will "
+    "catch it if the line count changes."
 )
 
 

@@ -408,55 +408,16 @@ def test_a_failed_run_says_why_and_does_not_wedge_the_process(serve_client, libe
 
 # ---------------------------------------------------------------------------
 # tempo — never derived, and absent rather than blank (rules 4 and 5)
+#
+# The two structural guards that used to live here — no bpm in the modules
+# that touch audio or lyrics, and no tempo anywhere in `server.py` — moved
+# to tests/test_validation.py's neighbour, tests/test_tempo.py, when round A
+# gave the review page a control. The first is unchanged; the second is
+# re-aimed, because `server.py` may now carry a tempo and what must not
+# exist is a SECOND opinion about a valid one. What stays here is the flow:
+# page 1 still has no control, and the run route still refuses a tempo
+# posted into it by hand.
 # ---------------------------------------------------------------------------
-
-
-def test_no_module_that_touches_audio_or_lyrics_mentions_a_tempo(monkeypatch):
-    """Rules 4 and 5, and B14 was dropped for this. Nothing on the path
-    from audio or lyric text to a timeline may so much as name a bpm."""
-    package = Path(server.__file__).parent
-
-    for module in ("aligner", "anchoring", "pipeline", "provenance", "serializer", "report"):
-        source = (package / f"{module}.py").read_text(encoding="utf-8")
-        assert "bpm" not in source, f"{module}.py names a bpm"
-
-
-def test_nothing_in_the_emit_path_can_construct_a_tempo_block():
-    """§11.5: `tempo` is written whole — `bpm`, `numerator`, `denominator`,
-    `countInBars` — or not at all, and Bombista can never write it whole,
-    because it never measures a meter and will not invent one. So the
-    emit path must carry no code that names a tempo at all.
-
-    Structural rather than a grep: the reasoning above lives in
-    `server.py`'s own docstrings and should, so this reads the executable
-    source only — literals, names, attributes and arguments. What it
-    guards against is a later pass helpfully putting `{"bpm": …}` back.
-    """
-    tree = ast.parse(Path(server.__file__).read_text(encoding="utf-8"))
-    # Every bare string statement: a module/class/function docstring, or
-    # the attribute docstring this file uses under a constant. All prose.
-    prose = {
-        node.value.value
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Expr)
-        and isinstance(node.value, ast.Constant)
-        and isinstance(node.value.value, str)
-    }
-
-    named = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            if node.value not in prose:
-                named.add(node.value)
-        elif isinstance(node, ast.Name):
-            named.add(node.id)
-        elif isinstance(node, ast.Attribute):
-            named.add(node.attr)
-        elif isinstance(node, ast.arg):
-            named.add(node.arg)
-
-    offenders = [name for name in named if "tempo" in name.lower() or "bpm" in name.lower()]
-    assert offenders == [], f"server.py still handles a tempo: {offenders}"
 
 
 def test_a_txt_run_ignores_a_tempo_offered_in_the_request_body(

@@ -608,14 +608,20 @@ button on the page. *`Align →`* was too quiet for the one control that starts 
 
 - **slug** — derived from the filename, shown read-only.
 - **title** — the one text input on the whole flow.
-- ~~**tempo**~~ — **the control is removed, decided 2026-08-16. See §11.5.** Bombista emits no
-  `tempo` key at all, on either branch. What remains is a note, in the REVIEW colour, where the
-  control used to be:
+- ~~**tempo**~~ — **the control is removed from THIS page, decided 2026-08-16. See §11.5, and
+  §11.14 for the part of that decision round A reversed.** Page 1 still has no control and is not
+  getting one back: a whole block needs four fields and this page's rule is four rows total. What
+  remains here is a note, in the REVIEW colour, where the control used to be — **rewritten in round
+  A**, because it used to send the reader to a text editor and there is now somewhere better to
+  send them:
 
-  > **Tempo is not Bombista's business.** Bombista answers *when* a line happens, not in which
-  > beat, so the file it writes carries no `tempo` block. Add it by hand from the source that
-  > produced this audio, where it is exact: all four values together (`bpm`, `numerator`,
-  > `denominator`, `countInBars`), because a partial block breaks Pregonero's pulse.
+  > **Tempo is typed in, never measured.** Bombista answers *when* a line happens, not in which
+  > beat, so it never works one out for you. Type it on **step 2**, from the source that produced
+  > this audio, where it is exact: all four values together (`bpm`, `numerator`, `denominator`,
+  > `countInBars`), because a partial block breaks Pregonero's pulse.
+
+  ⚠ The note read *"Tempo is not Bombista's business"* from 2026-08-16 to 2026-08-24. Half of that
+  is now false and the half that is not is why the note still names all four keys.
 
   ⚠ *"the emitted file"* until 2026-08-16 — **§10.1 forbids "emit" in a user-facing string**, and
   PR 4's test enforces it on every page. See §11.13.
@@ -798,7 +804,7 @@ format, different amounts of truth available. **Jorge's sketch of the from-scrat
 | `artist` | as given | `""` — Bombista does not know it |
 | `notes` | as given | `""` |
 | `title_translations` | as given (`en`/`fr`/`nl`) | `{ "<chosen lang>": "<title>" }` — the only one that exists |
-| `tempo` | as given, **never rewritten** | **omitted** unless page 1 supplied a real value — never a null scaffold |
+| `tempo` | as given, unless page 2 typed one (§11.14) | **omitted** unless page 2 typed one — never a null scaffold |
 | `intro` | as given | **omitted** — a `.txt` has no source for it |
 | `lyrics` | as given, all four languages | `[{ "<chosen lang>": "…" }]` — one language, the one that was sung |
 | `linesHash` · `timelineSignedOff` · `timelineVersion` · `leadIn` · `timeline` | **written** | **written** |
@@ -1096,6 +1102,10 @@ business (rules 4 and 5); and Jorge already types these in by hand — `songs@10
 control, and it now names all four keys, because "add the tempo by hand" is bad advice if it leads
 to a bpm-only block. The `.txt` branch emits no `tempo` key at all, which is already what §10.2.1
 specifies.
+
+> ⚠ **Half of this section was reversed on 2026-08-24. See §11.14.** The whole-block rule above is
+> untouched and is the reason §11.5 is worth keeping. What changed is the sentence *"tempo is never
+> Bombista's business"*: page 2 now has a four-field control. Page 1 still does not.
 
 ### 11.6 Cancel abandons the worker rather than killing it
 
@@ -1404,6 +1414,52 @@ The general rule, now three for three: **a decision is not landed until the mock
 it.** §11.11 found `hand-set`, the line-0 instruction, and now these.
 
 ---
+
+## 11.14 The tempo control comes back — on page 2, and only there (round A, 2026-08-24)
+
+**The reversal, and its boundary.** §11.5 gave two reasons for removing the control. One has
+expired and one has not.
+
+- *Expired:* **"tempo is never Bombista's business (rules 4 and 5)."** Pregonero loses tempo
+  ownership in a later round of the Tramoya integration, which leaves Bombista as the only tool in
+  the suite where a performer can type one in. A note saying *add it by hand somewhere else* stops
+  naming a place that exists.
+- *Standing:* **"a whole block needs four fields on a page whose rule is four rows total."** Page 1
+  still has no tempo control, and this is not a step toward giving it one back.
+
+**Page 2 is the surface**, because it is where the timeline is visible while it is being changed —
+the same argument §8.4 makes for the stepper living on the row rather than in a settings panel. The
+control is four number fields, a **Set** and a **Clear**, and one status line, sitting in the quiet
+register beside the provenance line rather than competing with the flagged row for the contrast
+budget.
+
+**What is unchanged, and it is everything §11.5 exists for:**
+
+1. **Whole, or not at all.** The route refuses a block missing any of `bpm`, `numerator`,
+   `denominator`, `countInBars`, and refuses an unknown key. The finding names every field at once,
+   because a person fixing a form wants all of it.
+2. **`countInBars` may be `0`** — the one field not required to be positive, because no count-in is
+   a real answer. The other three must be positive numbers.
+3. **Clear removes the key; it never writes a null.** Absent is the honest state and Pregonero is
+   already built for it (`songs@c5adf65`).
+4. **Nothing derives, measures or guesses.** The fields start **empty** on a song with no tempo,
+   not at a plausible `120 / 4 / 4` — a placeholder that looks real is precisely what `c5adf65`
+   deleted ten of. Rules 4 and 5 stand; B14 stays dropped.
+5. **One rule, one place.** `validation.validate_tempo` is the whole definition of a valid block and
+   both `bombista validate` and this route call it. The old structural test asserting that
+   `server.py` names no tempo at all is replaced by one asserting that `server.py` **never judges**
+   `bpm`, `numerator`, `denominator` or `countInBars` itself and does reach for the shared gate — a
+   second opinion about a valid tempo is now the failure mode, not a mention of one.
+
+**Two consequences worth writing down.** A song that already declares a tempo **keeps its own key
+position** — the catalogue disagrees about whether `tempo` sits before or after
+`title_translations` and both are valid (§10.2.1), so normalising would rewrite files this tool
+passes through. A tempo added to a song that had none is inserted before the first of `intro` /
+`lyrics`, which is the catalogue order.
+
+**The `timeline only` download is unchanged** and still carries exactly the five timing keys.
+`tempo` is not a timing key and does not join them; someone who typed one takes the whole file,
+which is the normal path anyway (§9.5, and B22's rule that the returned file *is* the vault file).
 
 ## 12. What *using* it found
 

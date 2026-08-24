@@ -387,6 +387,44 @@ def test_a_partial_tempo_is_still_a_hard_failure_for_performance():
     assert found != []
 
 
+def test_a_missing_intro_is_a_warning_for_performance_not_a_failure():
+    """An intro-less song is correct behaviour, not a fault — whatever
+    projects the intro simply stands dark. Worth knowing before a gig
+    rather than at one, which is exactly what a warning is for."""
+    without = timed(tempo=REAL_TEMPO)
+    del without["intro"]
+
+    found = validate_song(without, for_performance=True)
+
+    assert errors(found) == []
+    assert wheres(warnings(found)) == ["intro"]
+
+
+@pytest.mark.parametrize("value", [{}, {"es": ""}, {"es": "   ", "en": ""}, "", None, 7])
+def test_an_intro_carrying_no_text_is_the_same_as_a_missing_one(value):
+    found = validate_song(timed(tempo=REAL_TEMPO, intro=value), for_performance=True)
+
+    assert errors(found) == []
+    assert wheres(warnings(found)) == ["intro"]
+
+
+@pytest.mark.parametrize("value", [{"es": "Una canción."}, {"es": "", "nl": "Een lied."}])
+def test_an_intro_with_text_in_any_language_is_silent(value):
+    """Any language, not the chosen one: a tagline in some language beats
+    none, and which one gets projected is the consumer's decision."""
+    assert validate_song(timed(tempo=REAL_TEMPO, intro=value), for_performance=True) == []
+
+
+def test_intro_is_not_checked_at_the_default_level():
+    """The default level tolerates work in progress, and `intro` is still
+    not required at either level — `serve`'s from-scratch branch cannot
+    supply one."""
+    without = song()
+    del without["intro"]
+
+    assert validate_song(without) == []
+
+
 def test_unresolvable_media_is_a_hard_failure_for_performance(tmp_path):
     found = errors(
         validate_song(

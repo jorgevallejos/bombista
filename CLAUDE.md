@@ -84,7 +84,19 @@ would be a second understanding of SP JSON.
 
 `media.src` is a logical filename (Pregonero resolves it through a per-machine map), so
 `--media-dir` is how `validate` is told where the file actually lives; the song file's own
-directory is tried last, and a failure names every directory it looked in.
+directory is tried last, and a failure names every directory it looked in. **That makes the media
+check necessarily partial and it must not be read as a guarantee:** *the media resolves* is a fact
+about the machine the gate ran on and the directories it was handed, not about the song file. It
+earns its keep because the machine that runs the gate is the machine that runs the gig — but a
+pass says the file was found *here*, and nothing about anywhere else.
+
+**Three things warn rather than fail at `--for-performance`**, and none of them is a fault: an
+absent `tempo` (pedal-driven mode works without one), a `linesHash` that no longer matches the
+lyrics (usually a corrected translation — `promote` warns rather than blocks and this keeps that
+stance), and an absent `intro` (whatever projects it stands dark, which is correct behaviour).
+All three are things to learn before a gig rather than at one. **`intro` is still not a required
+field** at either level: `serve`'s from-scratch branch has no source for one, so requiring it
+would make Bombista's own output fail Bombista's own gate.
 
 `migrate` is the **one-off** for songs timed before v2 (B13): it rebases a *stored* v1
 timeline in place, applying exactly what `align` applies to a fresh run. Both shipped

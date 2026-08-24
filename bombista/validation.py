@@ -19,6 +19,13 @@ lives inside a single song file and needs no gig. If Pregonero
 implemented its own there would be two understandings of SP JSON, and the
 second would go stale the moment this one changed.
 
+**Warnings are for what is correct but worth knowing**, and there are
+three: an absent `tempo` (pedal-driven mode works without one), a
+`linesHash` that no longer matches the lyrics (usually a corrected
+translation, and only a human can say), and an absent `intro` (whatever
+projects it simply stands dark). None of the three is a fault; all three
+are things to learn before a gig rather than at one.
+
 **Every problem is reported, never just the first** — a person fixing a
 file wants all of it at once. That is why the module returns a list of
 `Finding`s rather than raising: raising is a first-failure interface.
@@ -210,6 +217,13 @@ def _media_search_path(song_path: Path | None, media_dirs: Sequence[Path]) -> li
     lives wherever that machine keeps it. There is no canonical location
     to hard-code, so the gate is told rather than guessing, and the
     failure names every directory it tried.
+
+    **Which makes this check necessarily partial, and it must not be read
+    as a guarantee.** *The media resolves* is a fact about the machine the
+    gate ran on and the directories it was handed, not about the song
+    file. It is worth having because the machine that runs the gate is the
+    machine that runs the gig — but a pass here says the file was found
+    *here*, and says nothing about anywhere else.
     """
     path = [Path(d) for d in media_dirs]
     if song_path is not None:
@@ -289,6 +303,21 @@ def _validate_lyrics(items: object, lang: str) -> list[Finding]:
                 )
             )
     return found
+
+
+def _has_intro_text(intro: object) -> bool:
+    """Whether *intro* carries any text at all, in any language.
+
+    Any language, not the chosen one: a tagline in some language beats
+    none, and which one gets projected is the consumer's decision, not the
+    gate's. Anything that is not a string or a mapping of them carries no
+    text by definition — this reports, it does not repair.
+    """
+    if isinstance(intro, str):
+        return bool(intro.strip())
+    if isinstance(intro, dict):
+        return any(isinstance(v, str) and v.strip() for v in intro.values())
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -460,6 +489,18 @@ def validate_song(
                 "no tempo block — pedal-driven mode works without one, but the "
                 "beat indicator, the count-in and clock-driven mode all need "
                 "it. Type it in on `bombista serve`'s review page.",
+            )
+        )
+
+    if for_performance and not _has_intro_text(song.get("intro")):
+        found.append(
+            Finding(
+                WARNING,
+                "intro",
+                "no intro text — whatever projects the song's intro will stand "
+                "dark. That is correct behaviour and not a fault, but it is "
+                "better known before a gig than at one. `intro` is still not "
+                "required: a song built from plain text has no source for one.",
             )
         )
 

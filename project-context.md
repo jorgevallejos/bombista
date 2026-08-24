@@ -164,6 +164,22 @@ a hand-edited song file until Pregonero rejected it on a stage.
   lyric lines and a 20-entry timeline (`songs@93e729c` added four verses on purpose and left the
   timeline behind). That is exactly the positional failure the tool exists to make loud.
 
+**What the media check can and cannot promise — recorded because it is easy to over-read.**
+`media.src` is a *logical* filename: Pregonero resolves it through a per-machine map
+(`mediaPathStore.ts`), because the delivery video lives wherever that machine keeps it. There is no
+canonical location, so `validate` is told where to look with `--media-dir` rather than guessing.
+**The consequence is that "the media resolves" is machine-dependent, and the check is necessarily
+partial.** That is acceptable — the machine that runs the gate is the machine that runs the gig —
+but it is not a guarantee, and a pass means the file was found *on that machine, in those
+directories*, not that the song is portable.
+
+**Three warnings, and the reason there are warnings at all.** `--for-performance` fails on what
+makes a song undisplayable and *warns* on what is correct but worth knowing: an absent `tempo`
+(pedal-driven mode works without one), a `linesHash` that no longer matches the lyrics — the common
+cause is a corrected translation, so blocking would punish the ordinary case — and an absent
+`intro`, which means whatever projects the intro stands dark. None is a fault; each is better
+learned before a gig than at one.
+
 ## Going public (B18) — the decision, not just the fact
 
 Bombista and Pregonero are both public, MIT-licensed repos. The decision (2026-08-14) was weighed, not automatic: going public meant Bombista's fixtures and worked example would expose real Chango Pepper lyrics and a real master-recording excerpt. Two things were swapped before publishing — not for rights reasons, but for **positioning**: a repo whose fixtures and worked example are one artist's own songs reads as that artist's private tool, which undercuts the generic captioning/surtitles positioning above. The test audio fixture became synthesised speech; the worked example became an invented song (*Río de Sal*), faithful in shape and field names but explicitly not real measurements.

@@ -89,6 +89,22 @@ You have a recording and its lyrics. You want to know when each line lands.
 The song below — *Río de Sal*, twenty lines — is invented, and so are its
 numbers; they are representative of a real run, not a transcript of one.
 
+### 0. Start the file
+
+If the song file does not exist yet, Bombista writes the skeleton:
+
+```bash
+bombista new rio-de-sal -o lyrics/rio-de-sal.json --lang es
+```
+
+That is a legal song file with nothing in it — the right key order, lyric
+entries shaped as objects keyed by language, and **no `tempo` and no timing
+keys**, because a missing value is a real state and a placeholder is a bug
+that reaches a stage. Fill in the words (by hand, or by handing the file to
+an LLM), then carry on.
+
+Skip this step if you already have the lyrics as a song JSON or a text file.
+
 ### 1. Align
 
 ```bash
@@ -150,6 +166,38 @@ bombista promote staging/rio-de-sal-fixed/rio-de-sal-timeline.json lyrics/rio-de
 
 `promote` backs the file up next to itself, refuses on a line-count mismatch, warns loudly if the lyrics have changed since alignment, replaces **only** the timeline, and prints a per-line diff.
 
+### 5. Check it
+
+```bash
+bombista validate lyrics/rio-de-sal.json
+```
+
+```
+lyrics/rio-de-sal.json: ok
+```
+
+Two questions, two levels. The default asks **is this file sane** — it
+tolerates work in progress, so a song fresh from `new` passes. `--for-performance`
+asks **is this song finished**, which is the question to ask before putting it
+in front of an audience: a timeline present and matching the lyrics, and any
+declared media resolving.
+
+```bash
+bombista validate lyrics/rio-de-sal.json --for-performance --media-dir video/
+```
+
+Every problem is listed, not just the first, each naming where it is:
+
+```
+lyrics/rio-de-sal.json: 2 problems (1 warning)
+  lyrics[7]: section marker '[Estribillo]' — a lyrics array carries sung lines only, and one extra entry shifts every timeline entry after it
+  timeline: 19 entries for 20 lyric lines — the timeline is matched to lyrics by position, so a count that disagrees means every entry past the difference is wrong
+  warning — tempo: no tempo block — pedal-driven mode works without one, but the beat indicator, the count-in and clock-driven mode all need it.
+```
+
+Exit code is non-zero if anything is an error; a warning says its piece and
+passes.
+
 **Total: about four minutes, of which roughly ninety seconds is human attention on two lines out of twenty.**
 
 ---
@@ -197,13 +245,23 @@ The cost of matching lines by position is positional fragility: insert one line 
 ## Commands
 
 ```
+bombista new SONG_ID [-o SONG.json] [--lang es] [--title TEXT]
+
 bombista align AUDIO SONG_JSON_OR_LYRICS_TXT -o STAGING_DIR
     [--lang es] [--model-size medium] [--anchor LINE=SECONDS]
     [--words STAGING/asr-words.jsonl] [--emit timeline|songjson|report-json|srt|lrc|html]
 
 bombista promote STAGING/SONG-timeline.json SONG.json
 
+bombista validate SONG.json [--for-performance] [--lang es] [--media-dir DIR]...
+
 bombista migrate SONG.json [--dry-run]
+```
+
+A song's life, and Bombista owns both ends of the one un-tooled step:
+
+```
+bombista new  →  the words get written in  →  bombista align  →  bombista promote  →  bombista validate
 ```
 
 `extract` is a working alias for `align` — the original verb, kept so old commands still paste. `migrate` is a one-off for timelines produced before the `leadIn` model existed.

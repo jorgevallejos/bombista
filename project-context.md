@@ -26,7 +26,7 @@ Deriving a timeline from a recording is a real subsystem (transcription, alignme
 
 These were tested against real proposals and hold as rules, established 2026-08-14:
 
-1. **No `tempo` block → no Auto mode.** Tempo is a prerequisite in Pregonero, not a nicety, and it is never derived. It is **supplied by the performer** (for the Chango Pepper catalogue, by Jorge, who is the source of record) and typed in by hand.
+1. **No `tempo` block → no Auto mode.** Tempo is a prerequisite in Pregonero, not a nicety, and it is never derived. It is **supplied by the performer** (for the Chango Pepper catalogue, by Jorge, who is the source of record) and typed in by hand. *Amended in round A of the Tramoya integration:* the typing now happens **in Bombista**, on `serve`'s review page — see "Bombista became the place a tempo is typed" below. Never derived is unchanged; where a human types it is what moved.
 2. **The pulse and the timeline are separate clocks.** A constant offset between them is fine; what must match is the *rate*, so any shift stays consistent instead of accumulating.
 3. **The timeline measures the recording; the performance is a playback-side transform.** Anything describing how a song is played on a given night — lead-in application, performed tempo — is applied by Pregonero at playback and never written back over the measured values. Bombista measures and records; the consumer decides.
 4. **Bombista answers "when," not "in which beat."** Its output is time: line *i* happens at *t*. Tempo, meter and any other musical structure are performer-owned metadata, entered by a human and consumed by Pregonero — never inferred from the timings.
@@ -115,9 +115,70 @@ The shipped method (forced alignment, adopted 2026-07-03 — see "History" below
 **Design decisions worth carrying forward:**
 - **A correction re-anchors; it never ripples.** Same rule as the CLI's `--anchor` (see "How it works" above) — edits below a correction re-derive against the audio, lines above stay untouched.
 - **Line 0 is not special, settled 2026-08-16.** It gets the same control as any other line. The normaliser banks its onset into `leadIn` and writes entry 0 as `0.00` at emit time regardless of how the value got there — the v2 contract is enforced by the normaliser, not by refusing the edit. *Lead-in* is a performance concept, meaningful the moment someone counts a band in; that distinction belongs to Pregonero at performance time, not to a timing tool.
-- **The Song Performance JSON (SP JSON) is not a new format — it is `songs/*.json`, named.** An early pass invented a shape from scratch; Jorge caught it ("not connected at all") and the fix wasn't a tweak, it was recognising the existing Chango Pepper song format already carried everything needed. Bombista owns exactly five keys and passes everything else through byte-for-byte: `linesHash`, `timelineSignedOff`, `timelineVersion`, `leadIn`, `timeline`. `tempo` is read, never written, per the design boundaries above — and on the plain-text branch, where a value is supplied by hand, it is **omitted rather than null-scaffolded** when not given (a null is not neutral once a consumer reads it — Pregonero already degrades safely on absence: no pulse, no count-in, scale pinned to 1).
+- **The Song Performance JSON (SP JSON) is not a new format — it is `songs/*.json`, named.** An early pass invented a shape from scratch; Jorge caught it ("not connected at all") and the fix wasn't a tweak, it was recognising the existing Chango Pepper song format already carried everything needed. Bombista owns five keys and passes everything else through byte-for-byte: `linesHash`, `timelineSignedOff`, `timelineVersion`, `leadIn`, `timeline`. **`tempo` is a sixth, and it is different in kind:** the other five are measurements, and `tempo` is the one value Bombista takes *from the performer* rather than from the audio (round A — see below). Never computed, never guessed, and **omitted rather than null-scaffolded** when not given (a null is not neutral once a consumer reads it — Pregonero already degrades safely on absence: no pulse, no count-in, scale pinned to 1).
 - **B21 — both the stepper and a typed value, not either.** The stepper alone doesn't scale: pimiento's error was 1.22 s (24 presses), but Luz y Sal produced a 47 s one (~940 presses). Found by using the tool, not by building it — an unrecognised phrase leaves a line with nothing to anchor to, so an unbounded landing is not the rare case it first looked like.
 - **B22 — withdrawn.** A plan to drop the `.sp` suffix from the download's filename was superseded by a cleaner rule, Jorge's: *"Bombista doesn't change the state of a file, it receives one and returns another."* The returned file already carries every original field plus the five timing keys, so the vault file **is** the returned file — replacing the old one with the download is the entire procedure, and the extension question dissolves rather than needing a decision.
+
+## Bombista became the place a tempo is typed (round A, 2026-08-24)
+
+**What changed, and it is narrow.** A tempo control existed on `serve`'s page 1 and was removed on
+2026-08-16 (serve-spec §11.5), leaving the note *"Tempo is not Bombista's business."* Round A of the
+Tramoya integration puts a control back — on **page 2, the review** — because Pregonero loses tempo
+ownership later in that integration, so Bombista becomes the only remaining home for typing one in.
+The review page is the right surface because it is where the timeline is visible while it is being
+changed, and page 1's own reason for refusing the control still stands: a whole block needs four
+fields, and page 1's rule is four rows total.
+
+**What did not change, and this is the part §11.5 exists for.** `tempo` is written **whole** —
+`bpm`, `numerator`, `denominator`, `countInBars` — or not written at all. There is no valid partial
+block, proved against Pregonero rather than asserted: `performedTempo.ts` degrades perfectly when
+the block is unusable, but `beatScheduler.ts` declares `numerator` and `denominator` as required and
+`getBeatsPerBar` does `numerator % 3`, so a bpm-only block yields NaN beats, bars and count-in. The
+result is **correct scaling and a broken pulse, with no error anywhere** — the same split brain
+`songs@c5adf65` deleted the ten placeholder blocks to avoid, one key deeper. Design boundary rules 4
+and 5 also stand in full: Bombista still never derives, measures or guesses a tempo, and B14 stays
+dropped.
+
+**The one rule, in one place.** `validation.validate_tempo` is the whole definition of a valid tempo
+block, and both `bombista validate` and the review control call it. Two front ends with two
+opinions about a valid block is how a partial one gets in through the door the other one closed.
+
+## Round A also gave the pipeline a front door and a gate (2026-08-24)
+
+`bombista new` and `bombista validate`. The reasoning is one sentence: a song's life is
+**`new` → the words get written in → `align` → `promote` → `validate`**, and until this round the
+first and last steps had no tool. A file appeared, and that was the whole process; nothing checked
+a hand-edited song file until Pregonero rejected it on a stage.
+
+- **`new` writes a skeleton `validate` already passes** — the catalogue's key order, lyric entries
+  as objects keyed by language (flattening them to strings destroyed every translation once), and
+  **`tempo` and the timing keys absent** rather than scaffolded.
+- **`validate` asks two questions.** The default asks *is this file sane* and tolerates work in
+  progress, or the front door would write files the gate rejects. `--for-performance` asks *is this
+  song finished* and is what a song passes before entering a setlist.
+- **Playability is checked in Bombista and not in Pregonero.** Every rule lives inside a single song
+  file and needs no gig. A first draft of the design put these checks in Pregonero; two
+  implementations would be two understandings of SP JSON, and the second would go stale the moment
+  the first changed.
+- **On its first run over the real catalogue it found a live defect**: `libertad.json` carries 24
+  lyric lines and a 20-entry timeline (`songs@93e729c` added four verses on purpose and left the
+  timeline behind). That is exactly the positional failure the tool exists to make loud.
+
+**What the media check can and cannot promise — recorded because it is easy to over-read.**
+`media.src` is a *logical* filename: Pregonero resolves it through a per-machine map
+(`mediaPathStore.ts`), because the delivery video lives wherever that machine keeps it. There is no
+canonical location, so `validate` is told where to look with `--media-dir` rather than guessing.
+**The consequence is that "the media resolves" is machine-dependent, and the check is necessarily
+partial.** That is acceptable — the machine that runs the gate is the machine that runs the gig —
+but it is not a guarantee, and a pass means the file was found *on that machine, in those
+directories*, not that the song is portable.
+
+**Three warnings, and the reason there are warnings at all.** `--for-performance` fails on what
+makes a song undisplayable and *warns* on what is correct but worth knowing: an absent `tempo`
+(pedal-driven mode works without one), a `linesHash` that no longer matches the lyrics — the common
+cause is a corrected translation, so blocking would punish the ordinary case — and an absent
+`intro`, which means whatever projects the intro stands dark. None is a fault; each is better
+learned before a gig than at one.
 
 ## Going public (B18) — the decision, not just the fact
 

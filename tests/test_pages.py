@@ -260,14 +260,19 @@ def test_page_1_has_no_tempo_control_at_all(page1):
     assert not re.search(r"<input[^>]*tempo", page1, re.I)
 
 
-def test_page_1_says_tempo_is_not_bombistas_business_and_names_all_four_keys(page1):
-    """The note that replaces the control (§9.3). It must name all four
-    keys: *add the tempo by hand* is bad advice on its own, because it
-    leads to exactly the bpm-only block this note exists to prevent."""
+def test_page_1_points_at_step_2_for_the_tempo_and_names_all_four_keys(page1):
+    """The note that replaces the control (§9.3), rewritten in round A.
+
+    It used to read *Tempo is not Bombista's business* and send the reader
+    to a text editor. Half of that is now false — the review page has a
+    control — so the note points there instead. The half that is not false
+    is why it still names all four keys: *type the tempo in* is bad advice
+    on its own, because it leads to exactly the bpm-only block §11.5
+    exists to prevent."""
     text = visible_text(page1)
 
-    assert "Tempo is not Bombista's business" in text
-    assert "Add it by hand from the source that produced" in text
+    assert "Tempo is typed in, never measured" in text
+    assert "step 2" in text
     for key in ("bpm", "numerator", "denominator", "countInBars"):
         assert key in text, f"the note does not name {key}"
 

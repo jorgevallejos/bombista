@@ -16,6 +16,8 @@ Output` — and the JSON routes behind it:
     POST   /api/reanchor  {"overrides": {"<line>": <seconds>}} -> the full
                           per-line result, RE-ANCHORED against the audio
     POST   /api/emit      write a new SP JSON through the one merge path
+    POST   /api/tempo     {"tempo": {...}|null} -> the session, with the
+                          typed-in block set or cleared. Whole, or refused.
     POST   /api/run       start a run; GET it for phases; DELETE to cancel
     GET    /api/lyrics    what a lyrics file declares, before it is run
     GET    /api/browse    a directory listing, because the server needs a
@@ -66,6 +68,7 @@ from .provenance import build_provenance, compute_lines_hash, words_meta
 from .readers import read_lyrics_input
 from .report import band_counts, render_qa_report
 from .serializer import to_dict
+from .validation import TEMPO_KEYS, one_line, validate_tempo
 from .writers import ENVELOPE_KEYS, merge_envelope
 
 __all__ = [
@@ -74,6 +77,7 @@ __all__ = [
     "create_server",
     "load_session",
     "session_payload",
+    "set_tempo",
     "build_sp_json",
     "emit_sp_json",
     "lead_in_source",
@@ -123,10 +127,16 @@ class Session:
     audio_path: Path | None = None
     model_size: str = "medium"
     from_scratch: bool = False
+    tempo: dict | None = None
     stripped_lines: list[dict] = field(default_factory=list)
     overrides: dict[int, float] = field(default_factory=dict)
     signed_off: str | None = None
     """The live state of the review, and the reason this is not frozen.
+
+    `tempo` starts as whatever the song already carried and is what page 2
+    has typed in since — `None` meaning the song has none, which is a real
+    state and the honest one (§10.2.1, `songs@c5adf65`). It is never
+    derived from anything: `set_tempo` is the only way it changes.
 
     `overrides` is what page 2 has set so far — page 3 serialises the
     timeline *as it stands*, and a download is a plain navigation that
@@ -275,10 +285,17 @@ def load_session(
     words = load_words(words_path)
     machine = anchor_lines(words, lines)
 
+    # Read, not computed: whatever the song already declares. `align` has
+    # no opinion about a tempo and neither does this, but a review that
+    # showed an empty control over a song that has one would invite a
+    # human to retype a value that was already right.
+    declared = song.get("tempo")
+
     return Session(
         audio_path=audio_path,
         model_size=model_size,
         from_scratch=from_scratch,
+        tempo=declared if isinstance(declared, dict) else None,
         stripped_lines=normalised.bombista.get("strippedLines") or [],
         staging_dir=staging_dir,
         lyrics_path=lyrics_path,
@@ -409,6 +426,7 @@ def session_payload(session: Session, overrides: dict[int, float] | None = None)
         "leadIn": envelope["leadIn"],
         "provenance": session.provenance,
         "fromScratch": session.from_scratch,
+        "tempo": session.tempo,
         "bands": {band: counts[band] for band in ("HIGH", "REVIEW", "FAIL")},
         "lines": lines,
     }
@@ -440,6 +458,75 @@ def _place_owned_keys(song: dict, *, lines_hash: str, signed_off: str | None) ->
             placed["linesHash"] = lines_hash
             placed["timelineSignedOff"] = signed_off
         placed[key] = value
+    return placed
+
+
+def set_tempo(session: Session, tempo: object) -> None:
+    """Type a tempo in, or clear it. The only way `session.tempo` moves.
+
+    **Whole, or refused.** `validation.validate_tempo` is the gate, and it
+    is the same one `bombista validate` runs — there is one understanding
+    of a valid tempo block in this repo, not one per front end. A partial
+    block gives Pregonero correct scaling and a broken pulse with no error
+    anywhere (docs/bombista-serve-spec.md §11.5), which is why a half-typed
+    control must not be able to reach a file.
+
+    **`None` clears the key**, and that is not the same as writing a null:
+    absent is the honest state and Pregonero is already built for it — no
+    pulse, no count-in, scale pinned to 1 (`songs@c5adf65`).
+
+    **Nothing here derives anything.** The value arrives typed, from the
+    source that produced the audio, where it is exact. Rules 4 and 5 stand
+    and B14 stays dropped; what changed with this round is only *where* a
+    performer may type it, not who supplies it.
+
+    Raises ValueError listing every problem — the caller renders it, and
+    the route turns it into a 400.
+    """
+    if tempo is None:
+        session.tempo = None
+        return
+
+    findings = validate_tempo(tempo)
+    if findings:
+        raise ValueError(one_line(findings))
+
+    # Rebuilt in TEMPO_KEYS order rather than stored as handed in: the
+    # block is small enough that a browser's key order should not decide a
+    # song file's.
+    session.tempo = {key: tempo[key] for key in TEMPO_KEYS}
+
+
+_TEMPO_FOLLOWS = ("intro", "lyrics")
+"""Where a tempo key goes into a song that never had one. §10.2 fixes the
+catalogue order against `songs/pimiento.json` — `title_translations`,
+`tempo`, `intro`, `lyrics` — so the block is inserted before the first of
+these that exists. Appending at the end would be valid JSON and would
+still make every file Bombista touched look unlike every file it did
+not."""
+
+
+def _place_tempo(song: dict, tempo: dict | None) -> dict:
+    """Return *song* with the tempo block set, replaced or removed.
+
+    A song that already declares one keeps **its own position** — files in
+    the catalogue disagree about whether `tempo` comes before or after
+    `title_translations`, both are valid, and normalising would rewrite
+    files this tool is supposed to pass through.
+    """
+    if tempo is None:
+        return {key: value for key, value in song.items() if key != "tempo"}
+
+    if "tempo" in song:
+        return {key: (tempo if key == "tempo" else value) for key, value in song.items()}
+
+    placed: dict = {}
+    for key, value in song.items():
+        if key in _TEMPO_FOLLOWS and "tempo" not in placed:
+            placed["tempo"] = tempo
+        placed[key] = value
+    if "tempo" not in placed:
+        placed["tempo"] = tempo
     return placed
 
 
@@ -488,6 +575,7 @@ def build_sp_json(
     )
 
     merged = merge_envelope(session.song, envelope)
+    merged = _place_tempo(merged, session.tempo)
     merged = _place_owned_keys(
         merged, lines_hash=session.lines_hash, signed_off=session.signed_off
     )
@@ -1026,6 +1114,7 @@ class _Handler(BaseHTTPRequestHandler):
         routes = {
             "/api/reanchor": self._reanchor,
             "/api/emit": self._emit,
+            "/api/tempo": self._set_tempo,
             "/api/run": self._start_run,
         }
         handler = routes.get(route)
@@ -1059,6 +1148,16 @@ class _Handler(BaseHTTPRequestHandler):
         # stands, and a download is a navigation that cannot carry a body.
         session.overrides = overrides
         return session_payload(session, overrides)
+
+    def _set_tempo(self, body: dict) -> dict:
+        session = self._session()
+        if "tempo" not in body:
+            raise ValueError(
+                'POST /api/tempo needs a "tempo" key — an object with all four '
+                "values, or null to clear it"
+            )
+        set_tempo(session, body["tempo"])
+        return session_payload(session, session.overrides)
 
     def _emit(self, body: dict) -> dict:
         session = self._session()

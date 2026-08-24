@@ -35,11 +35,14 @@ bombista --version          # `bombista <version>` — the SAME string that land
                             # a run's `toolVersion`, so a version quoted out of a
                             # song file and one read off the terminal compare directly
 
-# The workflow (align stages, promote applies):
+# The flow, front door to gate (round A closed both ends of it):
+bombista new <song-id> [-o <song.json>] [--lang es] [--title TEXT]
+#   ... an LLM session (or a human) writes the words into the skeleton ...
 bombista align <audio.wav> <song.json|lyrics.txt> -o <staging-dir> \
     [--model-size medium] [--lang es] [--anchor LINE=SECONDS] [--words <staging>/asr-words.jsonl] \
     [--emit timeline|songjson|report-json|srt|lrc|html]
 bombista promote <staging>/<song>-timeline.json <song.json>
+bombista validate <song.json> [--for-performance] [--lang es] [--media-dir DIR]...
 
 # The three-step interface in a browser, on this machine only (B20):
 bombista serve                                        # start at step 1
@@ -63,6 +66,37 @@ hand-fix REVIEW/FAIL lines by re-running with `--anchor <line>=<seconds>` (add `
 skip re-transcription — it's near-instant). `promote` validates the candidate against the
 timeline v2 contract, backs up the song JSON next to itself, and writes only
 `timelineVersion`, `leadIn` and `timeline`.
+
+`new` is the **front door**: it writes a canonical SP JSON skeleton that `validate` already
+passes, so the step that used to be folklore — *a file appears, and that is the whole process* —
+has a tool. **`tempo` and the timing keys are absent, not scaffolded**: a missing tempo is a real
+state and a fake one is a bug that reaches a stage (`songs@c5adf65`), and a human starting a song
+does not write timings.
+
+`validate` is the **gate, and it asks two different questions**. The default asks *is this file
+sane* and tolerates work in progress — a song fresh from `new` has no timeline and must still be
+savable. `--for-performance` asks *is this song finished*: a timeline present and consistent with
+the lyrics, and a declared `media` that resolves. **A missing `tempo` is a warning there, not a
+failure** (pedal-driven mode works without one); a *partial* tempo block is a failure at both
+levels. Every problem is listed, never just the first. **Playability is checked here and not in
+Pregonero** — every rule lives inside one song file and needs no gig, and a second implementation
+would be a second understanding of SP JSON.
+
+`media.src` is a logical filename (Pregonero resolves it through a per-machine map), so
+`--media-dir` is how `validate` is told where the file actually lives; the song file's own
+directory is tried last, and a failure names every directory it looked in. **That makes the media
+check necessarily partial and it must not be read as a guarantee:** *the media resolves* is a fact
+about the machine the gate ran on and the directories it was handed, not about the song file. It
+earns its keep because the machine that runs the gate is the machine that runs the gig — but a
+pass says the file was found *here*, and nothing about anywhere else.
+
+**Three things warn rather than fail at `--for-performance`**, and none of them is a fault: an
+absent `tempo` (pedal-driven mode works without one), a `linesHash` that no longer matches the
+lyrics (usually a corrected translation — `promote` warns rather than blocks and this keeps that
+stance), and an absent `intro` (whatever projects it stands dark, which is correct behaviour).
+All three are things to learn before a gig rather than at one. **`intro` is still not a required
+field** at either level: `serve`'s from-scratch branch has no source for one, so requiring it
+would make Bombista's own output fail Bombista's own gate.
 
 `migrate` is the **one-off** for songs timed before v2 (B13): it rebases a *stored* v1
 timeline in place, applying exactly what `align` applies to a fresh run. Both shipped
@@ -114,6 +148,17 @@ bombista/
                    the file it was given, and those three describe one file
   report.py      — markdown QA report (per-line band, ASR context, signals, fix hints)
   serializer.py  — the frozen timeline v2 envelope, and nothing else
+  skeleton.py    — round A: the canonical SP JSON skeleton `new` writes, in the
+                   catalogue's key order (§10.2). `tempo` and the timing keys are
+                   ABSENT, not scaffolded. The title is seeded from the song id and
+                   is a seed — unlike a tempo, a wrong one is visible on sight
+  validation.py  — round A: THE gate. Two levels (sane / finished), and it returns a
+                   list of Findings rather than raising, because raising is a
+                   first-failure interface and a person fixing a file wants all of it.
+                   `validate_tempo` is the ONE understanding of a valid tempo block in
+                   this repo — `bombista validate` and `serve`'s review control both
+                   call it, so a partial block cannot get in through one door and not
+                   the other. Pure, stdlib-only, prints nothing
   writers.py     — everything downstream of the canonical CP form: songjson, report-json,
                    srt, lrc, html — plus merge_envelope, THE one merge path (shared with
                    promote). The html writer (B16) is the offline review page: inline CSS/JS
@@ -140,8 +185,11 @@ bombista/
                    media file NAME (never the path), model, lead-in — and nothing
                    else; sha256, device, toolVersion, extractedAt and duration are
                    filed in <stem>-report.json, which is the audit artifact (§8.2).
-                   Page 1 has NO TEMPO CONTROL: tempo is written whole or not at
-                   all, Bombista cannot write it whole, so it writes none (§11.5).
+                   Page 1 still has NO TEMPO CONTROL (§11.5) — but page 2 does,
+                   as of round A: four fields, because a block is written whole or
+                   not at all. §11.5's removal is reversed only in WHERE a value may
+                   be typed; nothing derives, measures or guesses one, and the fields
+                   start empty rather than at a plausible 120/4/4.
                    String composition,
                    stdlib only, inline CSS/JS, no build step, NO WEBFONT. STYLESHEET is
                    the whole of §10.3's skin and is defined ONCE — page 2 inherits it
@@ -152,7 +200,11 @@ bombista/
                    ThreadingHTTPServer on 127.0.0.1 ONLY (invariant 7 — the host is
                    an explicit argument that refuses every other value). Holds one
                    Session (lines, words, QA state of a previous `align`) and answers
-                   GET /api/session, POST /api/reanchor, POST /api/emit. Imports
+                   GET /api/session, POST /api/reanchor, POST /api/emit, POST
+                   /api/tempo. The tempo route defers entirely to
+                   validation.validate_tempo — server.py must never judge a bpm,
+                   numerator, denominator or countInBars itself, and a test pins
+                   that by AST rather than by grep. Imports
                    NOTHING from cli.py (invariant 1): it calls the same extracted
                    anchoring/pipeline/merge the CLI calls, so the two cannot drift.
                    An override RE-ANCHORS — there is no code here that adds an offset
@@ -168,7 +220,8 @@ bombista/
                    silently plays the wrong take makes every judgement made against
                    it wrong (§11.11). NO line is refused: line 0 moves like any other
                    and `leadIn.source` says `manual` when a human set it (§8.6)
-  cli.py         — click CLI: align / promote / migrate / serve, and nothing else. Wiring only:
+  cli.py         — click CLI: new / align / promote / validate / migrate / serve, and
+                   nothing else. Wiring only:
                    options, help text, and translating ValueError into ClickException /
                    BadParameter. `extract` is a registered alias of `align` (B11) — the
                    same Command object, so the two cannot drift
@@ -232,7 +285,13 @@ stdlib-only by design — test it with synthetic `Word` lists, never with the wh
   Auto mode.
 - `leadIn.apply` defaults to `true` when the song has `media.type == "video"`, else `false`.
 - Lyrics arrays carry **sung lines only** — no section markers, no meta entries. A non-lyric
-  entry fails loudly, naming its index.
+  entry fails loudly, naming its index. `bombista validate` is where that is checked before a
+  run rather than during one.
+- **`tempo` is written whole — `bpm`, `numerator`, `denominator`, `countInBars` — or not at
+  all** (serve-spec §11.5, checked against Pregonero: `beatScheduler.ts` needs `numerator` and
+  `denominator` and does `numerator % 3`, so a bpm-only block gives a broken pulse and correct
+  scaling with no error anywhere). Absence is safe — no pulse, no count-in, scale pinned to 1 —
+  which is why a missing block is a warning and a partial one is a failure.
 - Rounding matters: assert losslessness with a **tolerance** (`< 0.005`), not equality —
   `13.1 - 7.26 == 5.840000000000001` in IEEE floats.
 - Alignment knobs (`offset`, `trimStart`) live on the song's `media` block — not here.

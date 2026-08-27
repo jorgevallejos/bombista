@@ -100,6 +100,10 @@ The shipped method (forced alignment, adopted 2026-07-03 — see "History" below
 5. **Correction:** `--anchor <line>=<seconds>` (CLI) re-anchors from that point using the cached transcription (`--words`), so a fix costs ~0.07 s, not another 50-second run. `bombista serve` (below) puts this loop in a page instead of a shell command.
 6. **Output:** `align` stages a timeline (never writing the input); `promote` merges it into the target song JSON (backup + diff, touches only the timing keys).
 
+**Time cost of filling in a missing timeline, as observed:** roughly fifteen minutes per song, start
+to finish through align, review and promote. This is the number behind "missing timelines are work,
+not a blocker" (Jorge).
+
 ## The review loop, and why `bombista serve` exists
 
 **Interface decision, 2026-08-14 — no dedicated Bombista GUI, at first.** Considered and declined: Bombista was expected to run only a handful of times over a couple of weeks and then go quiet, and a real GUI only pays off if the generic positioning above (theatre surtitles, captioning, karaoke) is a bet actually being placed. The friction was never the CLI — it's that judging a `REVIEW` line means *hearing* the audio at a candidate timestamp, which meant opening the file elsewhere and scrubbing. **`--emit html` (B16)** captured most of that value cheaply: one offline, self-contained review page with the audio embedded, a seek-and-play button per line, and the `--anchor` command pre-written beside each flagged line — no Electron, no packaging, no second app. A third option — building the timing UI *inside* Pregonero, which already has the library, the audio and an Electron shell — was named and rejected: it fuses two stations the Tramoya framing keeps separable, and drags Bombista's language-independence into an app that is entirely about language.
@@ -207,6 +211,15 @@ metadata of an uploaded version can never be edited. This is why `1.0.1` exists 
 never published: its classifiers understated the supported Python versions, and correcting them
 before uploading cost one small PR, where correcting them afterwards would have been impossible.
 The tag list therefore shows a gap that the PyPI page does not.
+
+### Round A's upload found a dead token (2026-08-24)
+
+The `bombista`-scoped PyPI token created the previous Sunday no longer authenticated, and its value
+was unrecoverable (PyPI never lets you read a token back after creation), so shipping round A's
+release meant creating a fresh token and deleting the dead one first. **Claude Code refused to
+handle the token itself, and that refusal is now a standing rule**: Claude Code builds the package
+and runs `twine check`, but a human uploads it. There is still no `~/.pypirc` and nothing in the
+keyring, so the next release will prompt for a token again unless that changes.
 
 ## Output contract (what the translator expects)
 

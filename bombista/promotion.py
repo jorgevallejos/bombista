@@ -37,6 +37,7 @@ __all__ = [
     "promote_candidate",
     "load_candidate",
     "extract_envelope",
+    "canonical_target_for",
     "find_candidate_lines_hash",
     "lines_hash_mismatch_warning",
     "lines_hash_unavailable_note",
@@ -58,8 +59,34 @@ class PromotionOutcome:
     render — `promote` echoes them to stdout, an HTTP handler would put
     them in a response body."""
 
-    backup: Path
+    backup: Path | None
+    """None when the song was created rather than replaced — there was
+    nothing to back up, and naming a path for a file that never existed
+    would be a lie in the caller's output."""
+
     diff: list[str]
+
+
+CANDIDATE_SUFFIX = "-song.json"
+"""What `align --emit songjson` names its output: `<stem>-song.json`."""
+
+
+def canonical_target_for(timeline_json: Path) -> str | None:
+    """The one filename a candidate may be **created** as: `<stem>.json`
+    for a candidate named `<stem>-song.json`. None when the candidate is
+    not an emitted songjson by name.
+
+    **A song's id IS its filename**, in this catalogue and in Pregonero's
+    library alike, so a free choice of target name when creating is a free
+    choice of id — and that is a decision this suite removes rather than
+    explains (`bombista`'s output always lands under the canonical name
+    and the user never picks a path). Replacing an existing song is
+    unaffected: the name is already settled, and this never runs.
+    """
+    name = timeline_json.name
+    if not name.endswith(CANDIDATE_SUFFIX):
+        return None
+    return name[: -len(CANDIDATE_SUFFIX)] + ".json"
 
 
 def load_candidate(timeline_json: Path) -> dict:
@@ -190,7 +217,11 @@ def promote_candidate(
     envelope = extract_envelope(timeline_json, data)
     new_timeline = envelope["timeline"]
 
-    song = json.loads(song_json.read_text(encoding="utf-8"))
+    creating = not song_json.exists()
+    if creating:
+        song = _song_to_create(timeline_json, song_json, data)
+    else:
+        song = json.loads(song_json.read_text(encoding="utf-8"))
     items = song.get("lyrics")
     if not isinstance(items, list):
         raise ValueError(f'{song_json}: song JSON has no "lyrics" list')
@@ -202,24 +233,40 @@ def promote_candidate(
 
     # B4 — positional-fragility guard: warn (never block) if the target
     # song's lyrics changed since this candidate was extracted.
-    candidate_lines_hash, candidate_lang = find_candidate_lines_hash(timeline_json, data)
-    if candidate_lines_hash is None:
-        emit(lines_hash_unavailable_note(timeline_json))
+    #
+    # **It cannot run when the song is being created, and saying nothing would be
+    # worse than saying that.** The guard asks whether the TARGET's lyrics moved on
+    # since extraction; a song that did not exist has no such history, and the
+    # target's lyrics are the candidate's own by construction. Left in, it prints
+    # "the lyrics changed since this timeline was extracted" about a song that has
+    # never been edited — a sentence that is not true and that sends the reader to
+    # re-run `align` for no reason.
+    if creating:
+        emit(
+            "note: linesHash guard does not apply — this song is being created, so "
+            "there are no earlier lyrics for its timeline to have drifted from."
+        )
     else:
-        try:
-            target_lines = lyric_lines(items, candidate_lang or FALLBACK_LANG)
-        except ValueError as exc:
-            # Can't recompute the hash, so the guard can't run — say so
-            # rather than let it look like a clean check.
-            target_lines = None
-            emit(f"note: linesHash guard could not be checked — {exc}")
-        if target_lines is not None:
-            target_lines_hash = compute_lines_hash(target_lines)
-            if target_lines_hash != candidate_lines_hash:
-                emit(lines_hash_mismatch_warning(candidate_lines_hash, target_lines_hash))
+        candidate_lines_hash, candidate_lang = find_candidate_lines_hash(timeline_json, data)
+        if candidate_lines_hash is None:
+            emit(lines_hash_unavailable_note(timeline_json))
+        else:
+            try:
+                target_lines = lyric_lines(items, candidate_lang or FALLBACK_LANG)
+            except ValueError as exc:
+                # Can't recompute the hash, so the guard can't run — say so
+                # rather than let it look like a clean check.
+                target_lines = None
+                emit(f"note: linesHash guard could not be checked — {exc}")
+            if target_lines is not None:
+                target_lines_hash = compute_lines_hash(target_lines)
+                if target_lines_hash != candidate_lines_hash:
+                    emit(lines_hash_mismatch_warning(candidate_lines_hash, target_lines_hash))
 
     carries_more_than_envelope = set(data.keys()) - set(ENVELOPE_KEYS)
-    if carries_more_than_envelope:
+    # Nothing to be narrower than when the song is being created, so the
+    # completeness refusal has no target to protect and does not run.
+    if carries_more_than_envelope and not creating:
         candidate_completeness = song_completeness(data)
         target_completeness = song_completeness(song)
         if target_completeness == "complete" and candidate_completeness == "partial":
@@ -234,9 +281,16 @@ def promote_candidate(
                 "bare timeline envelope instead."
             )
 
-    old_timeline = song.get("timeline")
+    # **A created song had no timeline, whatever the candidate carries.** `song` IS
+    # the candidate on this path, so reading its `timeline` here would compare the
+    # new timeline against itself and report "no changes" about a song that has just
+    # been given one.
+    old_timeline = None if creating else song.get("timeline")
     # Merge before touching the disk: an incomplete envelope must raise here,
-    # with the song file still untouched, rather than after the backup.
+    # with the song file still untouched, rather than after the backup. When
+    # creating, the candidate already carries the envelope and merging it into
+    # itself is the same operation — it is run either way so the contract check
+    # inside it fires on both paths.
     try:
         song = merge_envelope(song, envelope)
     except ValueError as exc:
@@ -245,3 +299,47 @@ def promote_candidate(
     backup = back_up_and_replace(song_json, song)
 
     return PromotionOutcome(backup=backup, diff=timeline_diff(old_timeline, new_timeline))
+
+
+def _song_to_create(timeline_json: Path, song_json: Path, data: dict) -> dict:
+    """The song to write when *song_json* does not exist yet.
+
+    **Two refusals, and they are the whole of what makes creating safe.**
+
+    - **The candidate must be a full `--emit songjson`.** A bare v2
+      envelope is three keys; there is no song in it to create, and
+      merging into a file that is not there is not a thing. This is the
+      case the old `click.Path(exists=True)` was really protecting
+      against, and it is protected properly now instead of by forbidding
+      creation altogether.
+    - **The target must be the canonical name for that candidate.** See
+      `canonical_target_for`.
+
+    The `_bombista` block is dropped. It is provenance about a run, it
+    belongs in the staging directory beside the report, and a catalogue
+    where created songs carry a key hand-made ones do not is a catalogue
+    with two kinds of song file in it.
+    """
+    if not set(data.keys()) - set(ENVELOPE_KEYS):
+        raise ValueError(
+            f"{song_json}: does not exist, and {timeline_json} is a bare "
+            "timeline envelope — there is no song in it to create. Promote a "
+            "full `--emit songjson` candidate to create a song, or point at an "
+            "existing song to merge a timeline into."
+        )
+
+    canonical = canonical_target_for(timeline_json)
+    if canonical is None:
+        raise ValueError(
+            f"{timeline_json}: to create a song, the candidate must be an "
+            f"`--emit songjson` output named `<stem>{CANDIDATE_SUFFIX}`."
+        )
+    if song_json.name != canonical:
+        raise ValueError(
+            f"{song_json}: refusing to create — a song's id is its filename, so "
+            f"{timeline_json.name} may only be created as `{canonical}`. Rename "
+            "the target, or promote into a song that already exists."
+        )
+
+    song = {k: v for k, v in data.items() if k != "_bombista"}
+    return song

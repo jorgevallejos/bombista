@@ -23,7 +23,7 @@ from pathlib import Path
 __all__ = ["back_up_and_replace", "timeline_diff"]
 
 
-def back_up_and_replace(song_json: Path, song: dict) -> Path:
+def back_up_and_replace(song_json: Path, song: dict) -> Path | None:
     """Copy *song_json* to a timestamped `.backup-<stamp>` sibling (never
     over an existing one — the stamp is the current second), then replace
     the original with *song*, atomically.
@@ -32,11 +32,23 @@ def back_up_and_replace(song_json: Path, song: dict) -> Path:
     `timelineVersion`, `leadIn` and `timeline` are written as a unit, so
     an interrupted write must not be able to leave a half-stamped song on
     disk — hence the scratch file and `os.replace`, and the scratch file
-    is removed if anything goes wrong. Returns the backup's path.
+    is removed if anything goes wrong. Returns the backup's path, or
+    **None when *song_json* did not exist** and there was nothing to back
+    up: creating is a real case now, and inventing a backup path for a
+    file that never existed would be a lie in the caller's output.
     """
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    backup = song_json.with_name(f"{song_json.name}.backup-{stamp}")
-    shutil.copyfile(song_json, backup)
+    # **Nothing to back up when the song is being created.** `promote` can now land a
+    # `--emit songjson` candidate as a song that does not exist yet, which is the only way a
+    # song made from a lyrics file and a recording ever reaches the catalogue. The atomic
+    # write below is unchanged; only the copy is conditional, and the caller is told there is
+    # no backup rather than handed a path that names nothing.
+    backup = None
+    if song_json.exists():
+        backup = song_json.with_name(f"{song_json.name}.backup-{stamp}")
+        shutil.copyfile(song_json, backup)
+    else:
+        song_json.parent.mkdir(parents=True, exist_ok=True)
 
     payload = json.dumps(song, indent=2, ensure_ascii=False) + "\n"
     temp = song_json.with_name(f"{song_json.name}.tmp-{stamp}")

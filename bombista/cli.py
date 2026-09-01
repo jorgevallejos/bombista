@@ -380,9 +380,10 @@ main.add_command(_extract_alias)
 
 @main.command()
 @click.argument("timeline_json", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.argument("song_json", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.argument("song_json", type=click.Path(dir_okay=False, path_type=Path))
 def promote(timeline_json: Path, song_json: Path) -> None:
-    """Write the timeline v2 envelope from TIMELINE_JSON into SONG_JSON.
+    """Write the timeline v2 envelope from TIMELINE_JSON into SONG_JSON,
+    creating SONG_JSON when it does not exist yet.
 
     TIMELINE_JSON may be either a bare timeline v2 envelope (`extract`'s
     default `--emit timeline` output) or a full `--emit songjson` output
@@ -402,6 +403,21 @@ def promote(timeline_json: Path, song_json: Path) -> None:
     an emitted songjson) whose own completeness is `"partial"` — promoting
     a thin, plain-text-derived candidate over a song that already has full
     CP data is very likely a mistake, not an upgrade.
+
+    \b
+    CREATING a song, when SONG_JSON does not exist:
+    This is the last step of making a song from a lyrics text file and a
+    recording, and it is the only way that song ever reaches the
+    catalogue. Two conditions, both refusals rather than judgement calls:
+      - TIMELINE_JSON must be a full `--emit songjson` output. A bare
+        timeline envelope is three keys; there is no song in it.
+      - SONG_JSON must be the canonical name for it — `<stem>.json` for a
+        candidate `<stem>-song.json`. A song's id IS its filename, so a
+        free choice of name here is a free choice of id.
+    The `_bombista` provenance block is not carried into the created song:
+    it is about a run, it belongs beside the report in staging, and a
+    catalogue where created songs carry a key hand-made ones do not is a
+    catalogue with two kinds of song file in it.
     """
     try:
         outcome = promote_candidate(
@@ -412,7 +428,10 @@ def promote(timeline_json: Path, song_json: Path) -> None:
     except ValueError as exc:
         raise click.ClickException(str(exc))
 
-    click.echo(f"backup: {outcome.backup}")
+    if outcome.backup is None:
+        click.echo(f"created: {song_json}")
+    else:
+        click.echo(f"backup: {outcome.backup}")
     for line in outcome.diff:
         click.echo(line)
 

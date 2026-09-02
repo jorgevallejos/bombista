@@ -200,16 +200,15 @@ def _from_scratch_song(song: dict, *, lang: str, info: dict | None) -> dict:
     """
     info = info or {}
     resolved_title = _text(info.get("title")) or song.get("title") or ""
-    translations = _merge_translations({}, info.get("title_translations"))
     return {
         "title": resolved_title,
         "artist": _text(info.get("artist")),
         "notes": _text(info.get("notes")),
-        # The own-language entry is the from-scratch default and nothing
-        # more: Jorge's sketch of 2026-08-15 fixes it, and a `.txt` plus
-        # page 1 can honestly supply no other. A page that named some
-        # translations is taken at its word instead.
-        "title_translations": translations or {lang: resolved_title},
+        # Not a translation collected from anyone — it is the title, in
+        # the one language this file has, which is why it survives the
+        # 2026-09-02 rule that no tool asks for a translation. Jorge's
+        # sketch of 2026-08-15 fixes the shape.
+        "title_translations": {lang: resolved_title},
         "lyrics": song.get("lyrics", []),
     }
 
@@ -218,10 +217,17 @@ def _from_scratch_song(song: dict, *, lang: str, info: dict | None) -> dict:
 # the song's general information — what a `.txt` cannot carry (step 6)
 # ---------------------------------------------------------------------------
 
-INFO_KEYS = ("title", "artist", "notes", "title_translations")
-"""The four keys page 1 collects, and the reason it collects them: a plain
-text file carries words and nothing else, so without this the flow can
-only ever make a song with no artist, no notes and no translated title.
+INFO_KEYS = ("title", "artist", "notes")
+"""The keys page 1 collects, and the reason it collects them: a plain text
+file carries words and nothing else, so without this the flow can only
+ever make a song with no artist and no notes.
+
+**`title_translations` was here and came off on 2026-09-02.** Translation
+is not Bombista's concern — lyric translations are written outside the
+suite in the file, and the title follows the same rule: *if it is a
+translation, it was written elsewhere and the file already carries it*.
+What a file carries still passes through untouched, because this list is
+what page 1 may **replace**, and every key absent from it is left alone.
 
 They are the song file's own key names on the wire too. A second
 vocabulary between the page and the format would be a second thing to keep
@@ -265,35 +271,6 @@ def _place_key(song: dict, key: str, value: object) -> dict:
     return placed
 
 
-def _merge_translations(original: object, posted: object) -> dict:
-    """The title translations after page 1 has had its say.
-
-    *posted* maps **every language the page offered** to what stands in its
-    field, an empty string meaning cleared. A language the page did not
-    offer is not in *posted* at all and survives untouched — the page
-    offers four and a song file may carry a fifth, and a field that was
-    never on screen must not be able to delete a value.
-
-    The original's order is kept for the keys that survive it. Rewriting
-    the order of a block nobody reads by position is exactly the
-    normalising this tool refuses elsewhere.
-    """
-    held = original if isinstance(original, dict) else {}
-    offered = posted if isinstance(posted, dict) else {}
-
-    merged = {}
-    for code, value in held.items():
-        if code in offered:
-            if _text(offered[code]):
-                merged[code] = _text(offered[code])
-        elif isinstance(value, str):
-            merged[code] = value
-    for code, value in offered.items():
-        if code not in merged and _text(value):
-            merged[code] = _text(value)
-    return merged
-
-
 def _place_info(song: dict, info: dict | None) -> dict:
     """Apply page 1's general information to *song*.
 
@@ -309,29 +286,18 @@ def _place_info(song: dict, info: dict | None) -> dict:
     for key in INFO_KEYS:
         if key not in info:
             continue
-        value = (
-            _merge_translations(song.get(key), info[key])
-            if key == "title_translations"
-            else _text(info[key])
-        )
-        placed = _place_key(placed, key, value)
+        placed = _place_key(placed, key, _text(info[key]))
     return placed
 
 
 def song_information(song: dict) -> dict:
     """What page 1 shows in the general-information block before anyone
-    retypes it — read off the file, never assembled twice."""
-    translations = song.get("title_translations")
-    return {
-        "title": _text(song.get("title")),
-        "artist": _text(song.get("artist")),
-        "notes": _text(song.get("notes")),
-        "title_translations": {
-            code: value
-            for code, value in (translations or {}).items()
-            if isinstance(value, str) and value
-        },
-    }
+    retypes it — read off the file, never assembled twice.
+
+    `title_translations` is deliberately absent: the page has no field for
+    it since 2026-09-02, and reporting a value nothing renders is an
+    invitation to build the field back."""
+    return {key: _text(song.get(key)) for key in INFO_KEYS}
 
 
 def _find_provenance(staging_dir: Path, stem: str) -> dict | None:
@@ -1000,10 +966,35 @@ class Holder:
     """The one mutable thing the handler class closes over: the session
     being reviewed, and the run producing it."""
 
-    def __init__(self, session: Session | None = None, staging: Path | None = None) -> None:
+    def __init__(
+        self,
+        session: Session | None = None,
+        staging: Path | None = None,
+        *,
+        browse_from: Path | None = None,
+        song: Path | None = None,
+        header: bool = True,
+    ) -> None:
         self.session = session
         self.run: Run | None = None
-        self.home = str(Path.home())
+        self.browse_from = str(browse_from or Path.home())
+        """Where the file pickers open. The home folder is the standalone
+        answer and a poor one on a screen whose whole job is to find a
+        lyrics file and a recording that live in the same folder as each
+        other (walked 2026-09-02). A caller that knows where the songs are
+        says so; Bombista learns a directory and nothing else."""
+
+        self.song = str(song) if song else ""
+        """A song file page 1 starts prefilled from, which is what makes an
+        edit an edit rather than a second new song. The page reaches it
+        through exactly the route a pick takes, so there is one answer to
+        *what does this file say*."""
+
+        self.header = header
+        """Whether to draw the product header — name, tagline, version,
+        *a Tramoya tool by Chango Pepper*. Off, the version still shows:
+        two builds calling themselves the same number is the trap that has
+        cost this project a day."""
         self.staging = staging
         """Where a run started from page 1 stages its working files, when
         the caller named a directory (`serve --staging`).
@@ -1151,12 +1142,7 @@ def describe_lyrics(lyrics_path: Path, *, lang: str = "es") -> dict:
         "info": (
             song_information(normalised.song)
             if complete
-            else {
-                "title": title_from_song_id(lyrics_path.stem),
-                "artist": "",
-                "notes": "",
-                "title_translations": {},
-            }
+            else {"title": title_from_song_id(lyrics_path.stem), "artist": "", "notes": ""}
         ),
         "tempo": declared_tempo if isinstance(declared_tempo, dict) else None,
     }
@@ -1274,9 +1260,17 @@ class _Handler(BaseHTTPRequestHandler):
                 # which rather than guessing at a landing page.
                 self._redirect("/review" if self.holder.session else "/input")
             elif route == "/input":
-                self._html(pages.render_input(home=self.holder.home))
+                self._html(
+                    pages.render_input(
+                        browse_from=self.holder.browse_from,
+                        song=self.holder.song,
+                        header=self.holder.header,
+                    )
+                )
             elif route == "/processing":
-                self._html(pages.render_processing(**self._run_lede()))
+                self._html(
+                    pages.render_processing(**self._run_lede(), header=self.holder.header)
+                )
             elif route == "/output":
                 self._output_page()
             elif route == "/review":
@@ -1290,7 +1284,9 @@ class _Handler(BaseHTTPRequestHandler):
             elif route == "/api/run":
                 self._respond(200, self._run_payload())
             elif route == "/api/browse":
-                self._respond(200, browse(Path(params.get("path", [self.holder.home])[0])))
+                self._respond(
+                    200, browse(Path(params.get("path", [self.holder.browse_from])[0]))
+                )
             elif route == "/api/lyrics":
                 self._respond(
                     200,
@@ -1393,7 +1389,11 @@ class _Handler(BaseHTTPRequestHandler):
         if session is None:
             self._redirect("/input")
             return
-        self._html(pages.render_review(session_payload(session, session.overrides)))
+        self._html(
+            pages.render_review(
+                session_payload(session, session.overrides), header=self.holder.header
+            )
+        )
 
     def _review_rows(self) -> None:
         """The list of lines, as markup, for the page to swap in after a
@@ -1453,6 +1453,7 @@ class _Handler(BaseHTTPRequestHandler):
                 filename=f"{session.lyrics_path.stem}.json",
                 save_path=str(default_out_path(session)),
                 from_scratch=session.from_scratch,
+                header=self.holder.header,
             )
         )
 
@@ -1582,6 +1583,9 @@ def create_server(
     port: int = 0,
     host: str = LOOPBACK_HOST,
     staging: Path | None = None,
+    browse_from: Path | None = None,
+    song: Path | None = None,
+    header: bool = True,
 ) -> ThreadingHTTPServer:
     """A threading HTTP server bound to the loopback interface.
 
@@ -1592,6 +1596,12 @@ def create_server(
     *staging* is where a run started from page 1 does its work. See
     `Holder.staging`: it is for a caller that means to read the emitted
     `<stem>.json` back out, and the default cache is unchanged without it.
+
+    *browse_from*, *song* and *header* are the three answers a caller may
+    give about the page itself — where the pickers open, a song file page 1
+    starts prefilled from, and whether the product header is drawn. See
+    `Holder` for each. **None of them tells this process who is calling**,
+    and none of them changes what Bombista writes.
 
     *host* is explicit and takes exactly one value (invariant 7): the
     argument exists so the bind address is visible at every call site, not
@@ -1608,5 +1618,6 @@ def create_server(
             "and nothing else (the audio never leaves this machine)"
         )
 
-    handler = type("_SessionHandler", (_Handler,), {"holder": Holder(session, staging)})
+    holder = Holder(session, staging, browse_from=browse_from, song=song, header=header)
+    handler = type("_SessionHandler", (_Handler,), {"holder": holder})
     return ThreadingHTTPServer((host, port), handler)

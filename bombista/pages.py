@@ -40,7 +40,7 @@ __all__ = [
     "render_output",
 ]
 
-VERSION = "v1.3.0"
+VERSION = "v1.4.0"
 """The masthead's version string — the package version with a `v` in front.
 
 It is a second copy of what `pyproject.toml` declares, and a second copy
@@ -136,6 +136,10 @@ code { font-family: var(--mono); font-size: .88em; }
 a { color: var(--paper); text-decoration: none; border-bottom: 1px solid var(--clay-dim); }
 a:hover { border-bottom-color: var(--clay); color: var(--clay); }
 .pageoff { display: none; }
+/* the version, when the product header is not drawn — the number survives,
+   the branding does not (2026-09-02) */
+.ver { margin: .5rem 0 0; font: 400 .68rem/1 var(--mono); letter-spacing: .11em;
+       text-transform: uppercase; color: var(--dimmer); }
 
 /* ---------- masthead (§9.1) ---------- */
 .mast { display: flex; align-items: flex-end; justify-content: space-between; gap: 1.5rem;
@@ -208,21 +212,44 @@ input[type="text"], input[type="number"] {
 .warnbox b { display: block; font-weight: 400; text-transform: uppercase;
              letter-spacing: .11em; margin-bottom: .3rem; color: var(--review); font-size: .72rem; }
 
-/* ---------- the file picker — a loopback listing, not a native dialog (§9.6) ---------- */
-.picker { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.72);
+/* ---------- the file picker — a plain dialog, deliberately (§9.6, 2026-09-02) ----------
+   The rest of this page is brutalist on purpose. A file dialog is the one
+   place a person expects their system's own furniture, and the brutalist
+   treatment was too far for it: hard clay border, uppercase buttons, rows
+   that lit up in an accent. So this one object steps out of the skin —
+   soft border, ordinary rows, a highlighted selection, Cancel and Choose
+   where every dialog on the machine puts them. It is still served by this
+   process and still hands back a real path, because a web page cannot. */
+.picker { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.55);
           display: flex; align-items: center; justify-content: center; padding: 2rem; }
-.picker .inner { background: var(--surface); border: 1px solid var(--clay);
-                 width: min(44rem, 100%); max-height: 80vh; display: flex; flex-direction: column; }
-.picker .head { padding: .6rem .8rem; border-bottom: 1px solid var(--line-2);
-                font: 400 .72rem/1.5 var(--mono); color: var(--dim);
-                overflow-wrap: anywhere; }
-.picker ul { list-style: none; margin: 0; padding: 0; overflow: auto; }
-.picker li { border-bottom: 1px solid var(--line); }
-.picker li button { width: 100%; text-align: left; border: none; text-transform: none;
-                    letter-spacing: 0; font-size: .82rem; color: var(--paper); padding: .45rem .8rem; }
-.picker li button:hover { background: var(--surface-2); color: var(--clay); }
-.picker li.dir button { color: var(--dim); }
-.picker .foot { padding: .55rem .8rem; border-top: 1px solid var(--line-2); text-align: right; }
+.picker .inner { background: var(--surface-2); border: 1px solid var(--line-2);
+                 border-radius: 6px; box-shadow: 0 16px 48px rgba(0,0,0,.55);
+                 width: min(40rem, 100%); height: min(28rem, 80vh);
+                 display: flex; flex-direction: column; overflow: hidden; }
+.picker .head { padding: .7rem .9rem; border-bottom: 1px solid var(--line-2);
+                font: 400 .78rem/1.4 var(--sans); color: var(--dim);
+                overflow-wrap: anywhere; flex: none; }
+.picker ul { list-style: none; margin: 0; padding: .25rem 0; overflow: auto; flex: 1 1 auto;
+             background: var(--surface); }
+.picker li button { width: 100%; text-align: left; border: none; background: transparent;
+                    text-transform: none; letter-spacing: 0; border-radius: 0;
+                    font: 400 .84rem/1.4 var(--sans); color: var(--paper);
+                    padding: .34rem .9rem; display: flex; gap: .5rem; }
+.picker li button:hover { background: rgba(255,255,255,.05); color: var(--paper);
+                          border-color: transparent; }
+.picker li button .kind { color: var(--dimmer); width: .9rem; flex: none; }
+.picker li.dir button { color: var(--paper); }
+.picker li.on button { background: #4a4a44; color: var(--paper); }
+.picker li.on button .kind { color: var(--paper); }
+.picker .foot { padding: .7rem .9rem; border-top: 1px solid var(--line-2); flex: none;
+                display: flex; justify-content: flex-end; gap: .55rem;
+                background: var(--surface-2); }
+.picker .foot button { text-transform: none; letter-spacing: 0; border-radius: 4px;
+                       font: 400 .82rem/1 var(--sans); padding: .45rem 1.1rem;
+                       color: var(--paper); }
+.picker .foot button.go { background: #4a4a44; border-color: #565650; color: var(--paper); }
+.picker .foot button.go:hover:not(:disabled) { background: #565650; border-color: #6a6a62;
+                                               color: var(--paper); }
 
 /* ---------- page 1.5 — the run (§9.4) ---------- */
 .phase { display: flex; align-items: center; gap: .8rem; padding: .8rem 0;
@@ -398,39 +425,90 @@ _PICKER_JS = """\
    50 MB m4a into a staging directory to recover something the file already
    had two directories away, and every path the tool then recorded would
    name the copy rather than the take. The page shows the file NAME alone
-   (§9.3, decision 1) — the path stays the tool's business. */
+   (§9.3, decision 1) — the path stays the tool's business.
+
+   **It looks like a file dialog and not like the rest of this page**
+   (walked 2026-09-02). Everything else here is brutalist by decision; a
+   file dialog is the one place a person expects their system's own
+   furniture, and the brutalist treatment read as a different application.
+   Path at the top, a plain list, Cancel and Choose at the bottom. One
+   implementation serves both contexts, because there is only one thing
+   that works standalone. */
 function browse(startPath, onPick) {
   var box = document.createElement("div");
   box.className = "picker";
+  box.innerHTML =
+    '<div class="inner">' +
+      '<div class="head" id="pick-path"></div>' +
+      '<ul id="pick-list"></ul>' +
+      '<div class="foot">' +
+        '<button type="button" data-close="1">Cancel</button>' +
+        '<button type="button" class="go" id="pick-choose" disabled>Choose</button>' +
+      '</div>' +
+    "</div>";
   document.body.appendChild(box);
+
+  var chosen = null;
+  var list = box.querySelector("#pick-list");
+  var choose = box.querySelector("#pick-choose");
+
   function close() { box.remove(); }
+
+  /* A directory row opens; a file row selects and `Choose` confirms.
+     One click either way, and the button that commits is the one at the
+     bottom right, where every dialog on this machine puts it. */
+  function select(li, path) {
+    var on = list.querySelector("li.on");
+    if (on) { on.className = on.className.replace(" on", ""); }
+    li.className += " on";
+    chosen = path;
+    choose.disabled = false;
+  }
+
+  function take() {
+    if (!chosen) { return; }
+    var path = chosen;
+    close();
+    onPick(path);
+  }
+
   function load(path) {
     fetch("/api/browse?path=" + encodeURIComponent(path))
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.error) { close(); return; }
-        var items = data.entries.map(function (entry) {
-          return '<li class="' + (entry.dir ? "dir" : "file") + '">' +
-                 '<button type="button" data-path="' + esc(entry.path) + '" data-dir="' +
-                 (entry.dir ? "1" : "") + '">' + (entry.dir ? "▸ " : "") +
-                 esc(entry.name) + "</button></li>";
-        }).join("");
-        box.innerHTML =
-          '<div class="inner"><div class="head">' + esc(data.path) + "</div><ul>" +
+        chosen = null;
+        choose.disabled = true;
+        box.querySelector("#pick-path").textContent = data.path;
+        list.innerHTML =
           '<li class="dir"><button type="button" data-path="' + esc(data.parent) +
-          '" data-dir="1">▸ ..</button></li>' + items +
-          '</ul><div class="foot"><button type="button" data-close="1">Close</button></div></div>';
+          '" data-dir="1"><span class="kind">&#9656;</span>..</button></li>' +
+          data.entries.map(function (entry) {
+            return '<li class="' + (entry.dir ? "dir" : "file") + '">' +
+                   '<button type="button" data-path="' + esc(entry.path) + '" data-dir="' +
+                   (entry.dir ? "1" : "") + '"><span class="kind">' +
+                   (entry.dir ? "&#9656;" : "") + "</span>" +
+                   esc(entry.name) + "</button></li>";
+          }).join("");
+        list.scrollTop = 0;
       });
   }
+
   box.addEventListener("click", function (ev) {
     var btn = ev.target.closest && ev.target.closest("button");
     if (!btn) { if (ev.target === box) { close(); } return; }
+    if (btn === choose) { take(); return; }
     if (btn.getAttribute("data-close")) { close(); return; }
     var path = btn.getAttribute("data-path");
     if (btn.getAttribute("data-dir")) { load(path); return; }
-    close();
-    onPick(path);
+    select(btn.parentNode, path);
   });
+
+  box.addEventListener("dblclick", function (ev) {
+    var btn = ev.target.closest && ev.target.closest("li.file button");
+    if (btn) { take(); }
+  });
+
   load(startPath);
 }
 
@@ -458,29 +536,30 @@ _INPUT_JS = """\
      block is whole, because a second opinion about what a valid tempo is
      is exactly what §11.5's rule exists to prevent. A blank field is left
      out, so the refusal names it. */
-  var T_FIELDS = { bpm: "t-bpm", numerator: "t-numerator",
-                   denominator: "t-denominator", countInBars: "t-countinbars" };
-
   function val(id) { return document.getElementById(id).value.trim(); }
 
+  /* A pulse and a signature, split into the four keys the format fixes at
+     the boundary and nowhere else. **Neither given means no tempo at all**,
+     which is a real state — so the bars field, which always has a value,
+     never makes a block on its own. One given and not the other is a
+     partial block, and it goes up to be refused by name rather than being
+     pre-judged here: a second opinion about a valid tempo is exactly what
+     the whole-or-nothing rule exists to prevent. */
   function tempoBlock() {
-    var block = {}, key, raw;
-    for (key in T_FIELDS) {
-      raw = val(T_FIELDS[key]);
-      if (raw !== "") { block[key] = Number(raw); }
+    var bpm = val("t-bpm"), signature = val("t-signature");
+    if (bpm === "" && signature === "") { return {}; }
+    var block = { countInBars: Number(val("t-countinbars") || "0") };
+    if (bpm !== "") { block.bpm = Number(bpm); }
+    if (signature !== "") {
+      var halves = signature.split("/");
+      block.numerator = Number(halves[0]);
+      block.denominator = Number(halves[1]);
     }
     return block;
   }
 
   function information() {
-    var translations = {};
-    LANGS.forEach(function (code) { translations[code] = val("tt-" + code); });
-    return {
-      title: val("title"),
-      artist: val("artist"),
-      notes: val("notes"),
-      title_translations: translations
-    };
+    return { title: val("title"), artist: val("artist"), notes: val("notes") };
   }
 
   /* Prefilled from the file, never invented here: an SP JSON already
@@ -491,19 +570,30 @@ _INPUT_JS = """\
     document.getElementById("title").value = info.title || "";
     document.getElementById("artist").value = info.artist || "";
     document.getElementById("notes").value = info.notes || "";
-    var translations = info.title_translations || {};
-    LANGS.forEach(function (code) {
-      document.getElementById("tt-" + code).value = translations[code] || "";
-    });
+
     var tempo = data.tempo || {};
-    for (var key in T_FIELDS) {
-      document.getElementById(T_FIELDS[key]).value =
-        tempo[key] === undefined || tempo[key] === null ? "" : String(tempo[key]);
+    document.getElementById("t-bpm").value =
+      tempo.bpm === undefined || tempo.bpm === null ? "" : String(tempo.bpm);
+    document.getElementById("t-countinbars").value =
+      tempo.countInBars === undefined || tempo.countInBars === null
+        ? "0" : String(tempo.countInBars);
+    /* A signature the dropdown cannot say is ADDED to it rather than
+       dropped — the file keeps its own 5/4, and the control does not
+       quietly edit what it was handed. */
+    var select = document.getElementById("t-signature");
+    var signature = tempo.numerator && tempo.denominator
+      ? tempo.numerator + "/" + tempo.denominator : "";
+    if (signature && !select.querySelector('option[value="' + signature + '"]')) {
+      var option = document.createElement("option");
+      option.value = signature;
+      option.textContent = signature;
+      select.appendChild(option);
     }
+    select.value = signature;
   }
 
   document.getElementById("pick-lyrics").addEventListener("click", function () {
-    browse(HOME, function (path) {
+    browse(BROWSE_FROM, function (path) {
       state.lyrics = path;
       document.getElementById("lyrics-name").textContent = baseName(path);
       describe(path);
@@ -511,7 +601,7 @@ _INPUT_JS = """\
   });
 
   document.getElementById("pick-media").addEventListener("click", function () {
-    browse(HOME, function (path) {
+    browse(BROWSE_FROM, function (path) {
       state.media = path;
       document.getElementById("media-name").textContent = baseName(path);
       ready();
@@ -598,6 +688,17 @@ _INPUT_JS = """\
     var box = document.getElementById("refused");
     box.className = "warnbox";
     document.getElementById("refused-why").textContent = message;
+  }
+
+  /* A song handed to `serve` prefills this page through exactly the path a
+     pick takes — same route, same prefill, same readiness check. A second
+     branch that filled the fields directly would be a second answer to
+     *what does this file say*, and the two would drift. It is what makes
+     an edit an edit rather than a second new song. */
+  if (SONG) {
+    state.lyrics = SONG;
+    document.getElementById("lyrics-name").textContent = baseName(SONG);
+    describe(SONG);
   }
 
   ready();
@@ -718,7 +819,13 @@ def _masthead() -> str:
     """§9.1. Without it, page 1's *the format Tramoya promotes* has no
     brand on the page to attach to. It is the only decoration in the
     interface and it earns its place by making the rest of the page's
-    vocabulary legible."""
+    vocabulary legible.
+
+    **It can be turned off** (2026-09-02). Inside a window somebody else
+    already titled, a product introducing itself by name, tagline and
+    *a Tramoya tool by Chango Pepper* is the tool talking about itself to
+    a person who did not choose it. `_version_line` keeps the one part
+    that must survive — see there."""
     return (
         '<header class="mast">'
         "<div>"
@@ -746,9 +853,28 @@ def _step_bar(current: str) -> str:
     return '<nav class="steps">' + "".join(segments) + "</nav>"
 
 
-def _shell(*, title: str, current: str, body: str, script: str = "") -> str:
-    """One page, inline CSS and JS, nothing fetched from anywhere but this
-    process (§8.1)."""
+def _version_line() -> str:
+    """The version, on a page with no masthead to carry it.
+
+    **The version has to survive** even when the product header does not
+    (Jorge, 2026-09-02): two builds calling themselves the same number is
+    the trap that has already cost this project a day, and a page you
+    cannot ask *which build is this* is a page that can lie about it. So
+    the branding goes and the number stays — one dim line under the step
+    bar, no name, no tagline, no attribution."""
+    return f'<p class="ver">{html_escape(VERSION)}</p>'
+
+
+def _shell(
+    *, title: str, current: str, body: str, script: str = "", header: bool = True
+) -> str:
+    """One page, inline CSS and JS, nothing fetched from anywhere but
+    this process (§8.1).
+
+    *header* is the product header — name, tagline, version, *a Tramoya
+    tool by Chango Pepper*. Turning it off replaces it with the version
+    alone. **Bombista learns nothing about who is calling**: this is a
+    boolean about what to draw, and every caller may pass it."""
     scripts = f"<script>\n{script}</script>" if script else ""
     return (
         "<!doctype html>\n"
@@ -761,8 +887,9 @@ def _shell(*, title: str, current: str, body: str, script: str = "") -> str:
         "</head>\n"
         "<body>\n"
         '<div class="wrap">\n'
-        + _masthead()
+        + (_masthead() if header else "")
         + _step_bar(current)
+        + ("" if header else _version_line())
         + body
         + "\n</div>\n"
         + scripts
@@ -1077,53 +1204,14 @@ _REVIEW_JS = """\
     }
   });
 
-  /* Tempo (round A). The four fields go up together and the SERVER
-     decides — this deliberately does not pre-judge the block, because a
-     second opinion about what a valid tempo is is exactly what §11.5's
-     rule exists to prevent. A blank field is simply left out, so the
-     refusal names it. */
-  var T_FIELDS = { bpm: "t-bpm", numerator: "t-numerator",
-                   denominator: "t-denominator", countInBars: "t-countinbars" };
-  var tstate = document.getElementById("t-state");
-
-  function tsay(text, kind) {
-    tstate.textContent = text;
-    tstate.className = "tstate" + (kind ? " " + kind : "");
-  }
-
-  function postTempo(body) {
-    return fetch("/api/tempo", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    }).then(function (r) {
-      return r.json().then(function (data) { return { ok: r.ok, data: data }; });
-    });
-  }
-
-  function tfield(key) { return document.getElementById(T_FIELDS[key]); }
-
-  document.getElementById("t-set").addEventListener("click", function () {
-    var block = {}, key, raw;
-    for (key in T_FIELDS) {
-      raw = tfield(key).value.trim();
-      if (raw !== "") { block[key] = Number(raw); }
-    }
-    tsay("Checking\u2026", "");
-    postTempo({ tempo: block }).then(function (res) {
-      if (res.ok) { tsay("Set.", "ok"); }
-      else { tsay(res.data.error || "Refused.", "bad"); }
-    });
-  });
-
-  document.getElementById("t-clear").addEventListener("click", function () {
-    postTempo({ tempo: null }).then(function (res) {
-      if (!res.ok) { tsay(res.data.error || "Refused.", "bad"); return; }
-      for (var key in T_FIELDS) { tfield(key).value = ""; }
-      tsay("No tempo block \u2014 no pulse, no count-in.", "");
-    });
-  });
-
+  /* The tempo control moved to page 1 in v1.2.0. Its wiring stayed here
+     and reached for `t-set`, which this page no longer renders, so the
+     whole script threw on load and `Confirm timeline` — the very next
+     statement, and the last one in the file — was never given a listener.
+     Everything above had already been registered, so the page looked
+     entirely alive while the one control that leaves it did nothing.
+     tests/test_pages.py pins the class of bug rather than this instance:
+     no page's script may reach for an id its own markup does not carry. */
   document.getElementById("confirm").addEventListener("click", function () {
     location.href = "/output";
   });
@@ -1298,12 +1386,35 @@ def _provenance(payload: dict) -> str:
     return f'<p class="prov">{html_escape(" · ".join(parts))}</p>'
 
 
-_TEMPO_FIELDS = (
-    ("bpm", "bpm", "any", "0"),
-    ("numerator", "beats", "1", "1"),
-    ("denominator", "per", "1", "1"),
-    ("countInBars", "count-in bars", "1", "0"),
-)
+TIME_SIGNATURES = ("4/4", "3/4", "6/8", "2/4", "12/8")
+"""The signatures that occur in practice, and the whole of the control.
+
+**A `numerator` and a `denominator` are not a question a musician can be
+asked** — walked 2026-09-02, where two bare number fields labelled *beats*
+and *per* were unanswerable by the person who has to answer them. A time
+signature is: it is what is written at the front of the stave, it is one
+choice, and these five cover the catalogue and most of everything else.
+
+A song declaring a signature outside this list keeps it — `_signature_options`
+adds it rather than offering to silently change it. Losing a `5/4` to a
+dropdown that could not say it would be the control editing the file."""
+
+
+def split_signature(value: str) -> tuple[int, int]:
+    """`"6/8"` -> `(6, 8)`. The one place the two halves are separated,
+    shared with the page's JavaScript by shape rather than by copy."""
+    numerator, _, denominator = value.partition("/")
+    return int(numerator), int(denominator)
+
+
+def _signature_options(current: str = "") -> str:
+    """The five, plus whatever the song already declares.
+
+    A file carrying `5/4` must come back out carrying `5/4`. A control that
+    could not say it would either drop the block or quietly round it to
+    something it can, and both are the control editing the file."""
+    offered = TIME_SIGNATURES + ((current,) if current and current not in TIME_SIGNATURES else ())
+    return "".join(f'<option value="{sig}">{sig}</option>' for sig in offered)
 
 
 def _tempo() -> str:
@@ -1325,35 +1436,59 @@ def _tempo() -> str:
     while the scaling keeps working, with no error anywhere. Hence four
     fields, and a run route that refuses anything less.
 
-    **There is no Set button any more**, because there is nothing to set
-    yet: the block travels with `Process song →` like every other answer
-    on this page, and the server refuses the whole run rather than one
-    control. **Nothing here proposes a value** — the fields start empty
-    rather than at a plausible 120/4/4, since a placeholder that looks
-    real is the bug `songs@c5adf65` deleted ten of.
+    **There is no Set button**, because there is nothing to set yet: the
+    block travels with `Process song →` like every other answer on this
+    page, and the server refuses the whole run rather than one control.
+
+    **Three controls, not four fields** (walked 2026-09-02). `bpm`,
+    `beats`, `per` and `count-in bars` as four bare numbers were
+    unanswerable by the person who has to answer them — Jorge did not know
+    what the last two meant here, in Ableton or in GarageBand, and a field
+    nobody can answer is a field that gets guessed. What replaced them:
+
+    - **Beats per minute**, relabelled from `bpm` and told what value is
+      wanted. On the same walk Jorge typed `100` for a `6/8` song whose
+      felt pulse is `66.67`, because the old caption said *type it from the
+      source that produced this audio, where it is exact* — and the source
+      says `100`. That is a **1.5x error the screen invited**, and the
+      caption now names the felt pulse and warns about the DAW's number.
+    - **Time signature**, one choice from `TIME_SIGNATURES`, which is what
+      a musician actually knows. The two halves are split at the boundary.
+    - **Bars before the first line**, which is what `countInBars` means
+      said in words.
+
+    **`0` bars is the one proposed value on this page, and it is not a
+    guess** — it is the answer for every song that has no count-in, which
+    is most of them, and it cannot be wrong in the way a `120 / 4 / 4`
+    would be. It also never makes a block on its own: the page sends no
+    tempo at all unless a pulse or a signature was given, so a song with no
+    tempo stays a song with no tempo (`songs@c5adf65`).
     """
-    fields = "".join(
-        f'<label>{html_escape(label)} <input type="number" id="t-{key.lower()}" '
-        f'step="{step}" min="{minimum}" autocomplete="off" value=""></label>'
-        for key, label, step, minimum in _TEMPO_FIELDS
-    )
     return f"""
   <div class="tempo">
     <div class="trow">
-      <span class="tlabel">Tempo</span>
-      {fields}
+      <label class="tf">Beats per minute
+        <input type="number" id="t-bpm" step="any" min="0" autocomplete="off" value=""></label>
+      <label class="tf">Time signature
+        <select id="t-signature"><option value="">—</option>{_signature_options()}</select></label>
+      <label class="tf">Bars before the first line
+        <input type="number" id="t-countinbars" step="1" min="0" autocomplete="off"
+          value="0"></label>
       <span class="tstate" id="t-state"></span>
     </div>
-    <p class="hint">Bombista never measures a tempo — type it from the source that produced
-      this audio, where it is exact. <b>All four together, or none</b> —
-      <code>bpm</code>, <code>numerator</code>, <code>denominator</code>,
-      <code>countInBars</code>: a partial block breaks Pregonero's pulse while its
-      scaling keeps working, which is worse than leaving it out.</p>
+    <p class="hint"><b>Beats per minute is the pulse you feel</b> — the beat you would count
+      out loud, or tap, while the song plays. It is <b>not</b> always the number the software
+      that made the recording reports: a <code>6/8</code> song counted in two is
+      <code>66.67</code> here where a DAW says <code>100</code>. Count it, do not read it off.</p>
+    <p class="hint">Bombista never measures any of this. <b>The pulse and the signature go
+      together or not at all</b> — half a tempo breaks Pregonero's pulse while its scaling
+      keeps working, which is worse than leaving it out. Leave both blank for a song that has
+      no tempo: that is a real answer and nothing downstream minds it.</p>
   </div>
 """
 
 
-def render_review(payload: dict) -> str:
+def render_review(payload: dict, *, header: bool = True) -> str:
     """Page 2 — Review (§8). The heart of B20, and B19 absorbed.
 
     **The list of lines is the interface** (Jorge, 2026-08-15). A first pass
@@ -1400,10 +1535,10 @@ def render_review(payload: dict) -> str:
 
 <p class="confirm"><button class="btn1" id="confirm">Confirm timeline →</button></p>
 """
-    return _shell(title="Review", current="2", body=body, script=_REVIEW_JS)
+    return _shell(title="Review", current="2", body=body, script=_REVIEW_JS, header=header)
 
 
-def render_input(*, home: str = "") -> str:
+def render_input(*, browse_from: str = "", song: str = "", header: bool = True) -> str:
     """Page 1 (§9.3), augmented at step 6 with the song itself.
 
     **Four rows still, until a lyrics file is chosen.** The form the user
@@ -1428,15 +1563,22 @@ def render_input(*, home: str = "") -> str:
 
     An SP JSON prefills every field from itself, which is the other half of
     step 6's wording: this flow is also how an existing song is edited.
+
+    **Title translations came off this page on 2026-09-02.** Translation is
+    not Bombista's concern: lyric translations are written outside the
+    suite, in the file, and the title follows the same rule — *if it is a
+    translation, it was written elsewhere and the file already carries it*
+    (tramoya-integration `project-context.md`). What the file carries still
+    passes through untouched; what changed is that nothing here asks.
+
+    *browse_from* is the directory the file pickers open in, and *song* is
+    a song file this page starts prefilled from. Both are answers a caller
+    may supply and neither tells Bombista anything about who is calling.
     """
     lang_options = "".join(
         f'<option value="{code}">{code} — {name}</option>' for code, name in LANGUAGES
     )
     tempo = _tempo()
-    translation_fields = "".join(
-        f'<label>{code} <input type="text" id="tt-{code}" value="" autocomplete="off"></label>'
-        for code, _ in LANGUAGES
-    )
     body = f"""
 <h1>Input song</h1>
 <p class="lede">Two files, two defaults, and the song itself.</p>
@@ -1507,12 +1649,6 @@ def render_input(*, home: str = "") -> str:
       <div class="ctl"><input type="text" id="notes" value="" autocomplete="off"></div>
       <p class="hint">For you, at a music stand. <code>Capo 5, acordes de Lam</code>.</p>
     </div>
-    <div class="frow">
-      <label class="flabel">Title translations</label>
-      <div class="ctl ttrow">{translation_fields}</div>
-      <p class="hint">One field per language, and a blank one is not written. The language
-        of the words usually repeats the title above; the rest are the translated ones.</p>
-    </div>
 {tempo}  </div>
   <p class="hint pageoff" id="stripped"></p>
 </div>
@@ -1523,15 +1659,17 @@ def render_input(*, home: str = "") -> str:
 <p class="go"><button class="btn1" id="process" disabled>Process song →</button></p>
 """
     script = (
-        f"var HOME = {json.dumps(home)};\n"
-        f"var LANGS = {json.dumps([code for code, _ in LANGUAGES])};\n"
+        f"var BROWSE_FROM = {json.dumps(browse_from)};\n"
+        f"var SONG = {json.dumps(song)};\n"
         + _PICKER_JS
         + _INPUT_JS
     )
-    return _shell(title="Input song", current="1", body=body, script=script)
+    return _shell(title="Input song", current="1", body=body, script=script, header=header)
 
 
-def render_processing(*, media_name: str = "", model: str = "", lang: str = "") -> str:
+def render_processing(
+    *, media_name: str = "", model: str = "", lang: str = "", header: bool = True
+) -> str:
     """Page 1.5 (§9.4). A state, not a spinner.
 
     The lede says *on your local machine*, not *on this machine* — §10.1,
@@ -1558,7 +1696,9 @@ def render_processing(*, media_name: str = "", model: str = "", lang: str = "") 
   reuses <code>asr-words.jsonl</code> and takes well under a second.</p>
 <div id="failed" class="pageoff"><b>The run stopped</b><span id="failed-why"></span></div>
 """
-    return _shell(title="Processing", current="1", body=body, script=_PROCESSING_JS)
+    return _shell(
+        title="Processing", current="1", body=body, script=_PROCESSING_JS, header=header
+    )
 
 
 _CAPTION_PASS = (
@@ -1584,7 +1724,12 @@ _CAPTION_NEW = (
 
 
 def render_output(
-    sp_json: dict, *, filename: str, save_path: str, from_scratch: bool = False
+    sp_json: dict,
+    *,
+    filename: str,
+    save_path: str,
+    from_scratch: bool = False,
+    header: bool = True,
 ) -> str:
     """Page 3 (§9.5). Read-only, the JSON in full, and a way to finish.
 
@@ -1649,4 +1794,4 @@ def render_output(
 <p><span class="pageoff" id="signoff"></span></p>
 <p class="go"><a href="/review">← Back to review</a></p>
 """
-    return _shell(title="Output", current="3", body=body, script=_OUTPUT_JS)
+    return _shell(title="Output", current="3", body=body, script=_OUTPUT_JS, header=header)

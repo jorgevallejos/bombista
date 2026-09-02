@@ -264,12 +264,20 @@ def page2(synthetic_session):
     return pages.render_review(server.session_payload(synthetic_session))
 
 
-def test_page_1_asks_for_all_four_values(page1):
+def test_page_1_can_still_only_produce_a_whole_block_or_none(page1):
     """A control that cannot ask for a whole block should not ask for part
-    of one — the sentence §11.5 was written around. Four fields is what
-    makes the reversal safe, wherever the fields sit."""
-    for field in ("t-bpm", "t-numerator", "t-denominator", "t-countinbars"):
-        assert f'id="{field}"' in page1, f"the control has no {field} input"
+    of one — the sentence §11.5 was written around, and it survives the
+    2026-09-02 redesign intact. Three controls now, but a time signature
+    carries both halves of the meter, so what the page can send is still
+    all of it or none of it."""
+    assert 'id="t-bpm"' in page1
+    assert 'id="t-signature"' in page1
+    assert 'id="t-countinbars"' in page1
+
+    script = page1.split("<script>")[1]
+    assert 'if (bpm === "" && signature === "") { return {}; }' in script, (
+        "the bars field must not be able to make a block on its own"
+    )
 
 
 def test_page_1_says_the_value_is_typed_not_measured(page1):
@@ -278,7 +286,7 @@ def test_page_1_says_the_value_is_typed_not_measured(page1):
     text = visible_text(page1)
 
     assert "never measures" in text
-    assert "all four" in text.lower()
+    assert "together or not at all" in text
 
 
 def test_the_review_page_no_longer_carries_a_tempo_control(page2):
@@ -321,6 +329,35 @@ def test_a_whole_block_posted_with_the_run_lands_in_the_file(
     _, payload, _ = client.get("/api/download?kind=song", raw=True)
 
     assert json.loads(payload)["tempo"] == WHOLE
+
+
+def test_bars_alone_is_not_a_tempo_block(serve_client, libertad, tmp_path):
+    """`0` bars is the one value page 1 proposes, and it must never become
+    a block by itself: a song with no tempo is a real state and `{"countInBars": 0}`
+    would be a partial one, refused. So the page sends nothing at all
+    unless a pulse or a signature was given, and this pins the server side
+    of that — an empty block clears rather than refuses."""
+    from tests.test_flow import _start, wait_for
+    from unittest import mock
+
+    from tests.conftest import words_for
+
+    client = serve_client(None)
+    txt = tmp_path / "cancion.txt"
+    txt.write_text("uno dos\ntres cuatro\n", encoding="utf-8")
+
+    with mock.patch.object(
+        server, "transcribe_words", return_value=words_for(["uno dos", "tres cuatro"])
+    ):
+        status, _, _ = _start(
+            client, libertad, lyrics=str(txt), info={"title": "Canción"}, tempo={}
+        )
+        assert status == 200
+        wait_for(client, "done")
+
+    _, payload, _ = client.get("/api/download?kind=song", raw=True)
+
+    assert "tempo" not in json.loads(payload)
 
 
 def test_a_partial_block_refuses_the_run_before_it_starts(serve_client, libertad, tmp_path):

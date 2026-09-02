@@ -184,16 +184,26 @@ def test_page_1_still_opens_on_exactly_four_rows(page1):
 
 def test_page_1_collects_the_general_information_a_txt_cannot_carry(page1):
     """journey-setup step 6, 2026-09-02: this is where the metadata a
-    lyrics `.txt` cannot carry is collected — title, artist, notes, title
-    translations. It is Bombista's own screen and appears when Bombista is
-    used on its own, which is the point of putting it here."""
+    lyrics `.txt` cannot carry is collected. It is Bombista's own screen
+    and appears when Bombista is used on its own, which is the point of
+    putting it here."""
     branch = re.search(r'<div id="songbranch".*?<!--/songbranch-->', page1, re.S)
 
     assert branch, "page 1 has no song block"
     for field in ("title", "artist", "notes"):
         assert f'id="{field}"' in branch.group(0), f"no {field} field"
+
+
+def test_page_1_does_not_ask_for_a_translation(page1):
+    """Walked 2026-09-02, on Jorge's own principle: translation is not
+    Bombista's concern. Lyric translations are written outside the suite,
+    in the file, and the title follows the same rule — *if it is a
+    translation, it was written elsewhere and the file already carries
+    it*. A file's own translations still pass through untouched; what
+    changed is that nothing here asks for one."""
     for code in ("es", "en", "nl", "fr"):
-        assert f'id="tt-{code}"' in branch.group(0), f"no {code} title translation field"
+        assert f'id="tt-{code}"' not in page1
+    assert "translation" not in visible_text(page1).lower()
 
 
 def test_the_song_block_starts_hidden(page1):
@@ -274,33 +284,82 @@ def test_page_1_offers_the_three_models_with_their_cost(page1):
     assert "~50 s" in models
 
 
-def test_page_1_asks_for_the_whole_tempo_block(page1):
-    """§11.5 removed a tempo control from this page in 2026-08-16 and
-    round A put a four-field one on page 2. Step 6 moves it here, which is
-    where Jorge asked for it: a tempo is typed from the source that
-    produced the audio, so nothing about it waits on having heard the take.
+def test_the_tempo_control_asks_three_questions_a_musician_can_answer(page1):
+    """Walked 2026-09-02: `bpm`, `beats`, `per` and `count-in bars` as four
+    bare numbers could not be answered by the person who has to answer
+    them. A pulse, a time signature and a number of bars can be.
 
-    §11.5's actual rule is untouched, and it was never *not on page 1* —
-    it was *whole or not at all*. Four fields, and a run route that
-    refuses anything less."""
-    for field in ("t-bpm", "t-numerator", "t-denominator", "t-countinbars"):
-        assert f'id="{field}"' in page1, f"the control has no {field} input"
+    **`beats` and `per` must not come back.** A numerator and a denominator
+    are the format's business, split at the boundary, and never a question
+    put to a musician."""
+    assert 'id="t-bpm"' in page1
+    assert 'id="t-signature"' in page1
+    assert 'id="t-countinbars"' in page1
+    assert 'id="t-numerator"' not in page1
+    assert 'id="t-denominator"' not in page1
+
+    text = visible_text(page1)
+    assert "Bars before the first line" in text
+    assert ">beats<" not in page1 and ">per<" not in page1
 
 
-def test_page_1_still_names_all_four_keys_and_says_a_tempo_is_typed(page1):
-    """*Type the tempo in* is bad advice on its own, because it leads to
-    exactly the bpm-only block §11.5 exists to prevent."""
+def test_the_signature_control_offers_the_signatures_that_occur_in_practice(page1):
+    options = re.search(r'<select id="t-signature">(.*?)</select>', page1, re.S).group(1)
+
+    assert re.findall(r'value="([^"]*)"', options) == ["", "4/4", "3/4", "6/8", "2/4", "12/8"]
+
+
+def test_a_signature_the_dropdown_cannot_say_is_added_rather_than_dropped():
+    """A file carrying `5/4` must come back out carrying `5/4`. A control
+    that could not say it would either drop the block or round it to
+    something it can, and both are the control editing the file."""
+    assert '<option value="5/4">5/4</option>' in pages._signature_options("5/4")
+    assert pages.split_signature("5/4") == (5, 4)
+
+
+def test_the_bpm_caption_asks_for_the_felt_pulse_and_warns_off_the_daw(page1):
+    """**The 1.5x error this exists to stop, walked 2026-09-02.** The old
+    caption read *type it from the source that produced this audio, where
+    it is exact*, so Jorge went to the source and typed `100` for a `6/8`
+    song whose felt pulse is `66.67`. The screen invited it."""
     text = visible_text(page1)
 
+    assert "pulse you feel" in text
+    assert "count" in text.lower()
+    assert "66.67" in text and "100" in text
     assert "never measures" in text
-    assert "all four" in text.lower()
-    for key in ("bpm", "numerator", "denominator", "countInBars"):
-        assert key in text, f"the note does not name {key}"
 
 
 def test_page_1_does_not_send_the_reader_to_another_step_for_the_tempo(page1):
     """The note that used to point at step 2 goes with the control."""
     assert "step 2" not in visible_text(page1)
+
+
+def test_the_product_header_can_be_turned_off_and_the_version_survives():
+    """Walked 2026-09-02: inside a window somebody else already titled, a
+    product introducing itself by name, tagline and *a Tramoya tool by
+    Chango Pepper* is the tool talking about itself to a person who did not
+    choose it. **The version is the part that must survive** — two builds
+    calling themselves the same number is the trap that has cost this
+    project a day."""
+    bare = pages.render_input(header=False)
+
+    assert "<header" not in bare
+    assert "Forced-alignment triage" not in bare
+    assert "by <b>Chango Pepper</b>" not in bare
+    assert 'class="wordmark"' not in bare
+    assert pages.VERSION in bare, "the version went with the branding"
+
+    # *the format Tramoya promotes* stays: it names the FORMAT on the
+    # lyrics row, which is a fact about the file being asked for, not the
+    # product introducing itself.
+    assert "the format Tramoya promotes" in bare
+
+
+def test_the_header_is_drawn_by_default(page1):
+    """It is an option a caller may pass, not a default that quietly
+    stripped Bombista's own pages."""
+    assert "<header" in page1 and "Forced-alignment triage" in page1
 
 
 def test_page_1_shows_the_slug_read_only(page1):
@@ -443,6 +502,62 @@ def test_saving_is_not_a_download(page3):
 
 
 # ---------------------------------------------------------------------------
+# a page's script and a page's markup are one thing (the Confirm regression)
+# ---------------------------------------------------------------------------
+
+
+def wanted_ids(script: str) -> set[str]:
+    """Every id a script asks the document for."""
+    return set(re.findall(r'getElementById\(\s*"([^"]+)"\s*\)', script))
+
+
+@pytest.mark.parametrize("name", ALL_PAGES)
+def test_no_page_script_reaches_for_an_id_the_page_does_not_carry(name, rendered):
+    """**The bug this exists for, walked 2026-09-02.** `v1.2.0` moved the
+    tempo control off page 2 and left its wiring behind. The script's
+    `getElementById("t-set")` returned null, `null.addEventListener` threw,
+    and every statement after it was skipped — which was exactly one:
+    `Confirm timeline`'s listener, the last line in the file. The stepper,
+    the player and the re-anchor were all registered earlier, so the page
+    looked completely alive while the one control that leaves it did
+    nothing. It failed standalone, not only in a frame.
+
+    A page's script and a page's markup are one artifact built by one
+    function; nothing but a test makes them stay that way. This pins the
+    class rather than the instance: the next control that moves takes its
+    wiring with it or turns this red.
+
+    Ids the script CREATES are exempt — the picker builds its own dialog —
+    so the exemption list is explicit and short, and adding to it is a
+    decision rather than an accident.
+    """
+    html = rendered[name]
+    script = "\n".join(re.findall(r"<script>(.*?)</script>", html, re.S))
+    markup = _BLOCKS.sub(" ", html)
+
+    # Page 2's stepper popup and the file picker's dialog are both built
+    # in the script, so their ids are never in the rendered markup. Every
+    # one of these is asserted to be created below, so the exemption
+    # cannot quietly grow to cover a real miss.
+    built_by_the_script = {"popval", "popbounds", "pick-list", "pick-path", "pick-choose"}
+    for ident in built_by_the_script & wanted_ids(script):
+        assert f'id="{ident}"' in script, f"{ident} is exempt but the script never builds it"
+    wanted = wanted_ids(script)
+    present = set(re.findall(r'id="([^"]+)"', markup))
+
+    missing = sorted(wanted - present - built_by_the_script)
+    assert not missing, f"{name}'s script reaches for {missing}, which it does not render"
+
+
+def test_confirm_is_the_last_thing_page_2_wires_and_it_is_wired(page2):
+    """The regression's shape, from the other side: the button exists in
+    the markup and the script asks for it. Without the test above this one
+    passes while the listener never attaches, which is why both are here."""
+    assert 'id="confirm"' in page2
+    assert 'getElementById("confirm")' in page2
+
+
+# ---------------------------------------------------------------------------
 # §10.1 — the vocabulary, and it is not negotiable in user-facing strings
 # ---------------------------------------------------------------------------
 
@@ -535,17 +650,45 @@ def test_the_palette_is_10_3s_tokens():
         assert f"{token}: {value}" in css
 
 
+def _rules(css: str) -> list[str]:
+    """The stylesheet as whole rules, so a property is judged with the
+    selector it belongs to rather than by which line it fell on."""
+    return [block + "}" for block in css.split("}")]
+
+
 def test_the_skin_has_one_palette_no_radius_and_no_blue():
     """§10.3: one palette (no light mode, no prefers-color-scheme block),
     no border radius anywhere, no blue — `--edit: #4b57c4` is gone and clay
-    took its jobs."""
+    took its jobs.
+
+    **The file picker is the one exception and it is scoped to it**
+    (2026-09-02). Everything else here is brutalist by decision; a file
+    dialog is the one place a person expects their system's own furniture,
+    so it gets soft corners. The rule holds everywhere it is not
+    `.picker`, which is what this now asserts — the exception cannot leak
+    into the rest of the skin without turning this red.
+    """
     css = pages.STYLESHEET
+    outside_the_picker = "".join(block for block in _rules(css) if ".picker" not in block)
 
     assert "color-scheme: dark" in css
     assert "prefers-color-scheme" not in css
-    assert {value.strip() for value in re.findall(r"border-radius:([^;]+)", css)} <= {"0"}
+    assert {v.strip() for v in re.findall(r"border-radius:([^;]+)", outside_the_picker)} <= {"0"}
     assert "4b57c4" not in css
     assert "--edit" not in css
+
+
+def test_the_file_picker_has_no_voice():
+    """Jorge, 2026-09-02: it is the one surface in the suite that should
+    not have a voice. It sits beside Pregonero's real macOS dialogs, which
+    cannot be styled, so what has to match is the behaviour and the
+    vocabulary rather than the pixels — `Choose` is Pregonero's own word.
+    Clay is Bombista talking, and it does not talk here."""
+    picker = "".join(block for block in _rules(pages.STYLESHEET) if ".picker" in block)
+
+    assert "--clay" not in picker, "the picker wears Bombista's accent"
+    assert "Choose" in pages._PICKER_JS and "Cancel" in pages._PICKER_JS
+    assert "text-transform: none" in picker, "uppercase buttons are this page's voice, not a dialog's"
 
 
 @pytest.mark.parametrize("name", ALL_PAGES)

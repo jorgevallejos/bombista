@@ -1549,6 +1549,100 @@ catalogue. Bombista has no idea where a catalogue is and must not acquire one. *
 gap is the path**, printed under the button before the press and replaced by what was written
 after it: the button carries the name and the line carries the fact.
 
+## 11.16 The first walk of the embedded flow (2026-09-02)
+
+**Where this comes from.** `changopepper/projects/tramoya-integration/journey-setup.md`, step 6 —
+the first time the seam between the two tools was operated by a person. Five findings, all of them
+about this repo. **Bombista still does not know Pregonero exists**; the two options below are
+answers a caller may give, and every one of them is a directory, a file or a boolean.
+
+### `Confirm timeline` did nothing, and it was not the frame
+
+**The cause is `v1.2.0`'s own.** §11.15 moved the tempo control off page 2 and left its wiring in
+`_REVIEW_JS`. `document.getElementById("t-set")` returned null, `null.addEventListener` threw, and
+the IIFE stopped — skipping exactly one statement, because `Confirm timeline`'s listener is the last
+line in the file. Everything above it had already been registered, so the player, the stepper and
+the re-anchor all worked and the page looked entirely alive. **It failed standalone**, in a plain
+top-level window; the iframe was never involved, and both are verified.
+
+**The guard is structural, not a fix for this instance.** `tests/test_pages.py` fails when any page's
+script reaches for an id that page's markup does not carry. A page's script and a page's markup are
+one artifact built by one function, and nothing but a test makes them stay that way. Ids the script
+itself creates — page 2's stepper popup, the picker's dialog — are exempt by name, and each is
+asserted to be built, so the exemption cannot quietly grow to cover a real miss.
+
+### The tempo block was unanswerable
+
+`bpm`, `beats`, `per`, `count-in bars` as four bare numbers. **Jorge did not know what the last two
+meant** — here, in Ableton or in GarageBand — and a field nobody can answer is a field that gets
+guessed. Three controls now:
+
+- **Beats per minute**, and the caption is the change. The old one said *type it from the source
+  that produced this audio, where it is exact*, so Jorge went to the source and typed `100` for a
+  `6/8` song whose felt pulse is `66.67`. **A 1.5x error the screen invited.** It now asks for the
+  beat you would count out loud or tap, and warns that the software that made the recording may say
+  something else.
+- **Time signature**, one choice from `TIME_SIGNATURES` — `4/4`, `3/4`, `6/8`, `2/4`, `12/8`. A
+  numerator and a denominator are the format's business, split at the boundary and never a question
+  put to a musician. **A song declaring a signature outside the list keeps it**: `_signature_options`
+  adds it rather than offering to silently round it.
+- **Bars before the first line**, which is what `countInBars` means said in words.
+
+**`0` bars is the one proposed value on this page and it is not a guess** — it is the answer for
+every song with no count-in. It never makes a block on its own: the page sends no tempo at all
+unless a pulse or a signature was given, so a song with no tempo stays one (`songs@c5adf65`).
+Whole-or-nothing is unchanged; a signature simply carries both halves of the meter at once.
+
+### Title translations came off page 1
+
+On Jorge's own principle, now written down in tramoya-integration's `project-context.md`:
+**translation happens outside the suite and no tool asks for one.** Lyric translations are written
+in an LLM session, in the file; the title follows the same rule. *If it is a translation, it was
+written elsewhere and the file already carries it.*
+
+`INFO_KEYS` is the list page 1 may **replace**, so dropping the key is the whole change: every key
+absent from that list passes through untouched, in whatever languages the file has, including ones
+this tool has never heard of. `_from_scratch_song` still writes `{lang: title}` — that is the title
+in the one language a `.txt` has, not a translation collected from anybody.
+
+### The file picker is the one surface with no voice
+
+**The brutalist treatment was too far for a file dialog** — the one place a person expects their
+system's own furniture, and where the accent-lit rows and uppercase buttons read as a different
+application. It is now a plain dialog: path at the top, a plain list, `Cancel` and `Choose` at the
+bottom, with a neutral selection and no clay anywhere.
+
+**The target is sitting beside Pregonero's real macOS dialogs without looking foreign, not imitating
+them** (Jorge, 2026-09-02). Identical pixels are not available: Pregonero opens the real system
+dialog, which cannot be styled, and this one must stay in-page because **a web page cannot hand back
+a file path** (§9.6) — which is also why one implementation serves both contexts. What matches is the
+behaviour and the vocabulary: `Choose` is Pregonero's own word, a directory row opens and a file row
+selects, and the button that commits is at the bottom right.
+
+**It is the only place §10.3's no-radius rule is relaxed**, and the test scopes the exception to
+`.picker` by CSS rule rather than by line, so it cannot leak into the rest of the skin.
+
+### Two options that shape the page, and one that aims the pickers
+
+| option | what it answers |
+|---|---|
+| `--browse-from DIR` | where the file pickers open. The home folder is the standalone answer and a poor one on a screen whose job is to find a lyrics file and a recording that live beside each other. |
+| `--song FILE` | a song file page 1 starts prefilled from. **This is what makes an edit an edit** rather than a second new song. Distinct from the positional argument, which boots into a review of a finished run. |
+| `--header / --no-header` | whether to draw the product header — name, tagline, version, *a Tramoya tool by Chango Pepper*. Inside a window somebody else already titled, that is the tool introducing itself to a person who did not choose it. |
+
+**The version survives `--no-header`**, as one dim line under the step bar. Jorge, 2026-09-02: two
+builds calling themselves the same number is the trap that has already cost this project a day, and
+a page you cannot ask *which build is this* is a page that can lie about it. The branding goes; the
+number does not.
+
+**`the format Tramoya promotes` stays** on the lyrics row with the header off. It names the format
+being asked for, which is a fact about the file, not the product introducing itself. Recorded
+because `_masthead`'s own docstring argues the masthead is what gives that phrase a brand to attach
+to — with the header off it stands alone, and that was judged acceptable rather than overlooked.
+
+**None of the three tells Bombista who is calling.** A directory, a file, a boolean. The page is
+shaped; nothing about what gets written changes, and no caller is named anywhere in this repo.
+
 ## 12. What *using* it found
 
 §11 is what building B20 found. This is what the first real sessions found — a different and more

@@ -512,7 +512,9 @@ def test_the_lyrics_route_reports_what_page_1_should_prefill(client, libertad):
     assert info["title"] == libertad["song"]["title"]
     assert info["artist"] == libertad["song"]["artist"]
     assert info["notes"] == libertad["song"]["notes"]
-    assert info["title_translations"] == libertad["song"]["title_translations"]
+    # No translations: the page has no field for one since 2026-09-02, and
+    # reporting a value nothing renders invites the field to be rebuilt.
+    assert "title_translations" not in info
 
 
 def test_a_txt_prefills_a_title_seeded_from_the_slug(client, tmp_path):
@@ -526,7 +528,6 @@ def test_a_txt_prefills_a_title_seeded_from_the_slug(client, tmp_path):
 
     assert payload["info"]["title"] == "Hasta calmar el alma"
     assert payload["info"]["artist"] == ""
-    assert payload["info"]["title_translations"] == {}
     assert payload["tempo"] is None
 
 
@@ -547,12 +548,7 @@ def test_the_general_information_typed_on_page_1_lands_in_the_file(
             client,
             libertad,
             lyrics=str(txt),
-            info={
-                "title": "Canción",
-                "artist": "Chango Pepper",
-                "notes": "Capo 5",
-                "title_translations": {"es": "Canción", "en": "Song", "nl": "", "fr": ""},
-            },
+            info={"title": "Canción", "artist": "Chango Pepper", "notes": "Capo 5"},
         )
         wait_for(client, "done")
 
@@ -562,7 +558,6 @@ def test_the_general_information_typed_on_page_1_lands_in_the_file(
     assert emitted["title"] == "Canción"
     assert emitted["artist"] == "Chango Pepper"
     assert emitted["notes"] == "Capo 5"
-    assert emitted["title_translations"] == {"es": "Canción", "en": "Song"}
 
 
 def test_an_existing_song_can_be_edited_through_the_same_screen(
@@ -595,10 +590,11 @@ def test_an_existing_song_can_be_edited_through_the_same_screen(
     ]
 
 
-def test_a_language_page_1_did_not_offer_survives_an_edit(serve_client, libertad, tmp_path):
-    """The page offers four languages; a song file may carry a fifth. A
-    field that was never on screen must not be able to delete a value —
-    only the languages the page actually posted are the ones it decides."""
+def test_an_edit_never_touches_the_songs_translations(serve_client, libertad, tmp_path):
+    """Walked 2026-09-02: translation is not Bombista's concern, so page 1
+    stopped asking. The other half of that rule is that the file's own
+    translations are **untouched** — Bombista reads what is there and never
+    collects, rewrites or drops it, whatever languages it is in."""
     song = dict(libertad["song"])
     song["title_translations"] = {**song["title_translations"], "de": "Freiheit"}
     path = tmp_path / "with-german.json"
@@ -608,18 +604,14 @@ def test_a_language_page_1_did_not_offer_survives_an_edit(serve_client, libertad
     with mock.patch.object(
         server, "transcribe_words", return_value=words_for(libertad["lines"])
     ):
-        _start(
-            client,
-            libertad,
-            lyrics=str(path),
-            info={"title_translations": {"en": "Freedom", "es": "", "nl": "", "fr": ""}},
-        )
+        _start(client, libertad, lyrics=str(path), info={"artist": "Alguien más"})
         wait_for(client, "done")
 
     _, payload, _ = client.get("/api/download?kind=song", raw=True)
     emitted = json.loads(payload)
 
-    assert emitted["title_translations"] == {"en": "Freedom", "de": "Freiheit"}
+    assert emitted["artist"] == "Alguien más"
+    assert emitted["title_translations"] == song["title_translations"]
 
 
 def test_a_run_that_says_nothing_about_the_song_changes_nothing(client, libertad):
@@ -849,6 +841,63 @@ def test_the_browse_route_marks_directories_and_offers_only_usable_files(
     assert by_name["staging"]["dir"] is True
     assert "song.json" in by_name
     assert "notes.docx" not in by_name
+
+
+def test_the_pickers_open_where_the_caller_said(serve_client, tmp_path):
+    """Walked 2026-09-02: they opened at the home folder, on a screen whose
+    whole job is to find a lyrics file and a recording that live in the
+    same folder as each other. A caller that knows where the songs are can
+    say so — and Bombista learns a directory and nothing else."""
+    songs = tmp_path / "songs"
+    songs.mkdir()
+    client = serve_client(None, browse_from=songs)
+
+    page = client.get("/input")[1]
+    _, listing, _ = client.get("/api/browse")
+
+    assert f'var BROWSE_FROM = "{songs}"' in page
+    assert listing["path"] == str(songs)
+
+
+def test_the_home_folder_is_still_the_standalone_default(serve_client):
+    """The option exists because the default is wrong for a caller, not
+    because it was wrong for somebody running Bombista on its own."""
+    client = serve_client(None)
+
+    assert f'var BROWSE_FROM = "{Path.home()}"' in client.get("/input")[1]
+
+
+def test_a_handed_over_song_prefills_page_1(serve_client, libertad):
+    """What makes an edit an edit rather than a second new song. The page
+    reaches it through the same route a pick takes, so there is one answer
+    to *what does this file say*."""
+    client = serve_client(None, song=libertad["song_path"])
+
+    page = client.get("/input")[1]
+
+    assert f'var SONG = "{libertad["song_path"]}"' in page
+    assert "if (SONG) {" in page, "the page never acts on it"
+
+
+def test_no_song_is_handed_over_by_default(serve_client):
+    client = serve_client(None)
+
+    assert 'var SONG = "";' in client.get("/input")[1]
+
+
+def test_the_product_header_can_be_turned_off_on_every_page(serve_client, session):
+    """Inside a window somebody else already titled, the product
+    introducing itself is the tool talking about itself to a person who did
+    not choose it. **The version survives** — two builds calling themselves
+    the same number is the trap that has cost this project a day."""
+    from bombista import pages
+
+    client = serve_client(session, header=False)
+
+    for route in ("/input", "/review", "/output"):
+        page = client.get(route)[1]
+        assert "Forced-alignment triage" not in page, f"{route} still introduces the product"
+        assert pages.VERSION in page, f"{route} lost the version with the branding"
 
 
 def test_the_browse_route_refuses_a_path_that_is_not_a_directory(client, libertad):

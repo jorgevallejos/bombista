@@ -525,6 +525,35 @@ def validate(
     ),
 )
 @click.option(
+    "--browse-from",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help=(
+        "The directory the file pickers open in. Defaults to your home "
+        "folder, which is a poor answer on a screen whose job is to find "
+        "a lyrics file and a recording that live beside each other — "
+        "point it at wherever the songs are."
+    ),
+)
+@click.option(
+    "--song",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help=(
+        "A song file to start page 1 prefilled from, which is what makes "
+        "an edit an edit rather than a second new song. Different from the "
+        "positional argument, which boots straight into a review of a "
+        "finished run: this one starts at step 1 with the file chosen."
+    ),
+)
+@click.option(
+    "--header/--no-header",
+    default=True,
+    help=(
+        "Draw the product header — the name, the tagline, the version and "
+        "who made it. Turn it off inside a window that already has a "
+        "title of its own. The version still shows either way."
+    ),
+)
+@click.option(
     "--port",
     default=0,
     show_default="an ephemeral port, printed on start",
@@ -536,6 +565,9 @@ def serve(
     lang: str,
     audio: Path | None,
     staging_out: Path | None,
+    browse_from: Path | None,
+    song: Path | None,
+    header: bool,
     port: int,
 ) -> None:
     """Open the three-step interface in a browser, on this machine only.
@@ -565,6 +597,14 @@ def serve(
     would have to know this tool's cache layout to find the file. A
     directory in, a file path on the page, and nothing else passes.
 
+    --browse-from, --song and --no-header are three answers about the page
+    itself: where the file pickers open, a song file page 1 starts
+    prefilled from, and whether to draw the product header. They exist
+    because the defaults are right for running Bombista on its own and
+    wrong inside a window that already has a title and already knows where
+    the songs are. **None of them tells Bombista who is calling**, and none
+    of them changes a byte of what it writes.
+
     Binds 127.0.0.1 and nothing else. The audio, the transcription and the
     anchoring all stay in this process on this machine — nothing is
     uploaded, and there is no configuration that would change that.
@@ -585,7 +625,14 @@ def serve(
             raise click.ClickException(str(exc))
 
     try:
-        httpd = create_server(session, port=port, staging=staging_out)
+        httpd = create_server(
+            session,
+            port=port,
+            staging=staging_out,
+            browse_from=browse_from,
+            song=song,
+            header=header,
+        )
     except ValueError as exc:
         raise click.ClickException(str(exc))
 

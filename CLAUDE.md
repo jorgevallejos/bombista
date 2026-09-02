@@ -50,6 +50,15 @@ bombista validate <song.json> [--for-performance] [--lang es] [--media-dir DIR].
 # The three-step interface in a browser, on this machine only (B20):
 bombista serve                                        # start at step 1
 bombista serve <staging-dir> <song.json|lyrics.txt> [--audio <take>]  # boot into the review
+#   Four options shape the run and the page without Bombista learning who
+#   is calling — a directory, a file, a boolean, and nothing about a caller:
+#     --staging DIR      where a page-1 run works, for a caller that will
+#                        read the emitted <stem>.json back out
+#     --browse-from DIR  where the file pickers open (default: home)
+#     --song FILE        page 1 starts prefilled from it — what makes an
+#                        edit an edit rather than a second new song
+#     --no-header        do not draw the product header. The VERSION still
+#                        shows: two builds with one number is the trap
 
 # One-off, for songs timed before timeline v2 (B13) — not part of the loop:
 bombista migrate <song.json> [--dry-run]
@@ -189,20 +198,33 @@ bombista/
                    else; sha256, device, toolVersion, extractedAt and duration are
                    filed in <stem>-report.json, which is the audit artifact (§8.2).
                    Page 1 carries the SONG BLOCK (§11.15, step 6): title,
-                   artist, notes, title translations and the tempo, hidden
-                   until a lyrics file is chosen and prefilled from an SP
-                   JSON. It is the metadata a `.txt` cannot carry. The tempo
-                   control lives HERE and nowhere else — round A put it on
-                   page 2, step 6 moved it, because a tempo changes no timing
-                   and is never read against the audio, so nothing about
-                   typing one waits on having heard the take. Four fields,
-                   because a block is written whole or not at all, and NO Set
-                   button: they travel with `Process song →` and the run route
-                   refuses the whole run. Nothing derives, measures or guesses
-                   one, and the fields start empty rather than at a plausible
-                   120/4/4. Page 3 carries `Save to the catalogue` BESIDE the
-                   three downloads — the one control here that writes a file,
-                   with the path it will write printed under it.
+                   artist, notes and the tempo, hidden until a lyrics file is
+                   chosen and prefilled from an SP JSON. It is the metadata a
+                   `.txt` cannot carry. NO TITLE TRANSLATIONS (§11.16):
+                   translation is not Bombista's concern — the file already
+                   carries it and nothing here asks. The tempo control lives
+                   HERE and nowhere else, and it is THREE controls, not four
+                   number fields (§11.16): a felt pulse in bpm, a time
+                   signature from TIME_SIGNATURES, and bars before the first
+                   line. `numerator`/`denominator` are the format's business,
+                   split at the boundary, never a question put to a musician.
+                   NO Set button: the block travels with `Process song →` and
+                   the run route refuses the whole run. Nothing derives,
+                   measures or guesses; the one proposed value is 0 bars, and
+                   it never makes a block alone. Page 3 carries `Save to the
+                   catalogue` BESIDE the three downloads — the one control
+                   here that writes a file, with the path it will write
+                   printed under it.
+                   THE FILE PICKER IS THE ONE SURFACE WITH NO VOICE (§11.16):
+                   a plain dialog — path, list, Cancel and Choose — because a
+                   file dialog is where a person expects their system's own
+                   furniture. It is the only place the skin's no-radius rule
+                   is relaxed, and a test scopes the exception to `.picker`.
+                   A PAGE'S SCRIPT AND ITS MARKUP ARE ONE ARTIFACT: a test
+                   fails when a script reaches for an id the page does not
+                   render. That is what `v1.2.0` broke — moving the tempo
+                   control off page 2 left its wiring, the script threw, and
+                   `Confirm timeline` never got its listener.
                    String composition,
                    stdlib only, inline CSS/JS, no build step, NO WEBFONT. STYLESHEET is
                    the whole of §10.3's skin and is defined ONCE — page 2 inherits it

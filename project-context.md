@@ -158,6 +158,11 @@ on page 2 — which the page-2 control could fix in place. `POST /api/tempo` sur
 so the capability is in the tool and only the surface is gone. Whether page 2 should offer it again
 is Jorge's call; two controls writing one fact is not the way to settle it.
 
+**The move also broke `Confirm timeline` for a day** — the control left page 2 and its wiring did
+not, so the page's script threw before reaching the one listener registered after it. Recorded here
+rather than only in the fix, because the lesson is not about tempo: a control that moves takes its
+wiring with it, and the test that now enforces that is the durable half of the repair.
+
 ## The song's general information is collected on page 1 (step 6, 2026-09-02)
 
 **What a `.txt` cannot carry has to be asked for somewhere, and page 1 is that place.** Title,
@@ -179,6 +184,35 @@ download does. Emit refuses every path the session read as an input, so it canno
 the page before the button is pressed and replaced by what was actually written after it. Bombista
 has no idea where a catalogue is and must not acquire one: the button carries the name and the line
 carries the fact.
+
+## What the first walk of the embedded flow found (2026-09-02)
+
+The first time the seam between Bombista and Pregonero was operated by a person. Five findings, all
+of them Bombista's, and none of them teaches this repo who is calling it.
+
+- **`Confirm timeline` did nothing, and the cause was `v1.2.0`'s own.** Moving the tempo control off
+  page 2 left its wiring behind; the script threw on `getElementById("t-set")` and stopped one
+  statement short of `Confirm`'s listener. Everything registered earlier still worked, so the page
+  looked alive. **It failed standalone, not only in a frame.** The guard is a test that fails when
+  any page's script reaches for an id its markup does not carry — a page's script and its markup are
+  one artifact, and nothing but a test keeps them that way.
+- **The tempo block could not be answered by the person who has to answer it.** Four bare numbers
+  became three controls: a felt pulse, a time signature, and bars before the first line. **The bpm
+  caption was actively harmful**: it sent the reader to the source that produced the audio, where a
+  `6/8` song counted in two reads `100` against a felt pulse of `66.67`, and Jorge typed `100`. A
+  1.5x error the screen invited. Whole-or-nothing is unchanged.
+- **Title translations came off page 1**, on the principle now written into tramoya-integration's
+  `project-context.md`: translation happens outside the suite and no tool asks for one. What a file
+  carries still passes through untouched — dropping the key from `INFO_KEYS` is the whole change,
+  because that list is only what page 1 may *replace*.
+- **The file picker is the one surface in the suite with no voice.** It sits beside Pregonero's real
+  macOS dialogs, which cannot be styled, so what matches is the behaviour and the vocabulary rather
+  than the pixels: `Choose`, path on top, plain list, confirm bottom-right. It stays in-page because
+  a web page cannot hand back a file path, and one implementation serves both contexts.
+- **Four options now shape the run and the page**, and every one is a directory, a file or a
+  boolean: `--staging`, `--browse-from`, `--song`, `--no-header`. **The version survives
+  `--no-header`** — two builds calling themselves the same number is the trap that has already cost
+  this project a day.
 
 **Open, found while building this and not fixed here.** `skeleton.py` writes
 `lyrics: [{"<lang>": ""}]` — one empty lyric entry, deliberately, so the entry *shape* is visible to

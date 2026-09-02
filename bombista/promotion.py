@@ -72,21 +72,43 @@ CANDIDATE_SUFFIX = "-song.json"
 
 
 def canonical_target_for(timeline_json: Path) -> str | None:
-    """The one filename a candidate may be **created** as: `<stem>.json`
-    for a candidate named `<stem>-song.json`. None when the candidate is
-    not an emitted songjson by name.
+    """The one filename a candidate may be **created** as.
+
+    Two candidates are accepted, and both answer the same question:
+
+    - `<stem>-song.json`, what `align --emit songjson` writes, may be
+      created as `<stem>.json`.
+    - `<stem>.json`, what `/api/emit` and page 3's `Save to the
+      catalogue` write, may be created as `<stem>.json` — **its own
+      name**, which is already the canonical one.
+
+    None for anything else.
 
     **A song's id IS its filename**, in this catalogue and in Pregonero's
     library alike, so a free choice of target name when creating is a free
     choice of id — and that is a decision this suite removes rather than
     explains (`bombista`'s output always lands under the canonical name
-    and the user never picks a path). Replacing an existing song is
-    unaffected: the name is already settled, and this never runs.
+    and the user never picks a path). The second case is not a loosening
+    of that: `libertad.json` may still only ever become `libertad.json`,
+    and the id still comes from the candidate rather than from whoever is
+    calling. Replacing an existing song is unaffected: the name is already
+    settled, and this never runs.
+
+    **Why the second case exists** (2026-09-02, journey-setup step 6). The
+    song flow ends at `Save to the catalogue`, which emits a NEW file
+    beside `align`'s output — never over it, invariant 6 — and that file
+    is what carries page 2's refinements. Promoting `align`'s
+    `<stem>-song.json` instead would silently merge the unreviewed
+    timeline, which is the failure this whole round removes. So the file
+    the flow ends on has to be promotable, and until now it was refused
+    for not being named like the file it deliberately is not.
     """
     name = timeline_json.name
-    if not name.endswith(CANDIDATE_SUFFIX):
-        return None
-    return name[: -len(CANDIDATE_SUFFIX)] + ".json"
+    if name.endswith(CANDIDATE_SUFFIX):
+        return name[: -len(CANDIDATE_SUFFIX)] + ".json"
+    if name.endswith(".json"):
+        return name
+    return None
 
 
 def load_candidate(timeline_json: Path) -> dict:
@@ -313,7 +335,9 @@ def _song_to_create(timeline_json: Path, song_json: Path, data: dict) -> dict:
       against, and it is protected properly now instead of by forbidding
       creation altogether.
     - **The target must be the canonical name for that candidate.** See
-      `canonical_target_for`.
+      `canonical_target_for`, which accepts `align`'s `<stem>-song.json`
+      and the `<stem>.json` an emit wrote — the file the song flow ends
+      on, and the only one carrying page 2's refinements.
 
     The `_bombista` block is dropped. It is provenance about a run, it
     belongs in the staging directory beside the report, and a catalogue
@@ -332,7 +356,8 @@ def _song_to_create(timeline_json: Path, song_json: Path, data: dict) -> dict:
     if canonical is None:
         raise ValueError(
             f"{timeline_json}: to create a song, the candidate must be an "
-            f"`--emit songjson` output named `<stem>{CANDIDATE_SUFFIX}`."
+            f"`--emit songjson` output named `<stem>{CANDIDATE_SUFFIX}`, or the "
+            "`<stem>.json` an emit wrote."
         )
     if song_json.name != canonical:
         raise ValueError(

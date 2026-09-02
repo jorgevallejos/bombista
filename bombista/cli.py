@@ -514,6 +514,17 @@ def validate(
     ),
 )
 @click.option(
+    "--staging",
+    "staging_out",
+    type=click.Path(file_okay=False, path_type=Path),
+    help=(
+        "Where a run started from page 1 does its work, instead of the "
+        "cache under ~/.cache/bombista. For a caller that means to read "
+        "the <stem>.json `Save to the catalogue` writes back out — a "
+        "directory in, a file path out, and nothing else passes."
+    ),
+)
+@click.option(
     "--port",
     default=0,
     show_default="an ephemeral port, printed on start",
@@ -524,6 +535,7 @@ def serve(
     lyrics: Path | None,
     lang: str,
     audio: Path | None,
+    staging_out: Path | None,
     port: int,
 ) -> None:
     """Open the three-step interface in a browser, on this machine only.
@@ -546,6 +558,13 @@ def serve(
     than finding some other file — a timeline is only meaningful against
     the audio it was measured from.
 
+    --staging says where a run started from page 1 should work. Without
+    it that is a cache directory under ~/.cache/bombista, which is right
+    for running Bombista on its own and wrong for a caller that means to
+    read the `<stem>.json` `Save to the catalogue` writes back out: it
+    would have to know this tool's cache layout to find the file. A
+    directory in, a file path on the page, and nothing else passes.
+
     Binds 127.0.0.1 and nothing else. The audio, the transcription and the
     anchoring all stay in this process on this machine — nothing is
     uploaded, and there is no configuration that would change that.
@@ -566,7 +585,7 @@ def serve(
             raise click.ClickException(str(exc))
 
     try:
-        httpd = create_server(session, port=port)
+        httpd = create_server(session, port=port, staging=staging_out)
     except ValueError as exc:
         raise click.ClickException(str(exc))
 

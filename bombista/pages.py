@@ -40,7 +40,7 @@ __all__ = [
     "render_output",
 ]
 
-VERSION = "v1.4.0"
+VERSION = "v1.5.0"
 """The masthead's version string — the package version with a `v` in front.
 
 It is a second copy of what `pyproject.toml` declares, and a second copy
@@ -241,15 +241,27 @@ input[type="text"], input[type="number"] {
 .picker li.dir button { color: var(--paper); }
 .picker li.on button { background: #4a4a44; color: var(--paper); }
 .picker li.on button .kind { color: var(--paper); }
+/* The foot is NOT a flex row, and that is deliberate (2026-09-02). Flex laid
+   the two buttons out at 53.5px and 29.5px, and every align-items value left
+   them on different lines — one obeyed the container and one did not. Two
+   dialog buttons are the same size as each other or the dialog is not one,
+   so this is the dullest thing that cannot go wrong: a block, text-align
+   right, two inline-blocks of a pinned size. */
 .picker .foot { padding: .7rem .9rem; border-top: 1px solid var(--line-2); flex: none;
-                display: flex; justify-content: flex-end; gap: .55rem;
-                background: var(--surface-2); }
-.picker .foot button { text-transform: none; letter-spacing: 0; border-radius: 4px;
-                       font: 400 .82rem/1 var(--sans); padding: .45rem 1.1rem;
-                       color: var(--paper); }
-.picker .foot button.go { background: #4a4a44; border-color: #565650; color: var(--paper); }
-.picker .foot button.go:hover:not(:disabled) { background: #565650; border-color: #6a6a62;
-                                               color: var(--paper); }
+                display: block; text-align: right; background: var(--surface-2);
+                font-size: 0; }
+.picker .foot button { display: inline-block; vertical-align: top; margin-left: .55rem;
+                       text-transform: none; letter-spacing: 0; border-radius: 4px;
+                       font: 400 .82rem/2rem var(--sans); padding: 0 1.1rem;
+                       min-width: 6.5rem; height: 2rem; color: var(--paper); }
+/* `pickgo`, not `go`: `.go` is page 1's own wrapper class and carries
+   `margin: 1.5rem 0 0`. Naming the confirm button `go` inherited that
+   24px top margin and pushed it below Cancel — the "two buttons at
+   different heights" of the 2026-09-02 walk. Every class inside this
+   dialog is prefixed for that reason. */
+.picker .foot button.pickgo { background: #4a4a44; border-color: #565650; color: var(--paper); }
+.picker .foot button.pickgo:hover:not(:disabled) { background: #565650; border-color: #6a6a62;
+                                                   color: var(--paper); }
 
 /* ---------- page 1.5 — the run (§9.4) ---------- */
 .phase { display: flex; align-items: center; gap: .8rem; padding: .8rem 0;
@@ -274,7 +286,7 @@ input[type="text"], input[type="number"] {
 pre.json { background: var(--surface); border: 1px solid var(--line-2);
            padding: .85rem .95rem; font: 400 .73rem/1.6 var(--mono); overflow: auto;
            max-height: 30rem; margin: 0; white-space: pre; color: #cdc6b9; }
-.dlrow { display: flex; gap: 1.6rem; flex-wrap: wrap; align-items: flex-start; margin: 1.7rem 0 0; }
+.dlrow { display: flex; gap: 1.6rem; flex-wrap: wrap; align-items: flex-start; margin: .9rem 0 0; }
 .dl { display: flex; flex-direction: column; gap: .45rem; max-width: 16rem; }
 .dl .hint { margin: 0; }
 .signoff { display: inline-block; margin: 1.5rem 0 0; border-left: 2px solid var(--high);
@@ -385,8 +397,10 @@ tr.divider td { background: var(--bg); border-bottom: none;
    bytes and choose no path, this one writes a file. The path is printed
    before the press and again after it, because *the catalogue* is a name and
    a file is a fact. */
-.save { margin: 1.9rem 0 0; padding-top: 1.1rem; border-top: 1px solid var(--line-2);
+.save { margin: 1.7rem 0 1.9rem; padding-bottom: 1.5rem;
+        border-bottom: 1px solid var(--line-2);
         display: flex; flex-direction: column; gap: .5rem; align-items: flex-start; }
+.dlhead { margin: 0 0 .2rem; }
 .save .hint { margin: 0; }
 .save .path { font: 400 .76rem/1.5 var(--mono); color: var(--paper);
               overflow-wrap: anywhere; }
@@ -413,6 +427,14 @@ tr.divider td { background: var(--bg); border-bottom: none;
 .tempo input[type="number"] { width: 5.4rem; }
 .tempo .tstate { font: 400 .72rem/1.5 var(--mono); color: var(--dimmer);
                  flex: 1 1 14rem; }
+.tempo .tapstate { font: 400 .72rem/1 var(--mono); color: var(--dim);
+                   font-variant-numeric: tabular-nums; min-width: 8rem; }
+.tapbar { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin: .7rem 0 0; }
+/* the native transport refuses the palette; invert it down to the ground the
+   way page 2's player is, rather than leaving a light slab on a dark page */
+.tapbar audio { height: 32px; max-width: 22rem; flex: 1 1 16rem;
+                filter: invert(.92) hue-rotate(180deg); opacity: .72; }
+.tapbar audio:hover { opacity: 1; }
 .tempo .tstate.bad { color: var(--fail); }
 .tempo .tstate.ok { color: var(--high); }
 """
@@ -443,7 +465,7 @@ function browse(startPath, onPick) {
       '<ul id="pick-list"></ul>' +
       '<div class="foot">' +
         '<button type="button" data-close="1">Cancel</button>' +
-        '<button type="button" class="go" id="pick-choose" disabled>Choose</button>' +
+        '<button type="button" class="pickgo" id="pick-choose" disabled>Choose</button>' +
       '</div>' +
     "</div>";
   document.body.appendChild(box);
@@ -538,6 +560,34 @@ _INPUT_JS = """\
      out, so the refusal names it. */
   function val(id) { return document.getElementById(id).value.trim(); }
 
+  /* Tap tempo. **The only method that yields the felt pulse** rather than
+     a number read off something that measured something else — which is
+     the 1.5x error the caption alone did not stop (walked 2026-09-02):
+     a 6/8 song counted in two is 66.67 where the DAW says 100.
+
+     Intervals, not a total: the bpm is the mean gap between consecutive
+     taps, so it settles as you keep going instead of being thrown by when
+     you started. A gap longer than RESET means you stopped and started
+     again — a fresh count rather than one enormous interval averaged in.
+     Nothing is derived from the audio; the machine times the person. */
+  var TAP_RESET_MS = 3000;
+  var taps = [];
+
+  function tapSay(text) { document.getElementById("t-tapstate").textContent = text; }
+
+  function tap() {
+    var now = Date.now();
+    if (taps.length && now - taps[taps.length - 1] > TAP_RESET_MS) { taps = []; }
+    taps.push(now);
+    if (taps.length < 2) { tapSay("keep tapping\u2026"); return; }
+    var span = taps[taps.length - 1] - taps[0];
+    var bpm = Math.round((60000 * (taps.length - 1)) / span * 100) / 100;
+    document.getElementById("t-bpm").value = String(bpm);
+    tapSay(taps.length + " taps \u00b7 " + bpm);
+  }
+
+  document.getElementById("t-tap").addEventListener("click", tap);
+
   /* A pulse and a signature, split into the four keys the format fixes at
      the boundary and nowhere else. **Neither given means no tempo at all**,
      which is a real state — so the bars field, which always has a value,
@@ -604,6 +654,11 @@ _INPUT_JS = """\
     browse(BROWSE_FROM, function (path) {
       state.media = path;
       document.getElementById("media-name").textContent = baseName(path);
+      /* The take, playable at step 1, because tapping a tempo along with a
+         recording you cannot hear is tapping along with nothing. */
+      document.getElementById("t-audio").src =
+        "/api/audio?path=" + encodeURIComponent(path);
+      document.getElementById("tapbar").className = "tapbar";
       ready();
     });
   });
@@ -1469,6 +1524,8 @@ def _tempo() -> str:
     <div class="trow">
       <label class="tf">Beats per minute
         <input type="number" id="t-bpm" step="any" min="0" autocomplete="off" value=""></label>
+      <button type="button" id="t-tap">Tap</button>
+      <span class="tapstate" id="t-tapstate">no taps yet</span>
       <label class="tf">Time signature
         <select id="t-signature"><option value="">—</option>{_signature_options()}</select></label>
       <label class="tf">Bars before the first line
@@ -1476,14 +1533,24 @@ def _tempo() -> str:
           value="0"></label>
       <span class="tstate" id="t-state"></span>
     </div>
+    <div class="tapbar pageoff" id="tapbar">
+      <audio id="t-audio" controls preload="none"></audio>
+      <span class="aside">Play it, tap the beat you would count out loud.</span>
+    </div>
     <p class="hint"><b>Beats per minute is the pulse you feel</b> — the beat you would count
-      out loud, or tap, while the song plays. It is <b>not</b> always the number the software
-      that made the recording reports: a <code>6/8</code> song counted in two is
-      <code>66.67</code> here where a DAW says <code>100</code>. Count it, do not read it off.</p>
-    <p class="hint">Bombista never measures any of this. <b>The pulse and the signature go
-      together or not at all</b> — half a tempo breaks Pregonero's pulse while its scaling
-      keeps working, which is worse than leaving it out. Leave both blank for a song that has
-      no tempo: that is a real answer and nothing downstream minds it.</p>
+      out loud, or tap, while the song plays. Nobody can count beats for a minute, so
+      <b>tap it</b>: press <b>Tap</b> in time with the recording, or hit the space bar once the
+      button has focus, and the field fills from your taps. Stop for a few seconds and the next
+      tap starts a fresh count.</p>
+    <p class="hint">Tapping is the only way to get the pulse you actually feel. It is <b>not</b>
+      always the number the software that made the recording reports: a <code>6/8</code> song
+      counted in two is <code>66.67</code> here where a DAW says <code>100</code>.</p>
+    <p class="hint">Bombista never measures any of this — your taps are yours. <b>The pulse and
+      the signature go together or not at all</b>; half a tempo breaks Pregonero's pulse while
+      its scaling keeps working, which is worse than leaving it out. Leave both blank for a song
+      that has no tempo: that is a real answer and nothing downstream minds it. <b>Bars before
+      the first line is left out of the file when it is zero</b>, which is how the format says
+      no count-in.</p>
   </div>
 """
 
@@ -1740,9 +1807,11 @@ def render_output(
     languages buries the timing keys — is answered by the caption saying
     which five keys Bombista wrote, not by hiding the rest.
 
-    **`Save to the catalogue` is step 6's addition, and it sits beside the
-    three downloads rather than replacing them** (journey-setup,
-    2026-09-02). The words are chosen for two reasons: the flow is not
+    **`Save to the catalogue` is step 6's addition, and since the walk of
+    2026-09-02 it sits ABOVE the three downloads rather than below them.**
+    It is the ending of the flow and they are an escape hatch; under them,
+    the page offered three ways out before the way through. It still does
+    not replace them (journey-setup, 2026-09-02). The words are chosen for two reasons: the flow is not
     always about a new song — it is also how an existing one is edited,
     which rules out *Add to the library* — and on a screen where
     everything else hands over bytes, naming the destination is the
@@ -1766,6 +1835,16 @@ def render_output(
 <div class="jsonhead"><span class="fn">{html_escape(filename)}</span></div>
 <pre class="json" id="json">{html_escape(rendered)}</pre>
 
+<div class="save">
+  <button type="button" class="btn1" id="save">Save to the catalogue</button>
+  <p class="hint">This is the way out. It writes the file above — nothing you loaded is
+    changed — here:</p>
+  <p class="path mono" id="savepath">{html_escape(save_path)}</p>
+  <p class="sstate" id="savestate"></p>
+</div>
+
+<p class="hint dlhead">Or take the bytes yourself, if you keep this song somewhere else.</p>
+
 <div class="dlrow">
   <div class="dl">
     <button type="button" id="dl-song">Download JSON file</button>
@@ -1782,13 +1861,6 @@ def render_output(
     <p class="hint">Bands, signals, provenance and every hand-set line, as markdown. Does not
       count as sign-off.</p>
   </div>
-</div>
-
-<div class="save">
-  <button type="button" class="btn1" id="save">Save to the catalogue</button>
-  <p class="hint">Writes the file above, and nothing you loaded is changed. It goes here:</p>
-  <p class="path mono" id="savepath">{html_escape(save_path)}</p>
-  <p class="sstate" id="savestate"></p>
 </div>
 
 <p><span class="pageoff" id="signoff"></span></p>

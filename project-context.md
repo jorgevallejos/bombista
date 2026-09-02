@@ -214,6 +214,28 @@ of them Bombista's, and none of them teaches this repo who is calling it.
   `--no-header`** — two builds calling themselves the same number is the trap that has already cost
   this project a day.
 
+## The tempo contract, and the habit that kept breaking it (2026-09-02)
+
+**Three contract mismatches in two days, all the same mistake**: a value one tool offered as its
+default, checked against nothing on the receiving side. The third one was walked — `Save to the
+catalogue` wrote a song Pregonero refused with *`tempo.countInBars` must be a positive integer when
+present*, and the song was dropped from the list it had just joined.
+
+**The repair is a contract decision, not a bug fix.** `0` and absent both mean no count-in, so there
+is one representation and it is absence. Bombista omits the key; Pregonero's rule stands. Teaching
+the receiver to accept `0` would have left two ways to say nothing.
+
+**The habit is the actual finding.** Reading `pregonero/src/songState.ts` `validateTempo` — instead
+of reasoning about what looked reasonable — turned up two more divergences in the same block:
+`numerator` and `denominator` were checked for *positive* here and for *whole* there, so `4.5`
+passed this gate and would have been refused; and `countInBars` was *required* here and optional
+there, which would have broken the fix on its own the moment a zero stopped being written.
+
+**Bombista's tests now carry the receiver's accept/refuse table**, transcribed from that file and
+verified by running its own `validateTempo` over each block. A divergence is a failing test rather
+than a walk. **This is the pattern to repeat**: when this suite's tools disagree, the answer is in
+the consumer's source, and it is cheap to read.
+
 **Open, found while building this and not fixed here.** `skeleton.py` writes
 `lyrics: [{"<lang>": ""}]` — one empty lyric entry, deliberately, so the entry *shape* is visible to
 whoever writes the words in. Pregonero refuses that file: an empty lyric string is not a lyric line.

@@ -180,7 +180,7 @@ def test_a_bpm_only_tempo_block_is_refused_naming_every_missing_key():
     pulse, no error anywhere. There is no valid partial tempo block."""
     found = errors(validate_song(song(tempo={"bpm": 128})))
 
-    assert wheres(found) == ["tempo.numerator", "tempo.denominator", "tempo.countInBars"]
+    assert wheres(found) == ["tempo.numerator", "tempo.denominator"]
 
 
 @pytest.mark.parametrize("key", ["bpm", "numerator", "denominator"])
@@ -194,10 +194,76 @@ def test_a_tempo_value_that_is_not_positive_and_real_is_refused(key, value):
     assert wheres(found) == [f"tempo.{key}"]
 
 
-def test_count_in_bars_may_be_zero():
-    """Zero count-in bars is a real answer — the one tempo field that is
-    legitimately not positive."""
-    assert validate_tempo({**REAL_TEMPO, "countInBars": 0}) == []
+def test_count_in_bars_is_optional_and_absence_is_how_no_count_in_is_said():
+    """**Read off the receiving side**, `pregonero/src/songState.ts`
+    `validateTempo`: `countInBars` is optional there, and when present must
+    be a positive integer. Bombista required it and allowed `0`, so the
+    block it wrote for a song with no count-in was refused by the suite it
+    writes for — the walk of 2026-09-02 saved a song and watched it drop
+    out of the list it had just joined."""
+    assert validate_tempo({key: REAL_TEMPO[key] for key in ("bpm", "numerator", "denominator")}) == []
+    assert validate_tempo({**REAL_TEMPO, "countInBars": 3}) == []
+
+
+def test_a_zero_count_in_is_refused_because_the_receiving_side_refuses_it():
+    """`0` and absent both mean no count-in, so there is one representation
+    and it is absence (Jorge, 2026-09-02). Teaching the consumer to accept
+    `0` would leave two ways to say nothing; this gate agrees with the
+    consumer instead."""
+    found = validate_tempo({**REAL_TEMPO, "countInBars": 0})
+
+    assert [f.where for f in found] == ["tempo.countInBars"]
+    assert "left out entirely" in found[0].message
+
+
+# The receiving side's rules, transcribed from `pregonero/src/songState.ts`
+# `validateTempo` on 2026-09-02 and checked by running that function over
+# each block. This table is the contract; the assertions below say Bombista
+# agrees with it. **Three contract mismatches in two days were all the same
+# mistake** — a value one tool offered, checked against nothing at the far
+# end — so what this gate believes is written down next to what the consumer
+# believes, and a divergence is a failing test rather than a walk.
+RECEIVER_ACCEPTS = [
+    {"bpm": 120, "numerator": 4, "denominator": 4},
+    {"bpm": 66.67, "numerator": 6, "denominator": 8},
+    {"bpm": 120, "numerator": 4, "denominator": 4, "countInBars": 1},
+    {"bpm": 120, "numerator": 4, "denominator": 4, "countInBars": 2},
+]
+RECEIVER_REFUSES = [
+    {"bpm": 120, "numerator": 4, "denominator": 4, "countInBars": 0},
+    {"bpm": 120, "numerator": 4.5, "denominator": 4},
+    {"bpm": 120, "numerator": 4, "denominator": 8.5},
+    {"bpm": 0, "numerator": 4, "denominator": 4},
+    {"bpm": 120},
+    {"bpm": 120, "numerator": 0, "denominator": 4},
+]
+
+
+@pytest.mark.parametrize("block", RECEIVER_ACCEPTS)
+def test_this_gate_passes_everything_the_receiving_side_accepts(block):
+    """A gate stricter than the consumer turns working files away."""
+    assert validate_tempo(block) == []
+
+
+@pytest.mark.parametrize("block", RECEIVER_REFUSES)
+def test_this_gate_refuses_everything_the_receiving_side_refuses(block):
+    """**The failure of 2026-09-02.** A gate looser than the consumer lets
+    through a file the suite will not load — and it is found on a stage, or
+    on a walk, rather than here. `countInBars: 0` was the third such
+    mismatch in two days."""
+    assert validate_tempo(block) != [], f"{block} passes here and is refused downstream"
+
+
+def test_the_meter_halves_must_be_whole_numbers():
+    """`songState.ts` checks `numerator` and `denominator` with
+    `Number.isInteger`; this gate checked only that they were positive, so
+    `4.5` passed here and would have been refused there."""
+    assert [f.where for f in validate_tempo({**REAL_TEMPO, "numerator": 4.5})] == [
+        "tempo.numerator"
+    ]
+    assert [f.where for f in validate_tempo({**REAL_TEMPO, "denominator": 8.5})] == [
+        "tempo.denominator"
+    ]
 
 
 @pytest.mark.parametrize("value", [-1, 1.5, "one", None])

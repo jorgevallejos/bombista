@@ -317,6 +317,30 @@ def test_a_signature_the_dropdown_cannot_say_is_added_rather_than_dropped():
     assert pages.split_signature("5/4") == (5, 4)
 
 
+def test_the_bpm_field_has_a_way_to_produce_a_number_and_not_only_a_definition(page1):
+    """Walked 2026-09-02, the second time this field failed. The caption
+    explains what the number means and still leaves you with no way to get
+    it: **nobody counts beats for a minute.** Tapping along with the take
+    is the only method that yields the felt pulse rather than a number read
+    off something that measured something else, and it is what every DAW
+    and metronome does."""
+    assert 'id="t-tap"' in page1
+    assert "Tap" in visible_text(page1)
+    assert 'id="t-audio"' in page1, "there is nothing to tap along with"
+
+    script = page1.split("<script>")[1]
+    assert "/api/audio?path=" in script, "the chosen take is never made playable"
+
+
+def test_the_tap_control_starts_a_fresh_count_after_a_pause(page1):
+    """Otherwise the gap while you find the beat again is averaged in as
+    one enormous interval, and the answer is silently wrong."""
+    script = page1.split("<script>")[1]
+
+    assert "TAP_RESET_MS" in script
+    assert "no taps yet" in page1
+
+
 def test_the_bpm_caption_asks_for_the_felt_pulse_and_warns_off_the_daw(page1):
     """**The 1.5x error this exists to stop, walked 2026-09-02.** The old
     caption read *type it from the source that produced this audio, where
@@ -468,6 +492,14 @@ def test_page_3_offers_saving_beside_the_downloads_not_instead_of_them(page3):
 
     buttons = re.findall(r'<button[^>]*id="dl-([a-z]+)"[^>]*>([^<]*)</button>', page3)
     assert [kind for kind, _ in buttons] == ["song", "timeline", "report"]
+
+
+def test_save_comes_before_the_downloads(page3):
+    """Walked 2026-09-02: below them, the ending of the flow read as the
+    least important thing on the page, and the page offered three ways out
+    before the way through. `Save` is the way through; the downloads are an
+    escape hatch for someone who keeps this song somewhere else."""
+    assert page3.index('class="save"') < page3.index('class="dlrow"')
 
 
 def test_page_3_names_the_path_it_will_write_before_it_is_pressed(page3):
@@ -676,6 +708,31 @@ def test_the_skin_has_one_palette_no_radius_and_no_blue():
     assert {v.strip() for v in re.findall(r"border-radius:([^;]+)", outside_the_picker)} <= {"0"}
     assert "4b57c4" not in css
     assert "--edit" not in css
+
+
+def test_no_class_inside_the_picker_collides_with_a_page_wide_one():
+    """**The "two buttons at different heights" of the 2026-09-02 walk.**
+    The confirm button was given `class="go"`, and `.go` is page 1's own
+    wrapper class carrying `margin: 1.5rem 0 0`. The button inherited a
+    24px top margin and sat below Cancel — under flex the row then grew to
+    fit it, so the two came out 53.5px and 29.5px.
+
+    The dialog is built in JavaScript, where nothing shows you the page's
+    other class names. So the rule is that a class it applies must not also
+    be styled on its own anywhere: `pickgo`, not `go`.
+    """
+    applied = set()
+    for value in re.findall(r'class=\\?"([^"\\]+)', pages._PICKER_JS):
+        applied.update(value.split())
+
+    bare = {
+        match.group(1)
+        for match in re.finditer(r"^\.([A-Za-z][\w-]*)\s*\{", pages.STYLESHEET, re.M)
+    }
+
+    assert not (applied & bare), (
+        f"{sorted(applied & bare)} is styled page-wide and inside the dialog"
+    )
 
 
 def test_the_file_picker_has_no_voice():

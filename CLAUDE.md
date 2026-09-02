@@ -168,9 +168,17 @@ bombista/
                    list of Findings rather than raising, because raising is a
                    first-failure interface and a person fixing a file wants all of it.
                    `validate_tempo` is the ONE understanding of a valid tempo block in
-                   this repo — `bombista validate` and `serve`'s review control both
-                   call it, so a partial block cannot get in through one door and not
-                   the other. Pure, stdlib-only, prints nothing
+                   this repo — `bombista validate`, `POST /api/tempo` and the run route
+                   all call it, so a partial block cannot get in through one door and
+                   not the other. **Every tempo rule here is READ OFF THE RECEIVING
+                   SIDE** (`pregonero/src/songState.ts` `validateTempo`) and not
+                   reasoned about: `bpm` > 0, `numerator`/`denominator` WHOLE and > 0,
+                   `countInBars` OPTIONAL and > 0 when present. `without_zero_count_in`
+                   lives here too — `0` and absent both mean no count-in, so there is
+                   ONE representation and it is absence, because the receiver refuses
+                   a zero. tests/test_validation.py carries the receiver's accept/refuse
+                   table; a divergence is a failing test rather than a walk.
+                   Pure, stdlib-only, prints nothing
   writers.py     — everything downstream of the canonical CP form: songjson, report-json,
                    srt, lrc, html — plus merge_envelope, THE one merge path (shared with
                    promote). The html writer (B16) is the offline review page: inline CSS/JS
@@ -206,13 +214,17 @@ bombista/
                    HERE and nowhere else, and it is THREE controls, not four
                    number fields (§11.16): a felt pulse in bpm, a time
                    signature from TIME_SIGNATURES, and bars before the first
-                   line. `numerator`/`denominator` are the format's business,
+                   line, with a TAP button beside the pulse and the chosen take
+                   playable, because nobody counts beats for a minute and tapping
+                   is the only method that yields the FELT pulse.
+                   `numerator`/`denominator` are the format's business,
                    split at the boundary, never a question put to a musician.
                    NO Set button: the block travels with `Process song →` and
                    the run route refuses the whole run. Nothing derives,
                    measures or guesses; the one proposed value is 0 bars, and
                    it never makes a block alone. Page 3 carries `Save to the
-                   catalogue` BESIDE the three downloads — the one control
+                   catalogue` ABOVE the three downloads — it is the ending of
+                   the flow and they are an escape hatch — the one control
                    here that writes a file, with the path it will write
                    printed under it.
                    THE FILE PICKER IS THE ONE SURFACE WITH NO VOICE (§11.16):
@@ -220,6 +232,10 @@ bombista/
                    file dialog is where a person expects their system's own
                    furniture. It is the only place the skin's no-radius rule
                    is relaxed, and a test scopes the exception to `.picker`.
+                   EVERY CLASS IT APPLIES IS PREFIXED (`pickgo`, not `go`) and
+                   a test enforces it: the dialog is built in JavaScript, where
+                   nothing shows you the page's other class names, and
+                   `class="go"` silently inherited page 1's `margin: 1.5rem 0 0`.
                    A PAGE'S SCRIPT AND ITS MARKUP ARE ONE ARTIFACT: a test
                    fails when a script reaches for an id the page does not
                    render. That is what `v1.2.0` broke — moving the tempo

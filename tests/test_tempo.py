@@ -88,8 +88,11 @@ def test_a_bpm_only_block_is_refused_naming_every_missing_key(client):
     status, payload, _ = client.post("/api/tempo", {"tempo": {"bpm": 128}})
 
     assert status == 400
-    for key in ("numerator", "denominator", "countInBars"):
+    for key in ("numerator", "denominator"):
         assert key in payload["error"]
+    assert "countInBars" not in payload["error"], (
+        "countInBars is optional on the receiving side and must not be demanded here"
+    )
 
 
 def test_a_refused_block_leaves_the_session_alone(client):
@@ -115,11 +118,43 @@ def test_a_block_that_is_not_whole_and_real_is_refused(client, block):
     assert status == 400
 
 
-def test_count_in_bars_may_be_zero(client):
+def test_a_zero_count_in_is_accepted_and_stored_as_absence(client):
+    """**The walk of 2026-09-02's failure, from the inside.** `0` bars is
+    what page 1 offers for a song with no count-in, and the file it
+    produced was refused by Pregonero — *must be a positive integer when
+    present* — so the song was written and immediately dropped from the
+    list it had just joined.
+
+    `0` and absent both mean no count-in, so there is one representation
+    and it is absence. The route still accepts the zero a control sends;
+    what it stores, and therefore what reaches a file, carries no key."""
     status, payload, _ = client.post("/api/tempo", {"tempo": {**WHOLE, "countInBars": 0}})
 
     assert status == 200
-    assert payload["tempo"]["countInBars"] == 0
+    assert "countInBars" not in payload["tempo"]
+    assert payload["tempo"]["bpm"] == WHOLE["bpm"]
+
+
+def test_a_song_that_already_carries_a_zero_count_in_is_not_re_emitted_with_one(
+    serve_client, synthetic, tmp_path
+):
+    """The other entry point. A file already carrying `countInBars: 0` is
+    being rewritten by this tool, and passing the zero through would emit a
+    file the suite refuses — the same failure, arriving by a different
+    door."""
+    session = untimed(
+        tmp_path,
+        synthetic["staging"],
+        tempo={"bpm": 120, "numerator": 4, "denominator": 4, "countInBars": 0},
+    )
+    client = serve_client(session)
+    out = tmp_path / "out.json"
+
+    client.post("/api/emit", {"out": str(out)})
+    emitted = json.loads(out.read_text(encoding="utf-8"))
+
+    assert "countInBars" not in emitted["tempo"]
+    assert emitted["tempo"] == {"bpm": 120, "numerator": 4, "denominator": 4}
 
 
 def test_null_clears_the_block(client):
@@ -375,6 +410,9 @@ def test_a_partial_block_refuses_the_run_before_it_starts(serve_client, libertad
     )
 
     assert status == 400
-    for key in ("numerator", "denominator", "countInBars"):
+    for key in ("numerator", "denominator"):
         assert key in payload["error"]
+    assert "countInBars" not in payload["error"], (
+        "countInBars is optional on the receiving side and must not be demanded here"
+    )
     assert client.get("/api/run")[1]["state"] == "idle"

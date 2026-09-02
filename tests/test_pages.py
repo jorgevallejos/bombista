@@ -446,6 +446,17 @@ def test_the_phase_dot_blinks_on_steps_and_does_not_fade():
 # ---------------------------------------------------------------------------
 
 
+def test_the_json_box_is_capped_so_save_stays_reachable_after_it():
+    """What makes *after the box* survivable on a long song. The window is
+    the file in full — no fold, no truncation — but it is bounded and
+    scrolls inside itself, so a 40-line song does not push the button that
+    ends the flow off the screen the way a paragraph did."""
+    rule = next(block for block in _rules(pages.STYLESHEET) if "pre.json" in block)
+
+    assert "max-height" in rule
+    assert "overflow: auto" in rule
+
+
 def test_page_3_renders_the_whole_json_with_no_fold(page3):
     """An earlier pass added a fold control and Jorge cut it: the window
     scrolls, the file is the file."""
@@ -514,12 +525,32 @@ def test_page_3_offers_saving_beside_the_downloads_not_instead_of_them(page3):
     assert [kind for kind, _ in buttons] == ["song", "timeline", "report"]
 
 
-def test_save_comes_before_the_downloads(page3):
-    """Walked 2026-09-02: below them, the ending of the flow read as the
-    least important thing on the page, and the page offered three ways out
-    before the way through. `Save` is the way through; the downloads are an
-    escape hatch for someone who keeps this song somewhere else."""
+def test_the_page_reads_as_the_file_then_what_to_do_with_it(page3):
+    """Two orderings decided on 2026-09-02, in that order.
+
+    First: `Save` above the downloads, because it is the way through and
+    they are an escape hatch — below them the ending of the flow read as
+    the least important thing on the page.
+
+    Then: `Save` back **after the JSON box**. It had been lifted above the
+    box to be reachable at all, which was the wrong repair — the button was
+    buried by a paragraph, and the answer is a shorter explanation rather
+    than a different order.
+    """
+    assert page3.index('<pre class="json"') < page3.index('class="save"')
     assert page3.index('class="save"') < page3.index('class="dlrow"')
+
+
+def test_the_text_above_the_json_box_is_short_enough_to_keep_save_in_reach(page3):
+    """The reason the order could go back. One sentence per ending, and
+    that is what this pins — the caption is what pushed the button off the
+    screen, so a paragraph growing back here is the regression."""
+    lede = re.search(r'<p class="lede">(.*?)</p>', page3, re.S).group(1)
+    caption = re.search(r'<p class="hint">(.*?)</p>', page3, re.S).group(1)
+
+    assert visible_text(caption).count(".") <= 2, "the caption grew past a sentence"
+    assert len(visible_text(caption)) < 220, "the caption is a paragraph again"
+    assert len(visible_text(lede)) < 80
 
 
 def test_page_3_names_the_path_it_will_write_before_it_is_pressed(page3):

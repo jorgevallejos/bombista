@@ -256,6 +256,26 @@ the timestamp stepper to nudge in tenths. A `0.1` step is coarser than the 0.07 
 stepper exists to land inside, which is invariant 2 by number and has its own test. The display
 rounds to a tenth and the stepper does not: the list is a readout, the popup is the instrument.
 
+## A prefill that answered the wrong question (2026-09-02)
+
+**`v1.6.0` reported the no-recording path as built and tested, and it did not take.** The cause was
+the feature shipped beside it: the media prefill read the take out of the staging directory's
+`asr-words.meta.json` **with no reference to which song was being described**. A staging directory is
+not necessarily one song's — `serve --staging` takes one directory and a caller may open every song
+in it — so picking any lyrics file, including a `.txt` that had never been aligned against anything,
+set a media source. From there the consent popup was skipped by design, the review was not skipped
+because the run was not manual, and one song's words were anchored against another song's recording.
+
+**The lesson, and it is the third time in this shape.** A per-song question was answered from
+per-run state. The guard written for it is the class rather than the instance: *what page 1 says
+about a file must not depend on what the server did before it*, checked over the whole payload and
+against an empty staging directory, because pointed at one that already held a take both answers
+would be equally wrong.
+
+**A second wrong-take path was found while fixing it**: the transcription cache was reused whenever
+`asr-words.jsonl` existed, without checking it was made from this run's recording. Re-transcribing
+costs ninety seconds; using the wrong words costs a timeline nobody can tell is wrong.
+
 **Open, found while building this and not fixed here.** `skeleton.py` writes
 `lyrics: [{"<lang>": ""}]` — one empty lyric entry, deliberately, so the entry *shape* is visible to
 whoever writes the words in. Pregonero refuses that file: an empty lyric string is not a lyric line.

@@ -139,6 +139,9 @@ def test_the_audio_route_serves_nothing_when_the_take_cannot_be_found(serve_clie
     plainly rather than answered with some other file."""
     session.audio_path = None
     session.provenance = None
+    # ...and the sibling, which is `audio_path_for`'s second source: the
+    # take is unfindable only when nothing on disk names it either.
+    (session.staging_dir / "asr-words.meta.json").unlink()
 
     status, payload, _ = serve_client(session).get("/api/audio")
 
@@ -523,25 +526,124 @@ def test_an_edit_prefills_the_take_the_file_was_aligned_against(
     """**Being asked is not the problem; being asked silently is** (Jorge,
     2026-09-02). The lyrics field prefilled on an edit and this one did
     not, so nothing said whether the app had forgotten the take or was
-    waiting to be told. The staging directory's own record of what a run
-    listened to is the exact answer."""
-    from bombista.provenance import build_provenance, words_meta
-
-    staging = libertad["staging"]
-    save_words(
-        libertad["words"],
-        staging / "asr-words.jsonl",
-        meta=words_meta(
-            build_provenance(libertad["audio"], model_size="tiny", lang="es"),
-            libertad["audio"],
-        ),
-    )
-    client = serve_client(None, staging=staging)
+    waiting to be told. The staging directory's record of what a run
+    listened to — **and which song it listened for** — is the answer."""
+    client = serve_client(None, staging=libertad["staging"])
 
     _, payload, _ = client.get("/api/lyrics?path=" + str(libertad["song_path"]))
 
     assert payload["media"]["path"] == str(libertad["audio"].resolve())
     assert payload["media"]["name"] == libertad["audio"].name
+
+
+# ---------------------------------------------------------------------------
+# page 1 describes the FILE, never what the server did last (2026-09-02)
+#
+# The class of bug, not the instance. `previous_take` read the take out of
+# the staging directory with no reference to which song was being described,
+# so a shared staging directory handed every song the last one's recording.
+# Walked: a `.txt` that had never been aligned against anything arrived with
+# a 2:40 take attached, the consent popup never appeared because a media
+# source was set, and the review came back with every line `no-anchor`.
+#
+# The guard below is the general statement — what `/api/lyrics` says about a
+# file must not depend on what ran before it — in the same spirit as the
+# missing-id test written for `Confirm timeline`.
+# ---------------------------------------------------------------------------
+
+
+def _describe(client, path):
+    return client.get("/api/lyrics?path=" + str(path))[1]
+
+
+def test_describing_a_file_says_the_same_thing_before_and_after_another_run(
+    serve_client, libertad, tmp_path
+):
+    """**The invariant this class violates.** Page 1's fields are derived
+    from the file being described. A run that happened first may make the
+    answer *slower* to compute, never *different* — so describing a file on
+    a server that has just run another song must equal describing it on a
+    server that has run nothing.
+
+    Anything page 1 prefills is covered, not just the media source: the
+    same shared-staging leak would reach a title or a tempo the same way.
+    """
+    other = tmp_path / "another-song.txt"
+    other.write_text("palabras distintas\nde otra cancion\n", encoding="utf-8")
+    # EMPTY, so the run is what puts a previous take in it. Pointing this at
+    # a directory that already held one would let the leak hide: both
+    # answers would be equally wrong.
+    staging = tmp_path / "shared-staging"
+    staging.mkdir()
+
+    fresh = _describe(serve_client(None, staging=staging), other)
+    assert fresh["media"] is None, "the empty directory already answered something"
+
+    used = serve_client(None, staging=staging)
+    with mock.patch.object(
+        server, "transcribe_words", return_value=words_for(libertad["lines"])
+    ):
+        _start(used, libertad, staging=str(staging))
+        wait_for(used, "done")
+
+    assert (staging / "asr-words.meta.json").exists(), "the run recorded nothing to leak"
+    assert _describe(used, other) == fresh
+
+
+def test_a_txt_never_arrives_with_a_recording_attached(serve_client, libertad, tmp_path):
+    """The instance, pinned where it happened. A plain text file carries no
+    record of any recording, so there is no honest source for one — and a
+    prefilled media source is what silently skipped the consent popup and
+    sent a song's words to be aligned against another song's audio."""
+    other = tmp_path / "another-song.txt"
+    other.write_text("palabras distintas\n", encoding="utf-8")
+
+    client = serve_client(None, staging=libertad["staging"])
+
+    assert _describe(client, other)["media"] is None
+
+
+def test_a_song_is_never_handed_the_take_of_a_different_song(
+    serve_client, libertad, tmp_path
+):
+    """A staging directory is not necessarily one song's. The meta names
+    the song it transcribed for, and a meta that names another one is not
+    a match — an unknown or foreign provenance answers no."""
+    stranger = tmp_path / "stranger.json"
+    stranger.write_text(
+        json.dumps({"title": "S", "lyrics": [{"es": "uno"}]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    client = serve_client(None, staging=libertad["staging"])
+
+    assert _describe(client, libertad["song_path"])["media"] is not None
+    assert _describe(client, stranger)["media"] is None
+
+
+def test_a_cached_transcription_is_not_reused_for_a_different_take(
+    serve_client, libertad, tmp_path
+):
+    """The same wrong-take failure, arriving through the cache. The words
+    file is a transcription of ONE recording; a staging directory may be
+    reused for another. Reusing it regardless would have the machine report
+    it listened when it listened to something else (§11.11)."""
+    another_take = tmp_path / "another-take.m4a"
+    another_take.write_bytes(b"\0" * 64)
+    client = serve_client(None)
+
+    with mock.patch.object(
+        server, "transcribe_words", return_value=words_for(libertad["lines"])
+    ) as transcribe:
+        _start(
+            client,
+            libertad,
+            media=str(another_take),
+            staging=str(libertad["staging"]),
+        )
+        done = wait_for(client, "done")
+
+    assert transcribe.called, "the previous take's transcription was reused"
+    assert done["phases"][0]["state"] == "done"
 
 
 def test_the_take_is_not_guessed_when_nothing_recorded_one(serve_client, libertad):

@@ -134,7 +134,7 @@ description with a recorded one would split it across two runs.
 """
 
 
-def words_meta(provenance: dict, audio_path: Path) -> dict:
+def words_meta(provenance: dict, audio_path: Path, song_path: Path | None = None) -> dict:
     """The `asr-words.meta.json` sibling's content, from a run's provenance.
 
     The audio path is stored **absolute**, and this is the one place the
@@ -147,6 +147,8 @@ def words_meta(provenance: dict, audio_path: Path) -> dict:
     """
     meta = {key: provenance[key] for key in WORDS_META_KEYS if key in provenance}
     meta["audio"] = str(Path(audio_path).resolve())
+    if song_path is not None:
+        meta["song"] = str(Path(song_path).resolve())
     return meta
 
 

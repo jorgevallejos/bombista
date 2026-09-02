@@ -320,6 +320,20 @@ ways to close it are keeping the process alive across `Back`, or having `serve` 
 answers into the staging directory — the second changes what Bombista writes and was not made on
 speculation.
 
+## The step bar is pinned, and the check came first (2026-09-02)
+
+The rule is the integration's, in its own `project-context.md`. What is worth keeping here is that
+**the receiving-side check it demands was done before building and it passed**: Pregonero gives the
+frame `flex: 1; min-height: 0` in a bounded flex column, so the embedded page scrolls inside its own
+frame and sticky works. Measured in a reproduction of that arrangement — a 793px frame box against
+a 1169px document — rather than reasoned about, which is the lesson this project has now paid for
+five times.
+
+**One thing the rule could not have known.** Page 2's player was already sticky at `top: 0`, so
+pinning the band put two sticky things in the same place. The player docks under the band now, at an
+offset derived from the band's own declarations; a first pass guessed it and was nine pixels wrong,
+which is invisible except on a scrolled page.
+
 **Open, found while building this and not fixed here.** `skeleton.py` writes
 `lyrics: [{"<lang>": ""}]` — one empty lyric entry, deliberately, so the entry *shape* is visible to
 whoever writes the words in. Pregonero refuses that file: an empty lyric string is not a lyric line.

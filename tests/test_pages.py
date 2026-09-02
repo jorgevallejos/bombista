@@ -754,6 +754,25 @@ def _rules(css: str) -> list[str]:
     return [block + "}" for block in css.split("}")]
 
 
+def _declarations(css: str) -> dict[str, str]:
+    """`{selector: body}`, with comments removed.
+
+    Comments are stripped because they talk ABOUT selectors — this file's
+    own `--stepband` comment names `.stepband`, which is enough to make a
+    substring search find the wrong rule. And the selector is taken as the
+    text after the last comment, because a rule preceded by a comment
+    otherwise carries the whole paragraph in its name.
+    """
+    bare = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    found = {}
+    for block in bare.split("}"):
+        if "{" not in block:
+            continue
+        selector, body = block.split("{", 1)
+        found[selector.strip()] = body
+    return found
+
+
 def test_the_skin_has_one_palette_no_radius_and_no_blue():
     """§10.3: one palette (no light mode, no prefers-color-scheme block),
     no border radius anywhere, no blue — `--edit: #4b57c4` is gone and clay
@@ -828,6 +847,84 @@ def test_every_component_that_sets_a_display_also_beats_pageoff():
         assert f".{name}.pageoff" in css, (
             f".{name} sets its own display and will beat .pageoff — say so explicitly"
         )
+
+
+# ---------------------------------------------------------------------------
+# the step bar is pinned, and it is the only thing that is (2026-09-02)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", ALL_PAGES)
+def test_the_step_bar_is_inside_a_band_that_sticks(name, rendered):
+    """On a long page the bar scrolled out of view, so *where am I*
+    depended on scroll position and the way back looked like a reset.
+
+    **The band sticks, not the bar.** `.steps` is `width: max-content`, so
+    pinning it directly would leave the page scrolling through the gap
+    beside it — and the band is opaque for the same reason.
+    """
+    html = rendered[name]
+
+    assert re.search(r'<div class="stepband"><nav class="steps"', html)
+
+    band = _declarations(pages.STYLESHEET)[".stepband"]
+    assert "position: sticky" in band
+    assert "top: 0" in band
+    assert "background: var(--bg)" in band, "the masthead would show through"
+
+
+def test_nothing_else_on_any_page_is_pinned():
+    """**Pin the step bar. Pin nothing else** (Jorge, 2026-09-02).
+
+    Not `Save to the catalogue`: it sits after the JSON box so the file is
+    read before it is written, and a permanently pressable save would
+    quietly restore the order that was rejected. Not the masthead:
+    standalone draws it above the bar, and pinning that too would leave
+    standalone with two permanent bands where the embedded case has one.
+
+    Page 2's player is the one other sticky thing and it is not pinned to
+    the top — it docks UNDER the band, which is what `--stepband` is for.
+    Two sticky things at `top: 0` overlap, and the one that loses is the
+    one that says where you are.
+    """
+    rules = _declarations(pages.STYLESHEET)
+    pinned = {
+        selector: (re.search(r"top:\s*([^;]+);", body).group(1).strip()
+                   if re.search(r"top:\s*([^;]+);", body) else None)
+        for selector, body in rules.items()
+        if "position: sticky" in body
+    }
+
+    assert pinned == {".stepband": "0", ".sticky": "var(--stepband)"}
+
+    # The two overlays are `position: fixed` by necessity — they cover the
+    # page while they are open and are gone when they are not. Naming them
+    # here is what stops the exemption growing quietly.
+    fixed = {
+        selector for selector, body in rules.items() if "position: fixed" in body
+    }
+    assert fixed == {".picker", ".ask"}
+
+
+def test_the_save_block_and_the_masthead_scroll_away():
+    """Stated separately from the rule above, because these two are the
+    ones somebody would reach for next."""
+    rules = _declarations(pages.STYLESHEET)
+    for selector in (".save", ".mast"):
+        assert "position:" not in rules[selector], f"{selector} was pinned"
+
+
+def test_the_players_offset_is_derived_from_the_bands_own_declarations():
+    """A copied number drifts the moment the band's padding changes, and
+    the failure is a player sitting nine pixels behind the bar — visible
+    only on a scrolled page, which is the one nobody screenshots."""
+    rules = _declarations(pages.STYLESHEET)
+    root, band, steps = rules[":root"], rules[".stepband"], rules[".steps a"]
+
+    assert "--stepband: calc(" in root
+    for part in ("1.1rem", ".6rem"):
+        assert part in band, f"the band no longer declares {part}; --stepband is now wrong"
+    assert ".55rem" in steps and ".72rem" in steps
 
 
 def test_the_file_picker_has_no_voice():

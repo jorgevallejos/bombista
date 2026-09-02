@@ -937,3 +937,64 @@ def test_the_report_download_renders_from_a_staging_dir_that_only_has_the_siblin
     assert "2026-08-14T20:55:00+02:00" in report
     assert "ab" * 32 in report
     assert "unknown" in report, "the keys the sibling does not carry are said, not guessed"
+
+
+# ── Where a page-1 run works, when the caller named a directory ────────────────
+#
+# journey-setup step 6, 2026-09-02. The default is a cache under
+# ~/.cache/bombista, which is right for running Bombista on its own and wrong
+# for a caller that means to read the `<stem>.json` `Save to the catalogue`
+# writes back out: it would have to know this module's cache layout to find the
+# file. `serve --staging` is a directory in and a file path on the page — the
+# whole of what passes.
+
+
+def test_a_run_works_in_the_directory_the_caller_named(serve_client, libertad, tmp_path):
+    named = tmp_path / "named-staging"
+    client = serve_client(None, staging=named)
+
+    with mock.patch.object(server, "transcribe_words", return_value=words_for(libertad["lines"])):
+        _start(client, libertad)
+        wait_for(client, "done")
+
+    assert (named / "asr-words.jsonl").exists()
+    _, payload, _ = client.get("/api/session")
+    assert payload  # the session is the run's, and it is in the named directory
+
+
+def test_the_page_names_the_file_it_will_write_in_that_directory(
+    serve_client, libertad, tmp_path
+):
+    """`Save to the catalogue` writes `<staging>/<stem>.json`, and the page
+    prints the path before the press. That is the file the caller promotes."""
+    named = tmp_path / "named-staging"
+    client = serve_client(None, staging=named)
+
+    with mock.patch.object(server, "transcribe_words", return_value=words_for(libertad["lines"])):
+        _start(client, libertad)
+        wait_for(client, "done")
+
+    _, body, _ = client.get("/output", raw=True)
+    assert str(named / f"{libertad['song_path'].stem}.json") in body
+
+
+def test_the_body_still_wins_over_the_named_directory(serve_client, libertad, tmp_path):
+    named = tmp_path / "named-staging"
+    client = serve_client(None, staging=named)
+
+    with mock.patch.object(server, "transcribe_words") as transcribe:
+        _start(client, libertad, staging=str(libertad["staging"]))
+        wait_for(client, "done")
+
+    assert not transcribe.called  # it used the body's directory, which is cached
+    assert not named.exists()
+
+
+def test_without_a_named_directory_the_cache_is_unchanged(serve_client, libertad, staging_root):
+    client = serve_client(None)
+
+    with mock.patch.object(server, "transcribe_words", return_value=words_for(libertad["lines"])):
+        _start(client, libertad)
+        wait_for(client, "done")
+
+    assert (staging_root / libertad["song_path"].stem / "asr-words.jsonl").exists()

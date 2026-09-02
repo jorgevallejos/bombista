@@ -191,3 +191,47 @@ def test_a_created_song_reports_its_timeline_as_added(tmp_path: Path):
     candidate = write(tmp_path / "libertad-song.json", full_candidate())
     outcome = promote_candidate(candidate, tmp_path / "libertad.json")
     assert outcome.diff == ["timeline added (1 entries)"]
+
+
+# ── The file the song flow ends on, and it is not `align`'s ────────────────────
+#
+# journey-setup step 6, 2026-09-02. `Save to the catalogue` emits a NEW file
+# beside `align`'s `<stem>-song.json` — never over it, invariant 6 — and it is
+# the only one carrying page 2's refinements. Promoting `align`'s output instead
+# would silently merge the unreviewed timeline, which is the failure the whole
+# round removes. So the file the flow ends on has to be promotable, and until
+# this it was refused for not being named like the file it deliberately is not.
+
+
+def test_creates_a_song_from_the_file_an_emit_wrote(tmp_path: Path):
+    candidate = write(tmp_path / "libertad.json", full_candidate())
+    target = tmp_path / "catalogue" / "libertad.json"
+
+    promote_candidate(candidate, target)
+
+    assert json.loads(target.read_text())["lyrics"] == [{"es": "una línea"}]
+
+
+def test_an_emitted_candidate_may_still_only_become_its_own_name(tmp_path: Path):
+    """Not a loosening of the id rule. `libertad.json` may become
+    `libertad.json` and nothing else — the id still comes from the candidate
+    rather than from whoever is calling."""
+    candidate = write(tmp_path / "libertad.json", full_candidate())
+    target = tmp_path / "catalogue" / "otro.json"
+
+    with pytest.raises(ValueError) as exc:
+        promote_candidate(candidate, target)
+
+    assert "libertad.json" in str(exc.value)
+    assert not target.exists()
+
+
+def test_a_candidate_that_is_not_json_at_all_is_still_refused(tmp_path: Path):
+    candidate = write(tmp_path / "libertad.txt", full_candidate())
+    target = tmp_path / "libertad.json"
+
+    with pytest.raises(ValueError) as exc:
+        promote_candidate(candidate, target)
+
+    assert "-song.json" in str(exc.value)
+    assert not target.exists()

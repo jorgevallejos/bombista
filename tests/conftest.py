@@ -191,10 +191,10 @@ def serve_client():
     """Start a real server on an ephemeral loopback port and drive it."""
     started = []
 
-    def start(session=None):
+    def start(session=None, staging=None):
         from bombista import server
 
-        httpd = server.create_server(session, port=0)
+        httpd = server.create_server(session, port=0, staging=staging)
         thread = threading.Thread(
             target=httpd.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True
         )

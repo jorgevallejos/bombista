@@ -1000,10 +1000,24 @@ class Holder:
     """The one mutable thing the handler class closes over: the session
     being reviewed, and the run producing it."""
 
-    def __init__(self, session: Session | None = None) -> None:
+    def __init__(self, session: Session | None = None, staging: Path | None = None) -> None:
         self.session = session
         self.run: Run | None = None
         self.home = str(Path.home())
+        self.staging = staging
+        """Where a run started from page 1 stages its working files, when
+        the caller named a directory (`serve --staging`).
+
+        **It exists because the caller may need to promote from it.** The
+        default below is a cache under `~/.cache/bombista`, which is the
+        right answer for somebody running Bombista on its own and the
+        wrong one for a caller that intends to read the emitted
+        `<stem>.json` back out — it would have to know this module's cache
+        layout to find it. A path in, a path out: the caller says where
+        the run works, and the page prints the file it will write there.
+
+        Bombista learns nothing about who is calling. This is a directory
+        and nothing else."""
 
 
 DEFAULT_STAGING_ROOT = Path.home() / ".cache" / "bombista"
@@ -1041,7 +1055,14 @@ def start_run(holder: Holder, body: dict) -> dict:
             f"{', '.join(declared)}"
         )
 
-    staging = Path(body["staging"]) if body.get("staging") else DEFAULT_STAGING_ROOT / lyrics.stem
+    # The body wins, then the directory the caller named on the command line, then
+    # the cache. The last is the standalone default and stays exactly as it was.
+    if body.get("staging"):
+        staging = Path(body["staging"])
+    elif holder.staging is not None:
+        staging = holder.staging
+    else:
+        staging = DEFAULT_STAGING_ROOT / lyrics.stem
     request = {
         "lyrics": str(lyrics),
         "media": str(media),
@@ -1556,13 +1577,21 @@ class _NoSession(Exception):
 
 
 def create_server(
-    session: Session | None = None, *, port: int = 0, host: str = LOOPBACK_HOST
+    session: Session | None = None,
+    *,
+    port: int = 0,
+    host: str = LOOPBACK_HOST,
+    staging: Path | None = None,
 ) -> ThreadingHTTPServer:
     """A threading HTTP server bound to the loopback interface.
 
     *session* is optional: `serve` with a staging directory boots straight
     into a review (PR 2's development seam), and `serve` with nothing at
     all starts the user at step 1, where page 1 makes the session.
+
+    *staging* is where a run started from page 1 does its work. See
+    `Holder.staging`: it is for a caller that means to read the emitted
+    `<stem>.json` back out, and the default cache is unchanged without it.
 
     *host* is explicit and takes exactly one value (invariant 7): the
     argument exists so the bind address is visible at every call site, not
@@ -1579,5 +1608,5 @@ def create_server(
             "and nothing else (the audio never leaves this machine)"
         )
 
-    handler = type("_SessionHandler", (_Handler,), {"holder": Holder(session)})
+    handler = type("_SessionHandler", (_Handler,), {"holder": Holder(session, staging)})
     return ThreadingHTTPServer((host, port), handler)

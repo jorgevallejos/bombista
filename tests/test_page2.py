@@ -141,11 +141,32 @@ def test_the_popup_contains_one_stepper_and_no_second_control(popup_markup):
 
 def test_the_stepper_step_is_finer_than_the_correction_loop(page2):
     """Invariant 2: the differentiator is a 0.07 s correction loop, so no
-    control and no serialisation may round coarser than that."""
+    control and no serialisation may round coarser than that.
+
+    **Unchanged by the 2026-09-02 display round.** The list shows a tenth
+    because hundredths are precision a person cannot act on, but the
+    stepper is the instrument rather than the readout: it edits the value,
+    and a 0.1 step would put the nearest reachable correction outside the
+    loop this control exists to land inside. The popup keeps hundredths
+    for the same reason.
+    """
     step = float(re.search(r"var STEP = ([\d.]+);", page2).group(1))
 
     assert step <= 0.07
     assert step == 0.05
+
+
+def test_the_list_rounds_the_display_and_never_the_value(synthetic_session):
+    """Jorge, 2026-09-02: round the display, never the value. The stored
+    number comes from alignment and rounding it to half-seconds would put
+    a cue a quarter of a second out on lines three seconds apart."""
+    payload = server.session_payload(synthetic_session)
+    html = pages.render_rows(payload)
+    exact = payload["lines"][1]["start"]
+
+    assert f'data-start="{exact}"' in html, "the row lost the aligner's value"
+    assert f">{exact:.1f}</button>" in html, "the list is not showing a tenth"
+    assert f">{exact:.2f}</button>" not in html
 
 
 def test_the_bounds_are_the_neighbouring_lines(page2):
@@ -395,8 +416,11 @@ def test_a_hand_set_row_keeps_its_machine_value_struck_through(synthetic_session
     row = rows_of(html)[FLAGGED_LINE]
 
     assert "HAND-SET" in row
-    assert f'<span class="was mono">{MACHINE_START:.2f}</span>' in row
-    assert f">{TRUE_ONSET:.2f}</button>" in row
+    # A tenth in the list, and the full value still on the row where the
+    # popup and the re-anchor read it (2026-09-02, round the display only).
+    assert f'<span class="was mono">{MACHINE_START:.1f}</span>' in row
+    assert f">{TRUE_ONSET:.1f}</button>" in row
+    assert f'data-start="{TRUE_ONSET}"' in row, "the row must still carry the unrounded value"
 
 
 def test_the_rail_and_one_line_of_text_say_what_moved(synthetic_session):
@@ -431,7 +455,8 @@ def test_times_are_raw_audio_clock_seconds(page2, payload):
     """The clock the QA report, `--anchor` and the audio element all use.
     The cue-relative conversion happens on emit and is never shown — two
     clocks on one page is a real risk, and only one of them is visible."""
-    assert f'>{payload["lines"][0]["start"]:.2f}</button>' in page2
+    assert f'>{payload["lines"][0]["start"]:.1f}</button>' in page2
+    assert f'data-start="{payload["lines"][0]["start"]}"' in page2
     assert "raw audio-clock seconds" in visible_text(page2)
 
 

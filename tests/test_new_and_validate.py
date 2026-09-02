@@ -182,13 +182,16 @@ def timed(**overrides) -> dict:
     return song(**timing)
 
 
-def test_for_performance_refuses_a_song_with_no_timeline(runner, tmp_path):
+def test_for_performance_names_the_mode_of_a_song_with_no_timeline(runner, tmp_path):
+    """**Reversed 2026-09-02**, and the exit code is the point: a manual
+    song is performable, so the gate must not fail. What it prints becomes
+    a claim about WHICH performance."""
     result = runner.invoke(
         main, ["validate", str(write(tmp_path, song(tempo=REAL_TEMPO))), "--for-performance"]
     )
 
-    assert result.exit_code == 1
-    assert "timeline" in result.output
+    assert result.exit_code == 0
+    assert "manual only: no timeline" in result.output
 
 
 def test_for_performance_passes_a_finished_song(runner, tmp_path):

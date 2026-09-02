@@ -517,6 +517,44 @@ def test_the_lyrics_route_reports_what_page_1_should_prefill(client, libertad):
     assert "title_translations" not in info
 
 
+def test_an_edit_prefills_the_take_the_file_was_aligned_against(
+    serve_client, libertad, tmp_path
+):
+    """**Being asked is not the problem; being asked silently is** (Jorge,
+    2026-09-02). The lyrics field prefilled on an edit and this one did
+    not, so nothing said whether the app had forgotten the take or was
+    waiting to be told. The staging directory's own record of what a run
+    listened to is the exact answer."""
+    from bombista.provenance import build_provenance, words_meta
+
+    staging = libertad["staging"]
+    save_words(
+        libertad["words"],
+        staging / "asr-words.jsonl",
+        meta=words_meta(
+            build_provenance(libertad["audio"], model_size="tiny", lang="es"),
+            libertad["audio"],
+        ),
+    )
+    client = serve_client(None, staging=staging)
+
+    _, payload, _ = client.get("/api/lyrics?path=" + str(libertad["song_path"]))
+
+    assert payload["media"]["path"] == str(libertad["audio"].resolve())
+    assert payload["media"]["name"] == libertad["audio"].name
+
+
+def test_the_take_is_not_guessed_when_nothing_recorded_one(serve_client, libertad):
+    """Never another file. A prefill that quietly named a different
+    recording would make every judgement about it wrong, and the person
+    would not know."""
+    client = serve_client(None)
+
+    _, payload, _ = client.get("/api/lyrics?path=" + str(libertad["song_path"]))
+
+    assert payload["media"] is None
+
+
 def test_a_txt_prefills_a_title_seeded_from_the_slug(client, tmp_path):
     """`hasta-calmar-el-alma` -> `Hasta calmar el alma`, which is what
     `bombista new` seeds. Two doors into the same tool should not disagree
@@ -624,6 +662,160 @@ def test_a_run_that_says_nothing_about_the_song_changes_nothing(client, libertad
 
     for key in ("title", "artist", "notes", "title_translations"):
         assert emitted[key] == libertad["song"][key]
+
+
+# ---------------------------------------------------------------------------
+# a song with no recording — legitimate, and performed by hand (2026-09-02)
+# ---------------------------------------------------------------------------
+
+
+def test_a_run_with_no_recording_needs_no_transcription_and_leaves_a_session(
+    serve_client, tmp_path, staging_root
+):
+    """**A song with words and no recording is a legitimate song.** It is
+    performed by advancing the lines by hand. There is nothing to align,
+    so `transcribe_words` must never be reached — and if it were, the
+    absence of a recording would be an error rather than a mode."""
+    client = serve_client(None)
+    txt = tmp_path / "cancion.txt"
+    txt.write_text("uno dos\ntres cuatro\n", encoding="utf-8")
+
+    with mock.patch.object(server, "transcribe_words") as never:
+        status, _, _ = client.post(
+            "/api/run",
+            {"lyrics": str(txt), "lang": "es", "model": "tiny", "info": {"title": "Canción"}},
+        )
+        assert status == 200
+        wait_for(client, "done")
+
+    assert not never.called, "a song with no recording was sent to the transcriber"
+
+
+def test_the_run_reports_both_phases_as_skipped_rather_than_done(
+    serve_client, tmp_path, staging_root
+):
+    """Page 1.5 is a state, not a spinner (§9.4). A run that said *done*
+    about work it never did would be that page lying about the only thing
+    it exists to show."""
+    client = serve_client(None)
+    txt = tmp_path / "cancion.txt"
+    txt.write_text("uno dos\n", encoding="utf-8")
+
+    client.post("/api/run", {"lyrics": str(txt), "lang": "es", "info": {"title": "C"}})
+    payload = wait_for(client, "done")
+
+    assert [phase["state"] for phase in payload["phases"]] == ["skipped", "skipped"]
+
+
+def test_the_review_sends_a_manual_song_straight_to_the_output(
+    serve_client, tmp_path, staging_root
+):
+    """There is no timeline to review. A page of empty rows would be the
+    flow pretending a step happened."""
+    client = serve_client(None)
+    txt = tmp_path / "cancion.txt"
+    txt.write_text("uno dos\n", encoding="utf-8")
+
+    client.post("/api/run", {"lyrics": str(txt), "lang": "es", "info": {"title": "C"}})
+    wait_for(client, "done")
+    status, _, headers = client.get("/review")
+
+    assert status == 303
+    assert headers["Location"] == "/output"
+
+
+def test_a_manual_song_carries_none_of_the_five_timing_keys(
+    serve_client, tmp_path, staging_root
+):
+    """Not even `linesHash`, which guards a timeline that is not there, and
+    not `timelineSignedOff`, which would claim a human reviewed one."""
+    client = serve_client(None)
+    txt = tmp_path / "cancion.txt"
+    txt.write_text("uno dos\ntres cuatro\n", encoding="utf-8")
+
+    client.post(
+        "/api/run",
+        {
+            "lyrics": str(txt),
+            "lang": "es",
+            "info": {"title": "Canción", "artist": "Chango Pepper"},
+            "tempo": {"bpm": 120, "numerator": 4, "denominator": 4, "countInBars": 0},
+        },
+    )
+    wait_for(client, "done")
+    _, payload, _ = client.get("/api/download?kind=song", raw=True)
+    emitted = json.loads(payload)
+
+    for key in ("linesHash", "timelineSignedOff", "timelineVersion", "leadIn", "timeline"):
+        assert key not in emitted, f"a song with no recording carries {key}"
+    assert emitted["title"] == "Canción"
+    assert emitted["artist"] == "Chango Pepper"
+    assert emitted["lyrics"] == [{"es": "uno dos"}, {"es": "tres cuatro"}]
+    assert emitted["tempo"] == {"bpm": 120, "numerator": 4, "denominator": 4}
+
+
+def test_the_file_a_manual_song_saves_passes_the_performance_gate_as_manual(
+    serve_client, tmp_path, staging_root
+):
+    """The whole point: this file is performable. The gate names the mode
+    and does not refuse it, so nothing downstream drops the song."""
+    from bombista.validation import errors, load_and_validate, modes
+
+    client = serve_client(None)
+    txt = tmp_path / "cancion.txt"
+    txt.write_text("uno dos\ntres cuatro\n", encoding="utf-8")
+
+    client.post("/api/run", {"lyrics": str(txt), "lang": "es", "info": {"title": "Canción"}})
+    wait_for(client, "done")
+    _, written = client.post("/api/emit", {"out": str(tmp_path / "out.json")})[:2]
+
+    found = load_and_validate(tmp_path / "out.json", for_performance=True)
+
+    assert errors(found) == []
+    assert [f.where for f in modes(found)] == ["timeline"]
+
+
+def test_a_manual_song_offers_no_timeline_and_no_report_download(
+    serve_client, tmp_path, staging_root
+):
+    """There is no timeline to paste and no bands to report. Offering
+    either would hand over an empty file or a refusal."""
+    client = serve_client(None)
+    txt = tmp_path / "cancion.txt"
+    txt.write_text("uno dos\n", encoding="utf-8")
+
+    client.post("/api/run", {"lyrics": str(txt), "lang": "es", "info": {"title": "C"}})
+    wait_for(client, "done")
+
+    assert client.get("/api/download?kind=song")[0] == 200
+    for kind in ("timeline", "report"):
+        status, payload, _ = client.get(f"/api/download?kind={kind}")
+        assert status == 400, f"{kind} was offered on a song with no recording"
+        assert "no recording" in payload["error"]
+
+
+def test_the_output_page_says_the_song_is_advanced_by_hand(
+    serve_client, tmp_path, staging_root
+):
+    """One caption cannot claim a timeline that is not there. The second
+    ending says what will happen on the night rather than what is missing
+    from the file — and the step bar says step 2 was skipped rather than
+    implying a review happened."""
+    client = serve_client(None)
+    txt = tmp_path / "cancion.txt"
+    txt.write_text("uno dos\n", encoding="utf-8")
+
+    client.post("/api/run", {"lyrics": str(txt), "lang": "es", "info": {"title": "C"}})
+    wait_for(client, "done")
+    page = client.get("/output")[1]
+
+    assert "advanced by hand during the performance" in page
+    assert "skipped" in page
+    assert 'id="dl-timeline"' not in page
+    assert 'id="save"' in page
+    # `/review` would only send you back here, and a link that returns you
+    # to the page you are on is the flow pretending a step exists.
+    assert 'href="/review"' not in page
 
 
 def test_a_txt_run_emits_the_from_scratch_shape(serve_client, libertad, tmp_path):

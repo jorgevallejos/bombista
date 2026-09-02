@@ -50,6 +50,8 @@ from .writers import ENVELOPE_KEYS
 __all__ = [
     "Finding",
     "REQUIRED_SONG_FIELDS",
+    "MODE",
+    "modes",
     "TEMPO_KEYS",
     "REQUIRED_TEMPO_KEYS",
     "without_zero_count_in",
@@ -66,6 +68,19 @@ __all__ = [
 
 ERROR = "error"
 WARNING = "warning"
+MODE = "mode"
+"""Not a problem at all — a **property of the song**, reported so the
+verdict says which performance it is a verdict about.
+
+Added 2026-09-02 for `manual only: no timeline`. A song with words and no
+timeline is a legitimate song, performed by advancing the lines by hand,
+and calling it *not ready* was the gate answering a question nobody asked:
+ready for **which** night? A mode is not a warning either — nothing here
+wants fixing, and a warning invites someone to fix it (journey-setup,
+*where a message goes, decided by what caused it*).
+
+It never fails a gate. `has_errors` ignores it, so `bombista validate
+--for-performance` exits zero on a manual song."""
 
 
 @dataclass(frozen=True)
@@ -136,6 +151,11 @@ def errors(findings: Iterable[Finding]) -> list[Finding]:
 
 def warnings(findings: Iterable[Finding]) -> list[Finding]:
     return [f for f in findings if f.severity == WARNING]
+
+
+def modes(findings: Iterable[Finding]) -> list[Finding]:
+    """The song's properties, not its problems. See `MODE`."""
+    return [f for f in findings if f.severity == MODE]
 
 
 def has_errors(findings: Iterable[Finding]) -> bool:
@@ -394,13 +414,19 @@ def _validate_timeline(song: dict, *, lyric_count: int, for_performance: bool) -
         # The 11-song regression case named in the contract: a song with no
         # timeline and no version is a perfectly normal un-timed song.
         if for_performance:
+            # **Not a refusal** (Jorge, 2026-09-02). A song with words and no
+            # timeline is performed by advancing the lines by hand, which is
+            # a normal night — so the gate names the mode instead of turning
+            # the song away. What `--for-performance` prints is a claim about
+            # WHICH performance, not about whether there can be one.
             return [
                 Finding(
-                    ERROR,
+                    MODE,
                     "timeline",
-                    "no timeline — a song without one cannot be displayed, and "
-                    "cannot enter a setlist. Run `bombista align`, then "
-                    "`bombista promote`.",
+                    "manual only: no timeline — the lines are advanced by hand "
+                    "during the performance. Add a recording and run `bombista "
+                    "align`, then `bombista promote`, to have them follow the "
+                    "audio on their own.",
                 )
             ]
         return []
@@ -549,7 +575,7 @@ def validate_song(
                 "tempo",
                 "no tempo block — pedal-driven mode works without one, but the "
                 "beat indicator, the count-in and clock-driven mode all need "
-                "it. Type it in on `bombista serve`'s review page.",
+                "it. Type it in on `bombista serve`'s first page.",
             )
         )
 
@@ -623,16 +649,23 @@ def render_findings(path: Path | str, findings: Sequence[Finding]) -> list[str]:
     """
     problems = errors(findings)
     notes = warnings(findings)
+    properties = modes(findings)
 
     if problems:
         head = f"{path}: {len(problems)} problem{'' if len(problems) == 1 else 's'}"
     else:
         head = f"{path}: ok"
+    # The mode joins the headline rather than the list below it, because it
+    # qualifies the verdict rather than adding to it: `ok — manual only`
+    # says which performance this file is ready for.
+    for found in properties:
+        head += f" — {found.message.split(' — ')[0]}"
     if notes:
         head += f" ({len(notes)} warning{'' if len(notes) == 1 else 's'})"
 
     lines = [head]
     lines.extend(f"  {f.where}: {f.message}" for f in problems)
+    lines.extend(f"  {f.where}: {f.message}" for f in properties)
     lines.extend(f"  warning — {f.where}: {f.message}" for f in notes)
     return lines
 

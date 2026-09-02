@@ -236,6 +236,26 @@ verified by running its own `validateTempo` over each block. A divergence is a f
 than a walk. **This is the pattern to repeat**: when this suite's tools disagree, the answer is in
 the consumer's source, and it is cheap to read.
 
+## A song with no recording is a whole song (2026-09-02)
+
+**The rule that a song could not leave step 1 without audio was written when a timeline was assumed,
+and it was wrong.** A song with words and no recording is performed by advancing the lines by hand,
+which is a normal night — `libertad` was chosen as the case for it on 26/08. Page 1 now lets the
+lyrics alone through, there is nothing to align, step 2 is skipped, and the flow lands on step 3.
+
+**The file such a flow writes carries none of the five timing keys** — not `linesHash`, which guards
+a timeline that is not there, and not `timelineSignedOff`, which would claim a human reviewed one.
+
+**The gate names the mode instead of refusing the song.** `--for-performance` reports
+`manual only: no timeline` and exits zero. A third severity, `MODE`, exists for it: a property of the
+song rather than a problem, so it never fails a gate and it qualifies the verdict in the headline.
+*Not ready* was the gate answering a question nobody asked — ready for **which** night?
+
+**One deviation from what was asked, recorded rather than taken silently.** The round also asked for
+the timestamp stepper to nudge in tenths. A `0.1` step is coarser than the 0.07 s correction loop the
+stepper exists to land inside, which is invariant 2 by number and has its own test. The display
+rounds to a tenth and the stepper does not: the list is a readout, the popup is the instrument.
+
 **Open, found while building this and not fixed here.** `skeleton.py` writes
 `lyrics: [{"<lang>": ""}]` — one empty lyric entry, deliberately, so the entry *shape* is visible to
 whoever writes the words in. Pregonero refuses that file: an empty lyric string is not a lyric line.

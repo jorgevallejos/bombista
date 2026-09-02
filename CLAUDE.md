@@ -140,8 +140,11 @@ bombista/
                    does not translate.
   aligner.py     — faster-whisper transcription → list[Word]; JSONL save/load, plus
                    the sibling `asr-words.meta.json` (B20 §11.10/§11.11): when the
-                   machine listened, with which model, and the ABSOLUTE path of the
-                   take. The JSONL is bare records with no header and adding one
+                   machine listened, with which model, the ABSOLUTE path of the
+                   take, and WHICH SONG it was made for (`song`, 2026-09-02).
+                   Without that last one the sibling can only answer questions
+                   about a folder, and it was asked one about a song — see
+                   §11.19. The JSONL is bare records with no header and adding one
                    would break every reader, so the facts go beside it — in a file,
                    not an mtime, because an mtime does not survive a copy. This
                    module builds neither dict; provenance.py does
@@ -281,6 +284,17 @@ bombista/
                    `_place_info` applies: absent means the song was never asked
                    and passes through byte for byte, a posted empty field clears
                    the key, and a language the page did not offer is left alone.
+                   `previous_take` answers WHICH RECORDING THIS SONG was
+                   aligned against, and the emphasis is the bug (§11.19): it
+                   read the staging directory's meta with no reference to the
+                   song, so a shared staging directory handed every song the
+                   last one's take — a `.txt` arrived with a recording, the
+                   consent popup was skipped and one song's words were
+                   anchored against another's audio. A `.txt` now gets
+                   nothing, `media.src` comes first, and the meta records
+                   `song` so it can be asked about a song rather than a
+                   folder. The transcription cache is checked the same way:
+                   reused only when the meta names THIS run's take.
                    `default_out_path` is THE answer to where a write with no path
                    of its own lands — page 3 names it and /api/emit writes it, so
                    the promise and the write cannot disagree. Imports

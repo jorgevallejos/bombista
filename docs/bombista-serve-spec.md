@@ -1796,6 +1796,66 @@ record of what a run listened to, with an absolute path — and failing that fro
 another file**: the same rule `audio_path_for` follows. Being asked is not the problem; being asked
 silently is.
 
+## 11.19 The take that came from the last run (2026-09-02)
+
+**`v1.6.0` reported the no-recording path as built and tested, and it did not take.** Jorge chose a
+lyrics file, left the media source empty and pressed `Process song`: no consent popup, no skipped
+review, and a full review with every line `no-anchor` against a 2:40 player, on a page that had
+shown `0:00 / 0:00` a moment earlier.
+
+### The cause
+
+**`previous_take` answered a question about a folder when it was asked one about a song.** §11.18
+added it so an edit would prefill the take the file was aligned against, and it read that take out
+of `asr-words.meta.json` in the staging directory — **with no reference to which song was being
+described**. A staging directory is not necessarily one song's: `serve --staging` takes one
+directory and a caller may open every song in it. So picking *any* lyrics file, a `.txt` that had
+never been aligned against anything included, ran `describe` → `/api/lyrics` → the previous run's
+recording → `prefill` set `state.media`. From there every symptom follows in order: the press saw a
+media source, so the consent popup was skipped by design; the run was not manual, so the review was
+not skipped; the words of one song were anchored against the audio of another, so every line came
+back `no-anchor`; and the transport read `0:00 / 0:00` only because the prefill had just set a `src`
+that had not loaded its metadata yet. Reproduced exactly before anything was changed.
+
+**A second defect of the same family was found while fixing it.** `Run._work` reused
+`asr-words.jsonl` whenever the file existed, **without checking it was a transcription of this
+run's take** — the walk's own run reported `transcribe=cached` while anchoring against the previous
+song's word stream. That is §11.11's wrong-take rule broken through the cache instead of the player:
+the machine reports it listened, and it listened to something else.
+
+### The repair
+
+- **A plain text file never gets a media prefill.** A `.txt` carries no record of any recording, so
+  there is no honest source for one.
+- **The song file's own `media.src` comes first**, resolved beside the file and in the pickers'
+  directory. It is the file's own statement about its take.
+- **`asr-words.meta.json` now records `song`**, the lyrics file the transcription was made for, so
+  the sibling can answer a per-song question. A meta that names another song, or names none, is not
+  a match — **an unknown provenance answers no.**
+- **A cached transcription is reused only when the meta names this run's take.** Re-transcribing
+  costs ninety seconds; using the wrong words costs a timeline nobody can tell is wrong.
+
+### The guard
+
+Written for the **class**, in the spirit of the missing-id test §11.16 added for `Confirm timeline`:
+*what `/api/lyrics` says about a file must not depend on what the server did before it.* Describing a
+file on a server that has just run another song must equal describing it on a server that has run
+nothing — over the whole payload, so the same leak reaching a title or a tempo is caught too. It
+points at an **empty** staging directory on purpose: aimed at one that already held a take, both
+answers would be equally wrong and the test would pass. All four guards were verified against the
+reintroduced bug.
+
+## 11.20 Page 3's order, corrected (2026-09-02)
+
+`Save to the catalogue` went **above** the JSON box in `v1.6.0` because it was below the fold. That
+was the wrong repair, and the right one was already in the same change: **a shorter explanation, not
+a different order** (Jorge). The page reads as the file, then what to do with it — box, `Save`, then
+the downloads, which stay after it because it is the way through and they are an escape hatch.
+
+What makes *after the box* survivable is that the box is **bounded**: `max-height` with its own
+scroll, so the file is still shown in full with no fold and a long song does not push the button off
+the screen the way a paragraph did. Both the order and the one-sentence captions are pinned.
+
 ## 12. What *using* it found
 
 §11 is what building B20 found. This is what the first real sessions found — a different and more

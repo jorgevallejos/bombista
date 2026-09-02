@@ -965,7 +965,22 @@ class Run:
                 self.state = "done"
                 return
 
-            if words_path.exists():
+            # **Cached only when it is a transcription of THIS take.** The
+            # words file is a transcription of one recording, and a staging
+            # directory may be reused for another — `serve --staging` takes
+            # one directory and a caller may open every song in it. Reusing
+            # it regardless is the same wrong-take failure §11.11 forbids
+            # for the player, arriving through the cache instead: the
+            # machine reports it listened and it listened to something
+            # else.
+            filed = (load_words_meta(words_path) or {}).get("audio")
+            same_take = (
+                words_path.exists()
+                and isinstance(filed, str)
+                and Path(filed) == media.resolve()
+            )
+
+            if same_take:
                 # §9.4's one line of copy, and the whole ergonomics of the
                 # correction loop: the slow part is cached, so coming back
                 # is a second rather than ninety.
@@ -994,6 +1009,7 @@ class Run:
                             lang=self.request["lang"],
                         ),
                         media,
+                        Path(self.request["lyrics"]),
                     ),
                 )
                 self._finish("transcribe")
@@ -1184,38 +1200,82 @@ def _declared(normalised) -> list[str]:
 def previous_take(
     lyrics_path: Path, *, staging: Path | None, browse_from: Path | None
 ) -> dict | None:
-    """The recording this song was last aligned against, if it can be
+    """The recording **this song** was last aligned against, if it can be
     found — `{"path": ..., "name": ...}` or None.
 
     **Being asked is not the problem; being asked silently is** (Jorge,
     2026-09-02). On an edit the lyrics field prefilled and this one did
-    not, so nothing on the screen said whether the app had forgotten the
-    take or was waiting to be told. It stays changeable either way:
-    re-aligning against a different take is the normal reason to edit a
-    song, not an edge case.
+    not, so nothing said whether the app had forgotten the take or was
+    waiting to be told. It stays changeable: re-aligning against a
+    different take is the normal reason to edit a song.
 
-    Two sources, in this order, each reached only when the one above
-    yields nothing:
+    **The question is per SONG, and the first version of this answered a
+    per-DIRECTORY one** — it read the take out of `asr-words.meta.json`
+    with no reference to which song was being described, so a staging
+    directory shared between songs handed every one of them the last
+    song's recording. Walked 2026-09-02: a `.txt` that had never been
+    aligned against anything arrived with a 2:40 take attached, the
+    consent popup never appeared because a media source was set, and the
+    review came back with every line `no-anchor`. Two sources now, both of
+    them about this song:
 
-    1. **`asr-words.meta.json` in the staging directory**, which records
-       the ABSOLUTE path of the take a run listened to (§11.11). It is
-       this tool's own record of the answer, and it is exact.
-    2. **The song's own `media.src`**, which is a logical filename rather
-       than a path, so it is looked for beside the song file and in the
-       directory the pickers open in — and nowhere else, because guessing
-       more widely is how a player ends up on the wrong take.
+    1. **The song's own `media.src`**, which is the file's own statement
+       about its take. It is a logical filename rather than a path, so it
+       is looked for beside the song file and in the directory the pickers
+       open in — and nowhere else, because guessing more widely is how a
+       player ends up on the wrong take.
+    2. **`asr-words.meta.json`, but only when it names this song.** The
+       meta records which lyrics file the transcription was made for, so
+       it can be asked a question about a song rather than about a folder.
+
+    **A plain text file gets nothing, ever.** A `.txt` carries no record of
+    any recording, so there is no honest source for one — and it is the
+    case the walk broke on.
 
     **Never another file.** The same rule `audio_path_for` follows: a
-    prefill that quietly names a different recording would make every
+    prefill that quietly named a different recording would make every
     judgement about it wrong, and the person would not know.
     """
-    if staging is not None:
-        filed = (load_words_meta(staging / WORDS_FILENAME) or {}).get("audio")
-        if isinstance(filed, str) and filed and Path(filed).is_file():
-            return {"path": str(Path(filed).resolve()), "name": Path(filed).name}
-
     if lyrics_path.suffix.lower() != ".json":
         return None
+
+    found = _declared_media(lyrics_path, browse_from=browse_from)
+    if found is not None:
+        return found
+
+    if staging is None:
+        return None
+    meta = load_words_meta(staging / WORDS_FILENAME) or {}
+    if not _meta_is_for(meta, lyrics_path):
+        return None
+    filed = meta.get("audio")
+    if isinstance(filed, str) and filed and Path(filed).is_file():
+        return {"path": str(Path(filed).resolve()), "name": Path(filed).name}
+    return None
+
+
+def _meta_is_for(meta: dict, lyrics_path: Path) -> bool:
+    """Whether a staging directory's transcription was made for *this*
+    song's words.
+
+    A staging directory is not necessarily one song's: `serve --staging`
+    takes one directory and a caller may reuse it for every song it opens.
+    So the meta has to say which song it belongs to, and a meta written
+    before it recorded that says nothing rather than yes — **an unknown
+    provenance is not a match.**
+    """
+    named = meta.get("song")
+    if not isinstance(named, str) or not named:
+        return False
+    try:
+        return Path(named).resolve() == lyrics_path.resolve()
+    except OSError:
+        return False
+
+
+def _declared_media(lyrics_path: Path, *, browse_from: Path | None) -> dict | None:
+    """The song file's own `media.src`, resolved beside the file and in the
+    directory the pickers open in."""
     try:
         declared = json.loads(lyrics_path.read_text(encoding="utf-8")).get("media")
     except (OSError, ValueError):

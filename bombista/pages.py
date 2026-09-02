@@ -40,7 +40,7 @@ __all__ = [
     "render_output",
 ]
 
-VERSION = "v1.6.0"
+VERSION = "v1.6.1"
 """The masthead's version string — the package version with a `v` in front.
 
 It is a second copy of what `pyproject.toml` declares, and a second copy
@@ -430,7 +430,7 @@ tr.divider td { background: var(--bg); border-bottom: none;
    bytes and choose no path, this one writes a file. The path is printed
    before the press and again after it, because *the catalogue* is a name and
    a file is a fact. */
-.save { margin: 1.7rem 0 1.9rem; padding-bottom: 1.5rem;
+.save { margin: 1.5rem 0 1.9rem; padding-bottom: 1.6rem;
         border-bottom: 1px solid var(--line-2);
         display: flex; flex-direction: column; gap: .5rem; align-items: flex-start; }
 .dlhead { margin: 0 0 .2rem; }
@@ -1993,11 +1993,16 @@ def render_output(
     that returns you to the page you are on is the flow pretending a step
     exists.
 
-    **`Save to the catalogue` is step 6's addition, and since the walk of
-    2026-09-02 it sits ABOVE the three downloads rather than below them.**
-    It is the ending of the flow and they are an escape hatch; under them,
-    the page offered three ways out before the way through. It still does
-    not replace them (journey-setup, 2026-09-02). The words are chosen for two reasons: the flow is not
+    **`Save to the catalogue` sits after the JSON box and before the three
+    downloads.** It was moved above the box on 2026-09-02 to be reachable
+    at all, behind a paragraph explaining what a `.txt` can honestly
+    supply — and that was the wrong repair: **the answer is a shorter
+    explanation, not a different order** (Jorge, the same day). The page
+    reads as the file, then what to do with it, and each caption is one
+    sentence, which is what makes the button visible without scrolling.
+
+    It stays ahead of the downloads: it is the way through and they are an
+    escape hatch. The words are chosen for two reasons: the flow is not
     always about a new song — it is also how an existing one is edited,
     which rules out *Add to the library* — and on a screen where
     everything else hands over bytes, naming the destination is the
@@ -2024,6 +2029,9 @@ def render_output(
 
 <p class="hint">{caption}</p>
 
+<div class="jsonhead"><span class="fn">{html_escape(filename)}</span></div>
+<pre class="json" id="json">{html_escape(rendered)}</pre>
+
 <div class="save">
   <button type="button" class="btn1" id="save">Save to the catalogue</button>
   <p class="hint">This is the way out. It writes the file above — nothing you loaded is
@@ -2031,9 +2039,6 @@ def render_output(
   <p class="path mono" id="savepath">{html_escape(save_path)}</p>
   <p class="sstate" id="savestate"></p>
 </div>
-
-<div class="jsonhead"><span class="fn">{html_escape(filename)}</span></div>
-<pre class="json" id="json">{html_escape(rendered)}</pre>
 
 <p class="hint dlhead">Or take the bytes yourself, if you keep this song somewhere else.</p>
 

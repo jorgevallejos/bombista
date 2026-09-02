@@ -94,9 +94,19 @@ def libertad(tmp_path: Path) -> dict:
 
     staging = tmp_path / "staging"
     staging.mkdir()
-    save_words(words_for(lines), staging / "asr-words.jsonl")
     song_path = tmp_path / "libertad.json"
     song_path.write_text(json.dumps(song, ensure_ascii=False, indent=2), encoding="utf-8")
+    audio = _touch(tmp_path / "libertad.m4a")
+    # The sibling a real run always leaves beside the stream, so this
+    # fixture is a staging directory that can say WHICH take it heard and
+    # WHICH song it heard it for. Without it the cache is not reused —
+    # deliberately, since a words file that cannot name its take might be
+    # a transcription of anything (2026-09-02).
+    save_words(
+        words_for(lines),
+        staging / "asr-words.jsonl",
+        meta={"audio": str(audio.resolve()), "song": str(song_path.resolve())},
+    )
 
     return {
         "staging": staging,
@@ -104,7 +114,7 @@ def libertad(tmp_path: Path) -> dict:
         "song": song,
         "lines": lines,
         "words": words_for(lines),
-        "audio": _touch(tmp_path / "libertad.m4a"),
+        "audio": audio,
     }
 
 

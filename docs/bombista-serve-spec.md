@@ -1928,6 +1928,59 @@ ninety seconds of work.
 re-runs and discards page 2's corrections — the same cost §11.15 recorded when the control moved
 there. The field message exists so nobody reaches the refusal; it is a backstop, not a workflow.
 
+## 11.23 The step bar is navigation, not a reset (2026-09-02)
+
+Page 1 rendered empty whatever the session held, so pressing `1 Input` threw away the files, the
+language, the model and everything typed about the song. **It also made §11.22's tempo backstop
+unusable**: the refusal at `Save to the catalogue` says to finish the tempo on page 1, and the only
+way to page 1 discarded the answers the refusal was about. **A backstop that cannot be acted on is a
+wall.**
+
+**Nothing new is stored.** The session has held every one of these since the run — `lyrics_path`,
+`audio_path`, `lang`, `model_size`, the general information inside `song`, `tempo` and
+`tempo_incomplete`. `answers_so_far` hands them to the page, and page 1 restores them on load.
+
+### What survives a return to step 1
+
+| answer | survives |
+|---|---|
+| the lyrics file | **yes** |
+| the recording, when there is one | **yes** |
+| the language | **yes** |
+| the model | **yes** — see below |
+| title, artist, notes | **yes** |
+| a whole tempo | **yes** |
+| **a half-typed tempo** | **yes**, which is the point |
+| step 2's hand-set corrections | **yes**, unless `Process song` is pressed again |
+
+**The model was the one answer genuinely lost**, and not by the page: the manual run path called
+`load_session` without `model_size`, so a song with no recording fell back to `medium` whatever had
+been chosen. Nothing transcribes on that path and the value is unused — but the person chose it, and
+going back keeps every answer or it keeps none of them.
+
+**Returning to the page does not re-read the file.** `describe` still runs, because the language
+options must stay constrained by what the file declares and the stripped-line count must still show
+— but its prefill is skipped. Coming back to this page is not choosing a file again, and what was
+typed is the person's.
+
+**Where a run has happened, the cost of re-running is stated.** A new run re-anchors from the
+machine's timings, so step 2's corrections go; the page says how many rather than discarding them in
+silence. **With no recording there is nothing to redo and nothing is said** — going back is free,
+which is the case that made this defect matter.
+
+### Leaving by `Back` — reported, not repaired
+
+Out of scope by instruction, and the answer is that **none of this survives it**. Pregonero's
+`SongFlowView` calls `bombista:stopFlow`, which kills the `serve` child process; `bombista:startFlow`
+also stops any existing one first, so re-entering is always a fresh process. The session is in that
+process's memory and nothing about page 1's answers is written to disk.
+
+**What does survive in the staging directory** is `asr-words.jsonl` and its sibling — so a re-entry
+pointed at the same `--staging` keeps the transcription cache and, for an SP JSON, the media
+prefill. The typed answers are not there. Two ways to close it, both Jorge's call: keep the process
+alive across `Back`, or have `serve` persist page 1's answers into the staging directory and restore
+them on boot. The second is a change to what Bombista writes and is not made on speculation.
+
 ## 12. What *using* it found
 
 §11 is what building B20 found. This is what the first real sessions found — a different and more

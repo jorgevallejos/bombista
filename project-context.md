@@ -297,6 +297,29 @@ and saving over a song that already exists changes nothing, silently. Not new an
 path's fault, but it is what the flow now implies and does not do. Widening `promote` past the
 timeline is a contract change, and how an edit lands is Pregonero's decision.
 
+## Going back was a reset, and it made the backstop a wall (2026-09-02)
+
+Page 1 rendered empty whatever the session held, so pressing `1 Input` discarded the files, the
+language, the model and everything typed. **The consequence was worse than the inconvenience**: the
+refusal at `Save to the catalogue` tells the person to finish the tempo on page 1, and the only way
+to page 1 threw away the answers the refusal was about. A backstop that cannot be acted on is a
+wall.
+
+**The fix stores nothing new.** The session has held every one of those answers since the run; page
+1 simply never asked for them. What was genuinely lost was the model, and not by the page — the
+manual run path never passed it to `load_session`, so a song with no recording fell back to
+`medium`. Nothing transcribes on that path and the value is unused, but the person chose it.
+
+**Where a run has happened the page says what running again costs** — step 2's corrections are
+re-anchored away — rather than discarding them in silence. With no recording there is nothing to
+redo and nothing is said.
+
+**Leaving by `Back` is a different problem and none of this survives it.** Pregonero kills the
+`serve` process, and the session is in that process's memory. Reported for Jorge to decide; the two
+ways to close it are keeping the process alive across `Back`, or having `serve` persist page 1's
+answers into the staging directory — the second changes what Bombista writes and was not made on
+speculation.
+
 **Open, found while building this and not fixed here.** `skeleton.py` writes
 `lyrics: [{"<lang>": ""}]` — one empty lyric entry, deliberately, so the entry *shape* is visible to
 whoever writes the words in. Pregonero refuses that file: an empty lyric string is not a lyric line.

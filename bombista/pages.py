@@ -40,7 +40,7 @@ __all__ = [
     "render_output",
 ]
 
-VERSION = "v1.7.0"
+VERSION = "v1.7.1"
 """The masthead's version string — the package version with a `v` in front.
 
 It is a second copy of what `pyproject.toml` declares, and a second copy
@@ -753,7 +753,7 @@ _INPUT_JS = """\
      does not carry has no lines to anchor. Undeclared options render
      disabled. The caption does not explain the rule (§9.3, decision 5) —
      and the server refuses it too, so this is a courtesy, not the guard. */
-  function describe(path) {
+  function describe(path, keepAnswers) {
     fetch("/api/lyrics?path=" + encodeURIComponent(path))
       .then(function (r) { return r.json(); })
       .then(function (data) {
@@ -770,7 +770,12 @@ _INPUT_JS = """\
         }
         songbranch.className = "";
         document.getElementById("slug").textContent = data.slug;
-        prefill(data);
+        /* Coming back to this page is not choosing a file again. The
+           language options still have to be constrained by what the file
+           declares, and the stripped-line count still has to be shown —
+           but what the person typed is theirs and the FILE does not get
+           to overwrite it. */
+        if (!keepAnswers) { prefill(data); }
         stripped(data);
         ready();
       });
@@ -870,7 +875,69 @@ _INPUT_JS = """\
      branch that filled the fields directly would be a second answer to
      *what does this file say*, and the two would drift. It is what makes
      an edit an edit rather than a second new song. */
-  if (SONG) {
+  /* **The step bar is navigation, not a reset** (2026-09-02). Everything
+     the session already holds comes back, including a half-typed tempo —
+     which is the whole point, because the refusal that sends people here
+     is about exactly that, and a backstop that cannot be acted on is a
+     wall. */
+  function restore(a) {
+    state.lyrics = a.lyrics.path;
+    document.getElementById("lyrics-name").textContent = a.lyrics.name;
+    if (a.media) {
+      state.media = a.media.path;
+      document.getElementById("media-name").textContent = a.media.name;
+      document.getElementById("t-audio").src =
+        "/api/audio?path=" + encodeURIComponent(a.media.path);
+      document.getElementById("tapbar").className = "tapbar";
+      document.getElementById("clear-media").className = "";
+    }
+    langSel.value = a.lang;
+    document.getElementById("model").value = a.model;
+
+    songbranch.className = "";
+    var info = a.info || {};
+    document.getElementById("title").value = info.title || "";
+    document.getElementById("artist").value = info.artist || "";
+    document.getElementById("notes").value = info.notes || "";
+
+    var tempo = a.tempo || a.tempoIncomplete || {};
+    document.getElementById("t-bpm").value =
+      tempo.bpm === undefined || tempo.bpm === null ? "" : String(tempo.bpm);
+    document.getElementById("t-countinbars").value =
+      tempo.countInBars === undefined || tempo.countInBars === null
+        ? "0" : String(tempo.countInBars);
+    var select = document.getElementById("t-signature");
+    var signature = tempo.numerator && tempo.denominator
+      ? tempo.numerator + "/" + tempo.denominator : "";
+    if (signature && !select.querySelector('option[value="' + signature + '"]')) {
+      var option = document.createElement("option");
+      option.value = signature;
+      option.textContent = signature;
+      select.appendChild(option);
+    }
+    select.value = signature;
+    checkTempo();
+
+    /* **What running again costs, said rather than discovered.** A new run
+       re-anchors from the machine's timings, so the lines corrected on
+       step 2 go. With no recording there is nothing to redo and nothing
+       to warn about — going back is free, which is the case that made
+       this defect matter. */
+    if (a.handSetLines > 0) {
+      var note = document.getElementById("rerun-cost");
+      note.className = "hint";
+      note.innerHTML = "<b>Running again starts the timing over.</b> The " +
+        a.handSetLines + " line" + (a.handSetLines === 1 ? "" : "s") +
+        " you set by hand on step 2 would go back to what the machine heard. " +
+        "Everything on this page is kept either way.";
+    }
+
+    describe(a.lyrics.path, true);
+  }
+
+  if (ANSWERS) {
+    restore(ANSWERS);
+  } else if (SONG) {
     state.lyrics = SONG;
     document.getElementById("lyrics-name").textContent = baseName(SONG);
     describe(SONG);
@@ -1766,7 +1833,13 @@ def render_review(payload: dict, *, header: bool = True) -> str:
     return _shell(title="Review", current="2", body=body, script=_REVIEW_JS, header=header)
 
 
-def render_input(*, browse_from: str = "", song: str = "", header: bool = True) -> str:
+def render_input(
+    *,
+    browse_from: str = "",
+    song: str = "",
+    header: bool = True,
+    answers: dict | None = None,
+) -> str:
     """Page 1 (§9.3), augmented at step 6 with the song itself.
 
     **Four rows still, until a lyrics file is chosen.** The form the user
@@ -1802,6 +1875,15 @@ def render_input(*, browse_from: str = "", song: str = "", header: bool = True) 
     *browse_from* is the directory the file pickers open in, and *song* is
     a song file this page starts prefilled from. Both are answers a caller
     may supply and neither tells Bombista anything about who is calling.
+
+    *answers* is what a session already holds, so **coming back here is
+    navigation rather than a reset** (2026-09-02). Everything typed
+    returns: the two files, the language, the model, the title, artist and
+    notes, and whatever tempo was given — including a half-typed one,
+    which is the whole point, since the refusal that sends people here is
+    about exactly that. Where a run has happened the page says what
+    running again costs instead of discarding step 2's corrections in
+    silence.
     """
     lang_options = "".join(
         f'<option value="{code}">{code} — {name}</option>' for code, name in LANGUAGES
@@ -1901,11 +1983,14 @@ def render_input(*, browse_from: str = "", song: str = "", header: bool = True) 
   </div>
 </div>
 
+<p class="hint pageoff" id="rerun-cost"></p>
+
 <p class="go"><button class="btn1" id="process" disabled>Process song →</button></p>
 """
     script = (
         f"var BROWSE_FROM = {json.dumps(browse_from)};\n"
         f"var SONG = {json.dumps(song)};\n"
+        f"var ANSWERS = {json.dumps(answers)};\n"
         + _PICKER_JS
         + _INPUT_JS
     )

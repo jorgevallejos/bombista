@@ -40,7 +40,7 @@ __all__ = [
     "render_output",
 ]
 
-VERSION = "v1.7.1"
+VERSION = "v1.8.0"
 """The masthead's version string — the package version with a `v` in front.
 
 It is a second copy of what `pyproject.toml` declares, and a second copy
@@ -107,6 +107,16 @@ STYLESHEET = """\
   --line-2: #423e37;
   --clay: #d98b7a;
   --clay-dim: #8f5a4e;
+  /* The pinned step band's height, so page 2's player sits UNDER it rather
+     than behind it — two sticky things at `top: 0` overlap, and the one
+     that loses is the one that says where you are.
+
+     **Derived from the band's own declarations, not measured off a
+     screenshot**: `.stepband`'s padding (1.1 + .6), `.steps a`'s padding
+     (.55 twice), its `line-height: 1` at .72rem, and the bar's 1px
+     borders. Change any of those and this follows; a copied number would
+     not. */
+  --stepband: calc(1.1rem + .6rem + .55rem + .55rem + .72rem + 2px);
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   /* HIGH is muted on purpose — 18 of 19 rows are HIGH and none of them need you */
@@ -154,8 +164,23 @@ a:hover { border-bottom-color: var(--clay); color: var(--clay); }
 .mast .by b { color: var(--dim); font-weight: 400; }
 .mast .by .tramoya { color: var(--clay-dim); }
 
-/* ---------- step bar (§9.2) — navigation, not an announcement ---------- */
-.steps { display: flex; align-items: stretch; margin: 1.1rem 0 0;
+/* ---------- step bar (§9.2) — navigation, not an announcement ----------
+   **Pinned, and it is the only thing that is** (2026-09-02). On a long page
+   the bar scrolled out of view, so *where am I* depended on scroll position
+   and the way back looked like a reset.
+
+   The BAND is what sticks, not the bar: `.steps` is `width: max-content`,
+   so pinning it directly would leave the page scrolling through the gap
+   beside it. The band is full width and opaque, and the masthead scrolls
+   away behind it — deliberately, so standalone ends with the same single
+   fixed band the embedded case has rather than two.
+
+   Nothing else is pinned. `Save to the catalogue` sits after the JSON box
+   so the file is read before it is written, and a permanently pressable
+   save would quietly restore the order that was rejected. */
+.stepband { position: sticky; top: 0; z-index: 40; background: var(--bg);
+            padding: 1.1rem 0 .6rem; }
+.steps { display: flex; align-items: stretch;
          border: 1px solid var(--line-2); width: max-content; max-width: 100%; }
 .steps a { display: flex; align-items: center; gap: .5rem; text-decoration: none;
            color: var(--dim); border-bottom: none;
@@ -339,7 +364,7 @@ p.prov { margin: 1.2rem 0 0; padding: 0 0 .55rem;
          overflow-wrap: anywhere; }
 
 /* ---------- page 2 — the sticky player, and nothing else is pinned ---------- */
-.sticky { position: sticky; top: 0; z-index: 20; background: var(--bg);
+.sticky { position: sticky; top: var(--stepband); z-index: 20; background: var(--bg);
           padding: .6rem 0 .5rem; border-bottom: 1px solid var(--line-2); }
 /* the native transport refuses the palette; invert it back down to the ground
    rather than leave a light slab as the brightest object on the page */
@@ -1094,6 +1119,10 @@ def _step_bar(current: str, *, skipped: str = "") -> str:
     step 3 is how you fix something you noticed while reading the file.
     Nothing is destroyed by moving between them.
 
+    **It is wrapped in a band that sticks to the top of the page** — see
+    `.stepband`. The bar itself is `width: max-content`, so pinning it
+    directly would leave the page scrolling through the gap beside it.
+
     *skipped* names a step that did not happen — step 2 on a song with no
     recording, where there is no timeline to review. **It is rendered as a
     span rather than a link**, struck through and labelled: a bar that
@@ -1112,7 +1141,9 @@ def _step_bar(current: str, *, skipped: str = "") -> str:
             continue
         on = ' class="on"' if number == current else ""
         segments.append(f'<a href="{href}"{on}><span class="n">{number}</span> {label}</a>')
-    return '<nav class="steps">' + "".join(segments) + "</nav>"
+    return (
+        '<div class="stepband"><nav class="steps">' + "".join(segments) + "</nav></div>"
+    )
 
 
 def _version_line() -> str:

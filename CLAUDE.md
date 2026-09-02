@@ -279,6 +279,15 @@ bombista/
                    render. That is what `v1.2.0` broke — moving the tempo
                    control off page 2 left its wiring, the script threw, and
                    `Confirm timeline` never got its listener.
+                   THE STEP BAR IS PINNED AND NOTHING ELSE IS (§11.24): a
+                   full-width `.stepband` sticks at top 0 — the BAND, because
+                   `.steps` is `width: max-content` and the page would scroll
+                   through the gap beside it. The masthead scrolls away, so
+                   standalone ends with the same single fixed band the
+                   embedded case has. Page 2's player docks at `--stepband`,
+                   which is DERIVED from the band's own declarations rather
+                   than copied. A test asserts the complete set of sticky
+                   rules, not just the one added.
                    String composition,
                    stdlib only, inline CSS/JS, no build step, NO WEBFONT. STYLESHEET is
                    the whole of §10.3's skin and is defined ONCE — page 2 inherits it

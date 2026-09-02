@@ -1981,6 +1981,50 @@ prefill. The typed answers are not there. Two ways to close it, both Jorge's cal
 alive across `Back`, or have `serve` persist page 1's answers into the staging directory and restore
 them on boot. The second is a change to what Bombista writes and is not made on speculation.
 
+## 11.24 The step bar is pinned, and it is the only thing that is (2026-09-02)
+
+The rule is tramoya-integration's `project-context.md`, *In an embedded subflow, the step bar is
+fixed and everything else scrolls*. On a long page the bar scrolled out of view, so *where am I*
+depended on scroll position and the way back looked like a reset.
+
+### The check the rule demands, done first
+
+**Sticky works only if the embedded page scrolls inside its own frame.** If the host scrolls the
+frame as one block, nothing sticks and the change silently does nothing.
+
+**It scrolls inside its own frame.** `pregonero/src/control.css` gives `.song-flow-frame`
+`flex: 1; min-height: 0` inside a flex column whose `.song-flow-body` is also `min-height: 0`, so
+the frame is a bounded box rather than a content-sized one. Measured in a reproduction of that exact
+arrangement at a 900px window: the frame's box came out **793px** against an inner document of
+**1169px**, and the outer page did not scroll at all. An `<iframe>` never grows to its content, and
+Pregonero reads nothing out of this one — *no preload, nothing read out of it and nothing put into
+it* — so there is no resize channel that could change that.
+
+### What is pinned
+
+**A band, not the bar.** `.steps` is `width: max-content`; pinning it directly would leave the page
+scrolling through the gap beside it. `.stepband` is full width and opaque, and the masthead scrolls
+away behind it — deliberately, so **standalone ends with the same single fixed band the embedded
+case has** rather than two.
+
+**Page 2's player docks under it, not behind it.** Two sticky things at `top: 0` overlap, and the
+one that loses is the one that says where you are. `--stepband` is that offset and it is **derived
+from the band's own declarations** — the band's padding, `.steps a`'s padding, its `line-height: 1`
+at `.72rem`, and the bar's borders — rather than copied from a measurement. A first pass guessed
+`3.05rem` against a real `58px`, which would have put the player nine pixels behind the bar: visible
+only on a scrolled page, which is the one nobody screenshots.
+
+### What is not
+
+`Save to the catalogue` is not pinned: it sits after the JSON box so the file is read before it is
+written (§11.20), and a permanently pressable save would quietly restore the order that was
+rejected. The masthead is not pinned either.
+
+**A test asserts the complete set of pinned things** rather than checking the one that was added:
+every `position: sticky` rule in the stylesheet, with its `top`, must be exactly `.stepband` at `0`
+and `.sticky` at `var(--stepband)`. The two `position: fixed` overlays are named as the exemption so
+it cannot grow quietly. Verified by pinning `Save` and watching the set change.
+
 ## 12. What *using* it found
 
 §11 is what building B20 found. This is what the first real sessions found — a different and more

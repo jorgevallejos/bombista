@@ -1643,6 +1643,81 @@ to — with the header off it stands alone, and that was judged acceptable rathe
 **None of the three tells Bombista who is calling.** A directory, a file, a boolean. The page is
 shaped; nothing about what gets written changes, and no caller is named anywhere in this repo.
 
+## 11.17 The walk of 2026-09-02, on `v1.4.0` inside `v0.33.0`
+
+The flow ran end to end for the first time and failed at the last step. Four findings.
+
+### `countInBars: 0` — the third contract mismatch in two days
+
+`Save to the catalogue` wrote a file the suite refuses:
+`Song file "tempo.countInBars" must be a positive integer when present`. The song was written and
+**dropped from the list it had just joined**. Bombista offered `0` as the default answer for *bars
+before the first line* and wrote it; nobody had ever read what the far end does with it.
+
+**The repair is a contract decision.** `0` and absent both mean no count-in, so there is one
+representation and it is **absence**. `validation.without_zero_count_in` removes the key, and
+`server` applies it at both places a tempo enters a session — what a page or caller posts, **and what
+a song file already declares**, because a file carrying a zero is being rewritten by this tool and
+passing it through would emit the same rejected file by a different door.
+
+**The rest of the block was then checked the same way**, by reading `pregonero/src/songState.ts`
+`validateTempo` rather than by reasoning about it, and two more divergences fell out:
+
+| key | the receiver requires | this gate required | verdict |
+|---|---|---|---|
+| `bpm` | number > 0 | number > 0 | agreed |
+| `numerator`, `denominator` | **whole** number > 0 | number > 0 | **looser** — `4.5` passed here and is refused there |
+| `countInBars` | **optional**, whole, **> 0** | **required**, whole, **>= 0** | **wrong twice** |
+| `meter` | accepted (legacy) | refused as unknown | stricter — see below |
+| unknown keys | ignored | refused | stricter, and safe |
+
+`countInBars` being *required* here is what would have broken this fix on its own: the moment a zero
+stopped being written, Bombista's own output failed Bombista's own gate.
+
+**`tests/test_validation.py` now carries the receiver's rules as a table** — blocks it accepts and
+blocks it refuses, transcribed from that file and verified by running its `validateTempo` over each
+one. A divergence is a failing test rather than a walk.
+
+**Left as a known divergence:** the receiver still accepts the legacy `meter: N` shorthand and this
+gate refuses it as an unknown key. That direction is safe — nothing this gate passes will surprise
+the consumer — and the format moved to `numerator`/`denominator` (§10.2). Recorded rather than
+fixed, so the next person reads it as a decision.
+
+### `beats per minute` had a definition and no method
+
+§11.16 fixed the caption and the caption was not enough: it says what the number means and offers no
+way to produce one, and **nobody counts beats for a minute**. There is now a **Tap** button beside
+the field and the chosen take is playable on page 1 — tap along with the recording and the field
+fills from the taps.
+
+**Tapping is the only method that yields the felt pulse** rather than a number read off something
+that measured something else, which is the whole of the `100`-vs-`66.67` error. The bpm is the mean
+gap between consecutive taps, so it settles as you keep going; a gap over `TAP_RESET_MS` starts a
+fresh count rather than averaging in the pause while you found the beat again.
+
+**`GET /api/audio?path=` serves the named file**, because there is no session at step 1 and tapping
+along with a take you cannot hear is tapping along with nothing. It is constrained the way `browse`
+constrains what it lists — a real file with a media suffix — and it is the same latitude
+`/api/lyrics` already has: the page names a file the person picked out of this server's own listing.
+Nothing here derives a tempo from the audio; **the machine times the person.**
+
+### `Save to the catalogue` moves above the downloads
+
+It is the ending of the flow and they are an escape hatch. Below them the page offered three ways
+out before the way through, and the ending read as the least important thing on it.
+
+### The picker's two buttons were different heights, and the cause was a class name
+
+`53.5px` and `29.5px`. The confirm button carried `class="go"` — and **`.go` is page 1's own wrapper
+class**, `margin: 1.5rem 0 0`. The button inherited a 24px top margin and dropped below Cancel;
+under flex the row then grew to fit it, which is where the height difference came from. Every
+`align-items` value was tried and none of them helped, because the problem was never alignment.
+
+**It is `pickgo` now, and a test fails when any class the dialog applies is also styled page-wide.**
+The dialog is built in JavaScript, where nothing shows you the rest of the page's class names. The
+foot is also a plain block with two pinned inline-blocks rather than a flex row — the dullest thing
+that cannot do this again.
+
 ## 12. What *using* it found
 
 §11 is what building B20 found. This is what the first real sessions found — a different and more

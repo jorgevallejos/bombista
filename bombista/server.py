@@ -28,7 +28,10 @@ Output` — and the JSON routes behind it:
     GET    /api/download  the three downloads, as bytes — song, timeline, report
     GET    /review        page 2 — the list of lines, and the one control
     GET    /review/rows   that list again, as markup, after a re-anchor
-    GET    /api/audio     the take, as bytes, so the page needs no relative src
+    GET    /api/audio     the take, as bytes, so the page needs no relative src.
+                          With `?path=`, the media file page 1 names instead —
+                          the tap control needs the take audible at step 1,
+                          where there is no session yet
 
 **It re-anchors; it never shifts.** `anchoring.py` is forward-only: an
 override advances the scan to the first word after the corrected time, so
@@ -72,7 +75,7 @@ from .readers import read_lyrics_input
 from .skeleton import title_from_song_id
 from .report import band_counts, render_qa_report
 from .serializer import to_dict
-from .validation import TEMPO_KEYS, one_line, validate_tempo
+from .validation import TEMPO_KEYS, one_line, validate_tempo, without_zero_count_in
 from .writers import ENVELOPE_KEYS, merge_envelope
 
 __all__ = [
@@ -387,6 +390,8 @@ def load_session(
     # showed an empty control over a song that has one would invite a
     # human to retype a value that was already right.
     declared = song.get("tempo")
+    if isinstance(declared, dict):
+        declared = without_zero_count_in(declared)
 
     return Session(
         audio_path=audio_path,
@@ -599,11 +604,14 @@ def normalise_tempo(tempo: object) -> dict | None:
     if tempo is None or tempo == {}:
         return None
 
+    if isinstance(tempo, dict):
+        tempo = without_zero_count_in(tempo)
+
     findings = validate_tempo(tempo)
     if findings:
         raise ValueError(one_line(findings))
 
-    return {key: tempo[key] for key in TEMPO_KEYS}
+    return {key: tempo[key] for key in TEMPO_KEYS if key in tempo}
 
 
 def _place_tempo(song: dict, tempo: dict | None) -> dict:
@@ -1204,6 +1212,23 @@ def audio_path_for(session: Session) -> Path:
     )
 
 
+def media_path(path: Path) -> Path:
+    """A media file page 1 may play, or a refusal naming why.
+
+    The tap control needs the take audible before there is a session to
+    ask for it, so the page names a path. It is the same latitude
+    `/api/lyrics` has and it is constrained the same way `browse` is: a
+    file that exists, with a suffix this tool can open. Nothing here
+    widens what the process is willing to read — `browse` already lists
+    these files, and this server answers on loopback only.
+    """
+    if not path.is_file():
+        raise ValueError(f"{path}: no such file")
+    if path.suffix.lower() not in MEDIA_SUFFIXES:
+        raise ValueError(f"{path.name}: not a media file this tool can play")
+    return path
+
+
 def browse(path: Path) -> dict:
     """§9.6, resolved: a loopback listing rather than `<input type="file">`.
 
@@ -1278,7 +1303,7 @@ class _Handler(BaseHTTPRequestHandler):
             elif route == "/review/rows":
                 self._review_rows()
             elif route == "/api/audio":
-                self._audio()
+                self._audio(params)
             elif route == "/api/session":
                 self._respond(200, session_payload(self._session()))
             elif route == "/api/run":
@@ -1410,18 +1435,36 @@ class _Handler(BaseHTTPRequestHandler):
         payload = session_payload(session, session.overrides)
         self._send(200, pages.render_rows(payload).encode("utf-8"), "text/html; charset=utf-8")
 
-    def _audio(self) -> None:
+    def _audio(self, params: dict) -> None:
         """The take, as bytes, over loopback (§8.9).
 
         Ranges are honoured because the transport seeks: a player that can
         only start from zero cannot be used to judge a line by ear, and
         judging by ear is the whole of §6's acceptance case.
+
+        **With a `path`, it serves that file instead of the session's**,
+        which is what lets page 1 play the recording the person just chose:
+        there is no session yet at step 1, and tapping a tempo along with a
+        take you cannot hear is tapping along with nothing. The path is
+        constrained the same way `browse` constrains what it lists — a
+        real file with a media suffix — and this process answers on
+        loopback only. It is the same latitude `/api/lyrics` already has:
+        the page names a file the person picked out of this server's own
+        listing, and the server reads it.
         """
-        try:
-            path = audio_path_for(self._session())
-        except ValueError as exc:
-            self._error(404, str(exc))
-            return
+        named = params.get("path", [None])[0]
+        if named:
+            try:
+                path = media_path(Path(named))
+            except ValueError as exc:
+                self._error(404, str(exc))
+                return
+        else:
+            try:
+                path = audio_path_for(self._session())
+            except ValueError as exc:
+                self._error(404, str(exc))
+                return
         size = path.stat().st_size
         content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         start, end = _range_header(self.headers.get("Range"), size)

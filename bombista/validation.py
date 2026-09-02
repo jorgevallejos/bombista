@@ -51,6 +51,8 @@ __all__ = [
     "Finding",
     "REQUIRED_SONG_FIELDS",
     "TEMPO_KEYS",
+    "REQUIRED_TEMPO_KEYS",
+    "without_zero_count_in",
     "errors",
     "warnings",
     "has_errors",
@@ -99,6 +101,19 @@ from-scratch branch cannot supply one: a `.txt` has no source for it
 (docs/bombista-serve-spec.md §10.2.1). Requiring it here would make
 Bombista's own output fail Bombista's own gate."""
 
+REQUIRED_TEMPO_KEYS: tuple[str, ...] = ("bpm", "numerator", "denominator")
+"""The three a tempo block must carry. **Read off the receiving side**
+(`pregonero/src/songState.ts` `validateTempo`, 2026-09-02): it requires
+exactly these and treats `countInBars` as optional. Bombista required all
+four, which made its own output — a block with no count-in — fail its own
+gate the moment `countInBars` stopped being written."""
+
+_WHOLE_TEMPO_KEYS: tuple[str, ...] = ("numerator", "denominator", "countInBars")
+"""The three the receiving side checks with `Number.isInteger`. Bombista
+accepted `numerator: 4.5` and Pregonero refuses it — a file this gate
+passed and the consumer would not, which is the failure mode the gate
+exists to prevent."""
+
 TEMPO_KEYS: tuple[str, ...] = ("bpm", "numerator", "denominator", "countInBars")
 """**`tempo` is written whole — or not written at all.** There is no valid
 partial block (docs/bombista-serve-spec.md §11.5, checked against
@@ -109,9 +124,6 @@ perfectly. Correct scaling, broken pulse, no error anywhere.
 
 Which is also why absence is safe and a partial block is not: Pregonero on
 an absent block gives no pulse, no count-in, and scale pinned to 1."""
-
-_POSITIVE_TEMPO_KEYS: tuple[str, ...] = ("bpm", "numerator", "denominator")
-
 
 # ---------------------------------------------------------------------------
 # selecting
@@ -140,54 +152,103 @@ def _is_real_number(value: object) -> bool:
     return not isinstance(value, bool) and isinstance(value, (int, float))
 
 
+def without_zero_count_in(tempo: dict) -> dict:
+    """A tempo block with a zero `countInBars` removed.
+
+    **`0` and absent both mean no count-in, so there is one representation
+    and it is absence** (Jorge, 2026-09-02). Bombista offered `0` as the
+    default answer for *bars before the first line* and wrote it;
+    `pregonero/src/songState.ts` refuses it outright — *must be a positive
+    integer when present* — so `Save to the catalogue` produced a file the
+    suite rejected, and the song was dropped from the list it had just
+    joined.
+
+    The repair is a contract decision rather than a bug fix. Teaching the
+    receiver to accept `0` would leave two ways to say nothing; removing
+    the key leaves one. `validation.validate_tempo` refuses a zero for the
+    same reason — a file carrying one will not load, whoever wrote it.
+
+    `server` applies it at **both** places a tempo enters a session: what a
+    page or a caller posts, and what a song file already declares. A file
+    that already carries `countInBars: 0` is being rewritten by this tool,
+    and passing the zero through would emit a file the suite refuses.
+    """
+    if tempo.get("countInBars") == 0:
+        return {key: value for key, value in tempo.items() if key != "countInBars"}
+    return tempo
+
+
 def validate_tempo(tempo: object, *, where: str = "tempo") -> list[Finding]:
     """The whole-block rule, as findings.
 
-    `bpm`, `numerator` and `denominator` must be present and positive.
-    `countInBars` must be present and a whole number of bars — **zero is a
-    real answer**, which is why it is the one field not required to be
-    positive. Unknown keys are refused: a `tempo` carrying something
-    Pregonero does not read is a value someone believes is doing work.
+    **Every rule here was read off the receiving side and not reasoned
+    about** (`pregonero/src/songState.ts` `validateTempo`, checked
+    2026-09-02). Three contract mismatches in two days all had the same
+    shape: a value one tool offered, checked against nothing at the far
+    end. What that file actually requires:
+
+    - `bpm` — a number greater than zero. Not required to be whole.
+    - `numerator`, `denominator` — **whole** numbers greater than zero.
+    - `countInBars` — **optional**, and when present a whole number
+      **greater than zero**. Pregonero refuses `0` outright.
+
+    **`0` and absent both mean no count-in, so there is one representation
+    and it is absence** (Jorge, 2026-09-02). Bombista omits the key rather
+    than writing a zero, and this gate refuses a zero for the same reason:
+    a file carrying one is a file the suite will not load, whoever wrote
+    it. `without_zero_count_in`, just above, is where the omission happens —
+    in this module, because what a tempo block may say is one
+    understanding and it lives in one place.
+
+    Unknown keys are refused, which is stricter than the receiver — it
+    ignores them. That direction is safe: nothing this gate passes will
+    surprise the consumer. A `tempo` carrying something Pregonero does not
+    read is still a value someone believes is doing work.
 
     Bombista never derives, measures or guesses any of these. The
-    performer types them in, from the source that produced the audio,
-    where they are exact (rules 4 and 5; B14 was dropped for this).
+    performer supplies them — by tapping the pulse, or from the score
+    (rules 4 and 5; B14 was dropped for this).
     """
     if not isinstance(tempo, dict):
         return [
             Finding(
                 ERROR,
                 where,
-                "must be an object with bpm, numerator, denominator and "
-                f"countInBars — got {type(tempo).__name__}",
+                "must be an object with bpm, numerator and denominator "
+                f"— got {type(tempo).__name__}",
             )
         ]
 
     found: list[Finding] = []
-    for key in TEMPO_KEYS:
+    for key in REQUIRED_TEMPO_KEYS:
         if key not in tempo:
             found.append(
                 Finding(
                     ERROR,
                     f"{where}.{key}",
                     "missing — a tempo block is written whole (bpm, numerator, "
-                    "denominator, countInBars) or not at all",
+                    "denominator) or not at all",
                 )
             )
+
+    for key in TEMPO_KEYS:
+        if key not in tempo:
             continue
 
         value = tempo[key]
-        if key in _POSITIVE_TEMPO_KEYS:
-            if not _is_real_number(value) or value <= 0:
-                found.append(
-                    Finding(ERROR, f"{where}.{key}", f"must be a positive number, got {value!r}")
-                )
-        elif not _is_real_number(value) or value < 0 or value != int(value):
+        whole = key in _WHOLE_TEMPO_KEYS
+        if not _is_real_number(value) or value <= 0 or (whole and value != int(value)):
             found.append(
                 Finding(
                     ERROR,
                     f"{where}.{key}",
-                    f"must be a whole number of bars, 0 or more, got {value!r}",
+                    (
+                        "must be a whole number of bars greater than zero, or "
+                        f"left out entirely for no count-in — got {value!r}"
+                        if key == "countInBars"
+                        else f"must be a positive {'whole ' if whole else ''}number, "
+                        f"got {value!r}"
+                    ),
                 )
             )
 

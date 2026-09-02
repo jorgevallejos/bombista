@@ -40,7 +40,7 @@ __all__ = [
     "render_output",
 ]
 
-VERSION = "v1.6.1"
+VERSION = "v1.7.0"
 """The masthead's version string — the package version with a `v` in front.
 
 It is a second copy of what `pyproject.toml` declares, and a second copy
@@ -629,9 +629,34 @@ _INPUT_JS = """\
     var bpm = Math.round((60000 * (taps.length - 1)) / span * 2) / 2;
     document.getElementById("t-bpm").value = String(bpm);
     tapSay(taps.length + " taps \u00b7 " + bpm);
+    checkTempo();
   }
 
   document.getElementById("t-tap").addEventListener("click", tap);
+
+  /* **Said at the field, while it can still be fixed.** The run used to
+     refuse a half-typed block, which withheld ninety seconds of
+     transcription over a value nothing in transcription or anchoring
+     reads. Whole-or-nothing is unchanged; it is the FILE that answers for
+     it now, and this is the sentence that stops anyone getting there.
+     Silent when the block is whole, and silent when it is empty — no
+     tempo is a real answer. */
+  var tstate = document.getElementById("t-state");
+
+  function checkTempo() {
+    var bpm = val("t-bpm"), signature = val("t-signature");
+    if (bpm === "" && signature === "") { tstate.textContent = ""; tstate.className = "tstate"; return; }
+    if (bpm !== "" && signature !== "") { tstate.textContent = ""; tstate.className = "tstate"; return; }
+    tstate.className = "tstate bad";
+    tstate.textContent = bpm === ""
+      ? "Needs a pulse too \u2014 a tempo is written whole or not at all."
+      : "Needs a time signature too \u2014 a tempo is written whole or not at all.";
+  }
+
+  ["t-bpm", "t-signature"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", checkTempo);
+    document.getElementById(id).addEventListener("change", checkTempo);
+  });
 
   /* A pulse and a signature, split into the four keys the format fixes at
      the boundary and nowhere else. **Neither given means no tempo at all**,
@@ -699,6 +724,7 @@ _INPUT_JS = """\
       select.appendChild(option);
     }
     select.value = signature;
+    checkTempo();
   }
 
   document.getElementById("pick-lyrics").addEventListener("click", function () {

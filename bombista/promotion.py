@@ -125,6 +125,25 @@ def load_candidate(timeline_json: Path) -> dict:
     return data
 
 
+def carries_a_timeline(data: dict) -> bool:
+    """Whether *data* claims a timeline at all.
+
+    **None of the three keys means a manual song, and that is a complete
+    song** (2026-09-02). `serve` omits all five timing keys for a song with
+    no recording, on purpose — `timelineSignedOff` would claim a review
+    that never happened — and `promote` refused the file its own flow
+    produces. That was the fifth contract mismatch in two days of the same
+    shape: one side produces a value deliberately, the other refuses it.
+
+    **Any of the three means all of them.** A candidate carrying a
+    `timeline` and no `timelineVersion` is a v1 leftover or a half-written
+    file, and it is refused exactly as before — absence is a state,
+    incompleteness is a fault, and nothing here coerces one into the
+    other.
+    """
+    return any(key in data for key in ENVELOPE_KEYS)
+
+
 def extract_envelope(timeline_json: Path, data: dict) -> dict:
     """Pull `{timelineVersion, leadIn, timeline}` out of *data* and
     contract-validate the result (docs/timeline-v2-contract.md). Works
@@ -134,7 +153,10 @@ def extract_envelope(timeline_json: Path, data: dict) -> dict:
     envelope, so both shapes validate identically. Raises ValueError —
     naming the problem, never coercing — on any shape/type/version
     violation, including a v1 candidate (missing or non-2
-    `timelineVersion`)."""
+    `timelineVersion`).
+
+    Call `carries_a_timeline` first: a candidate claiming none is a manual
+    song rather than a broken one, and there is no envelope to extract."""
     envelope = {k: data.get(k) for k in ENVELOPE_KEYS}
     try:
         validate_v2_envelope(envelope)
@@ -223,9 +245,15 @@ def promote_candidate(
 
     Raises ValueError, without touching the song file, on every refusal:
     an unreadable or misshapen candidate, a v1 candidate, a lyrics count
-    that does not match, a partial candidate over a complete target, or a
-    partial envelope. Returns the backup path and the per-line diff on
-    success.
+    that does not match, a partial candidate over a complete target, a
+    partial envelope, or a candidate with no timeline over a song that has
+    one. Returns the backup path and the per-line diff on success.
+
+    **A candidate with no timeline at all is accepted** (2026-09-02) and
+    creates the song without one: a song with words and no recording is
+    advanced by hand during the performance, which is a complete song and
+    the path this suite now offers by design. Absence is a state;
+    incompleteness is still a fault.
 
     *note* receives B4's non-fatal remarks — the guard's mismatch warning
     and its two "could not be checked" notes. It is a callback rather than
@@ -236,8 +264,9 @@ def promote_candidate(
     emit = note if note is not None else lambda _message: None
 
     data = load_candidate(timeline_json)
-    envelope = extract_envelope(timeline_json, data)
-    new_timeline = envelope["timeline"]
+    timed = carries_a_timeline(data)
+    envelope = extract_envelope(timeline_json, data) if timed else None
+    new_timeline = envelope["timeline"] if timed else None
 
     creating = not song_json.exists()
     if creating:
@@ -247,10 +276,24 @@ def promote_candidate(
     items = song.get("lyrics")
     if not isinstance(items, list):
         raise ValueError(f'{song_json}: song JSON has no "lyrics" list')
-    if len(new_timeline) != len(items):
+    if timed and len(new_timeline) != len(items):
         raise ValueError(
             f"timeline length ({len(new_timeline)}) must match the song's "
             f"lyrics item count ({len(items)}) — refusing to promote"
+        )
+
+    # **A candidate with no timeline may not silently answer for a song that
+    # has one.** Writing nothing would leave the old timings in place while
+    # the person believes they removed them; writing an empty envelope would
+    # destroy a measured timeline. Both are the tool deciding something the
+    # candidate did not say, so it says so instead.
+    if not timed and not creating and song.get("timeline") is not None:
+        raise ValueError(
+            f"{song_json}: refusing to promote — the candidate "
+            f"({timeline_json.name}) carries no timeline and this song has "
+            "one. Promoting would either drop a measured timeline or keep one "
+            "the candidate never mentioned. Remove the timing keys from the "
+            "song by hand if this song is now advanced by hand."
         )
 
     # B4 — positional-fragility guard: warn (never block) if the target
@@ -266,6 +309,9 @@ def promote_candidate(
     if creating:
         emit(
             "note: linesHash guard does not apply — this song is being created, so "
+            "there are no earlier lyrics to have drifted from."
+            if not timed
+            else "note: linesHash guard does not apply — this song is being created, so "
             "there are no earlier lyrics for its timeline to have drifted from."
         )
     else:
@@ -313,14 +359,26 @@ def promote_candidate(
     # creating, the candidate already carries the envelope and merging it into
     # itself is the same operation — it is run either way so the contract check
     # inside it fires on both paths.
-    try:
-        song = merge_envelope(song, envelope)
-    except ValueError as exc:
-        raise ValueError(f"{timeline_json}: {exc}")
+    #
+    # **There is nothing to merge for a manual song**, and merging an empty
+    # envelope would be exactly the half-stamped file `merge_envelope` exists
+    # to refuse. The song is written as it stands.
+    if timed:
+        try:
+            song = merge_envelope(song, envelope)
+        except ValueError as exc:
+            raise ValueError(f"{timeline_json}: {exc}")
 
     backup = back_up_and_replace(song_json, song)
 
-    return PromotionOutcome(backup=backup, diff=timeline_diff(old_timeline, new_timeline))
+    return PromotionOutcome(
+        backup=backup,
+        diff=(
+            timeline_diff(old_timeline, new_timeline)
+            if timed
+            else ["no timeline — this song is advanced by hand"]
+        ),
+    )
 
 
 def _song_to_create(timeline_json: Path, song_json: Path, data: dict) -> dict:

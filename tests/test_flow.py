@@ -419,22 +419,33 @@ def test_a_failed_run_says_why_and_does_not_wedge_the_process(serve_client, libe
 # the run route is now the door a typed tempo comes through; what it
 # accepts and what it refuses is pinned in test_tempo.py beside the gate
 # itself. What stays here is the flow's own rule: a run that was told no
-# tempo emits no tempo key.
+# tempo emits no tempo key — and, since 2026-09-02, that the RUN is not
+# where a half-typed one is refused. Alignment never reads a tempo, so the
+# file answers for it and the ninety seconds are not withheld.
 # ---------------------------------------------------------------------------
 
 
-def test_a_scalar_tempo_posted_by_hand_is_still_refused(serve_client, libertad, tmp_path):
+def test_a_scalar_tempo_posted_by_hand_never_reaches_a_file(
+    serve_client, libertad, tmp_path, staging_root
+):
     """The bpm-only block §11.5 closed the door on, in its crudest form.
-    The route reaches for the shared gate rather than judging a number
-    itself, so `66.67` is refused in the same words `bombista validate`
-    refuses it in."""
+    Since 2026-09-02 the run carries it and the FILE refuses it — through
+    the shared gate, so it is refused in the same words `bombista
+    validate` refuses it in."""
     client = serve_client(None)
     txt = tmp_path / "cancion.txt"
     txt.write_text("uno dos\ntres cuatro\n", encoding="utf-8")
 
-    status, payload, _ = _start(
-        client, libertad, lyrics=str(txt), info={"title": "Canción"}, tempo=66.67
-    )
+    with mock.patch.object(
+        server, "transcribe_words", return_value=words_for(["uno dos", "tres cuatro"])
+    ):
+        status, _, _ = _start(
+            client, libertad, lyrics=str(txt), info={"title": "Canción"}, tempo=66.67
+        )
+        assert status == 200
+        wait_for(client, "done")
+
+    status, payload, _ = client.get("/api/download?kind=song")
 
     assert status == 400
     assert "bpm" in payload["error"]
@@ -1341,3 +1352,66 @@ def test_without_a_named_directory_the_cache_is_unchanged(serve_client, libertad
         wait_for(client, "done")
 
     assert (staging_root / libertad["song_path"].stem / "asr-words.jsonl").exists()
+
+
+def test_the_file_the_manual_flow_writes_is_the_file_promote_accepts(
+    serve_client, tmp_path, staging_root
+):
+    """**The end-to-end check the previous five mismatches each lacked.**
+    Each of them was one side producing a value deliberately and the other
+    refusing it, found by walking rather than by testing. This runs the
+    real flow's output through the real `promote`, so the two cannot drift
+    apart again without a red test.
+    """
+    from bombista.promotion import promote_candidate
+
+    client = serve_client(None)
+    txt = tmp_path / "manual.txt"
+    txt.write_text("uno dos\ntres cuatro\n", encoding="utf-8")
+
+    client.post(
+        "/api/run",
+        {
+            "lyrics": str(txt),
+            "lang": "es",
+            "info": {"title": "Manual", "artist": "Chango Pepper"},
+            "tempo": {"bpm": 66.67, "numerator": 6, "denominator": 8, "countInBars": 0},
+        },
+    )
+    wait_for(client, "done")
+    _, written = client.post("/api/emit", {})[:2]
+
+    catalogue = tmp_path / "song-performance" / "manual.json"
+    promote_candidate(Path(written["path"]), catalogue, note=lambda message: None)
+
+    song = json.loads(catalogue.read_text(encoding="utf-8"))
+    assert song["title"] == "Manual"
+    assert song["artist"] == "Chango Pepper"
+    assert song["tempo"] == {"bpm": 66.67, "numerator": 6, "denominator": 8}
+    assert song["lyrics"] == [{"es": "uno dos"}, {"es": "tres cuatro"}]
+    for key in ("linesHash", "timelineSignedOff", "timelineVersion", "leadIn", "timeline"):
+        assert key not in song
+
+
+def test_that_promoted_file_then_passes_the_performance_gate(
+    serve_client, tmp_path, staging_root
+):
+    """And the far end of the same chain: the song the flow made is one the
+    gate calls performable, naming the mode."""
+    from bombista.promotion import promote_candidate
+    from bombista.validation import errors, load_and_validate, modes
+
+    client = serve_client(None)
+    txt = tmp_path / "manual.txt"
+    txt.write_text("uno dos\n", encoding="utf-8")
+
+    client.post("/api/run", {"lyrics": str(txt), "lang": "es", "info": {"title": "M"}})
+    wait_for(client, "done")
+    _, written = client.post("/api/emit", {})[:2]
+
+    catalogue = tmp_path / "song-performance" / "manual.json"
+    promote_candidate(Path(written["path"]), catalogue, note=lambda message: None)
+    found = load_and_validate(catalogue, for_performance=True)
+
+    assert errors(found) == []
+    assert [f.where for f in modes(found)] == ["timeline"]

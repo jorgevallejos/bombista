@@ -91,6 +91,11 @@ through with the lyrics alone, there is nothing to align, step 2 is skipped and 
 step 3. Such a file carries **none of the five timing keys**, and `--for-performance` reports
 `manual only: no timeline` and exits 0 rather than refusing it.
 
+**A HALF-TYPED TEMPO REFUSES THE FILE, NOT THE RUN** (§11.22). Whole-or-nothing is unchanged, but
+nothing in transcription or anchoring reads a tempo, so the run goes and every door that produces
+the song file — `Save to the catalogue` and both JSON downloads — refuses. Page 1 says it at the
+field, live, so nobody reaches the refusal.
+
 `validate` is the **gate, and it asks two different questions**. The default asks *is this file
 sane* and tolerates work in progress — a song fresh from `new` has no timeline and must still be
 savable. `--for-performance` asks *which performance is this song ready for*: a timeline present and consistent with
@@ -205,7 +210,17 @@ bombista/
   songfile.py    — back_up_and_replace (THE one song-write path: backup, scratch file,
                    os.replace — never a half-stamped song on disk) + timeline_diff.
                    Shared by promote and migrate; returns its lines, prints nothing
-  promotion.py   — promote_candidate: the whole promote flow as a callable — load the
+  promotion.py   — promote_candidate: the whole promote flow as a callable.
+                   **A CANDIDATE WITH NO TIMELINE IS ACCEPTED** (§11.21,
+                   2026-09-02) and creates the song without one: a manual song
+                   is a complete song. `carries_a_timeline` is the rule —
+                   NONE of the three envelope keys is a manual song, ANY of
+                   them demands all three and a valid v2 envelope. Absence is
+                   a state; incompleteness is a fault. The one refusal it adds
+                   is a candidate with no timeline over a song that HAS one:
+                   writing nothing leaves timings the person thinks they
+                   removed, writing an empty envelope destroys a measured
+                   timeline, and neither is what the candidate said — load the
                    candidate, extract + validate the v2 envelope, run B4's linesHash
                    guard, refuse a partial candidate over a complete target, merge,
                    write. Raises ValueError; `note` is a callback so a warning is

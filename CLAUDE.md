@@ -299,6 +299,13 @@ bombista/
                    `_place_info` applies: absent means the song was never asked
                    and passes through byte for byte, a posted empty field clears
                    the key, and a language the page did not offer is left alone.
+                   `answers_so_far` is what makes THE STEP BAR NAVIGATION
+                   RATHER THAN A RESET (§11.23): page 1 rendered empty
+                   whatever the session held, which discarded everything
+                   typed and made the tempo backstop a wall — the refusal
+                   says to finish the tempo on page 1 and page 1 threw the
+                   half-typed one away. Nothing new is stored; the session
+                   already held all of it and the page never asked.
                    `previous_take` answers WHICH RECORDING THIS SONG was
                    aligned against, and the emphasis is the bug (§11.19): it
                    read the staging directory's meta with no reference to the

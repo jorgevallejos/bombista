@@ -1415,3 +1415,121 @@ def test_that_promoted_file_then_passes_the_performance_gate(
 
     assert errors(found) == []
     assert [f.where for f in modes(found)] == ["timeline"]
+
+
+# ---------------------------------------------------------------------------
+# the step bar is navigation, not a reset (2026-09-02)
+#
+# Page 1 rendered empty whatever the session held, so pressing `1 Input`
+# discarded the files, the language, the model and everything typed about
+# the song. It also made the tempo backstop a wall: the refusal at `Save to
+# the catalogue` says to finish the tempo on page 1, and the only way to
+# page 1 threw away the answers the refusal was about.
+# ---------------------------------------------------------------------------
+
+
+def _restored(client):
+    """What page 1 hands its own script when a session exists."""
+    page = client.get("/input")[1]
+    return json.loads(re.search(r"var ANSWERS = (.*?);\n", page).group(1))
+
+
+def test_returning_to_step_1_keeps_every_answer(serve_client, tmp_path, staging_root):
+    """The files, the language, the model, and everything typed about the
+    song. Nothing here is new state — the session has held all of it since
+    the run; page 1 simply never asked."""
+    client = serve_client(None)
+    txt = tmp_path / "manual.txt"
+    txt.write_text("uno dos\ntres cuatro\n", encoding="utf-8")
+
+    client.post(
+        "/api/run",
+        {
+            "lyrics": str(txt),
+            "lang": "es",
+            "model": "tiny",
+            "info": {"title": "Sin Grabación", "artist": "Chango Pepper", "notes": "Capo 3"},
+            "tempo": {"bpm": 66.67, "numerator": 6, "denominator": 8, "countInBars": 0},
+        },
+    )
+    wait_for(client, "done")
+    answers = _restored(client)
+
+    assert answers["lyrics"]["path"] == str(txt)
+    assert answers["lang"] == "es"
+    assert answers["model"] == "tiny", "the model was chosen and must come back"
+    assert answers["info"] == {
+        "title": "Sin Grabación",
+        "artist": "Chango Pepper",
+        "notes": "Capo 3",
+    }
+    assert answers["tempo"] == {"bpm": 66.67, "numerator": 6, "denominator": 8}
+
+
+def test_a_half_typed_tempo_comes_back_so_the_backstop_can_be_acted_on(
+    serve_client, tmp_path, staging_root
+):
+    """**The wall this fix exists for.** `Save to the catalogue` refuses a
+    half-typed tempo and says to finish it on page 1. If page 1 discards
+    it, the instruction cannot be followed."""
+    client = serve_client(None)
+    txt = tmp_path / "manual.txt"
+    txt.write_text("uno dos\n", encoding="utf-8")
+
+    client.post(
+        "/api/run",
+        {
+            "lyrics": str(txt),
+            "lang": "es",
+            "info": {"title": "M"},
+            "tempo": {"numerator": 6, "denominator": 8, "countInBars": 0},
+        },
+    )
+    wait_for(client, "done")
+    answers = _restored(client)
+
+    assert answers["tempo"] is None
+    assert answers["tempoIncomplete"] == {"numerator": 6, "denominator": 8}
+
+
+def test_going_back_with_no_recording_costs_nothing_and_says_nothing(
+    serve_client, tmp_path, staging_root
+):
+    """There is no run to redo, so there is nothing to warn about. A
+    warning here would be the page inventing a cost."""
+    client = serve_client(None)
+    txt = tmp_path / "manual.txt"
+    txt.write_text("uno dos\n", encoding="utf-8")
+
+    client.post("/api/run", {"lyrics": str(txt), "lang": "es", "info": {"title": "M"}})
+    wait_for(client, "done")
+
+    assert _restored(client)["handSetLines"] == 0
+
+
+def test_going_back_after_corrections_says_what_running_again_costs(
+    serve_client, libertad, tmp_path
+):
+    """**Said, rather than discovered.** A new run re-anchors from the
+    machine's timings, so the lines corrected on step 2 go — and the old
+    page discarded them in silence."""
+    client = serve_client(None)
+
+    with mock.patch.object(
+        server, "transcribe_words", return_value=words_for(libertad["lines"])
+    ):
+        _start(client, libertad, staging=str(libertad["staging"]))
+        wait_for(client, "done")
+
+    client.post("/api/reanchor", {"overrides": {"1": 4.5, "2": 9.0}})
+
+    assert _restored(client)["handSetLines"] == 2
+    assert "Running again starts the timing over" in client.get("/input")[1]
+
+
+def test_page_1_is_empty_when_there_is_no_session(serve_client):
+    """The from-nothing case is untouched: nothing is restored because
+    nothing was answered."""
+    page = serve_client(None).get("/input")[1]
+
+    assert "var ANSWERS = null;" in page

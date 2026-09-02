@@ -87,6 +87,7 @@ __all__ = [
     "set_tempo",
     "refuse_a_half_typed_tempo",
     "build_sp_json",
+    "answers_so_far",
     "default_out_path",
     "emit_sp_json",
     "lead_in_source",
@@ -834,6 +835,41 @@ def refuse_a_half_typed_tempo(session: Session) -> None:
     )
 
 
+def answers_so_far(session: Session) -> dict:
+    """Every answer page 1 was given, so returning to it restores them.
+
+    **The step bar is navigation, not a reset** (Jorge, 2026-09-02). Page 1
+    rendered empty whatever the session held, so pressing `1 Input` threw
+    away the files, the language, the model and everything typed about the
+    song. It also made the tempo backstop unusable: the refusal at
+    `Save to the catalogue` says to finish the tempo on page 1, and the
+    only way to page 1 discarded the answers the refusal was about. **A
+    backstop that cannot be acted on is a wall.**
+
+    Nothing here is new state. The session has held all of it since the
+    run; page 1 simply never asked. `handSetLines` is what re-running
+    would cost — the corrections made on step 2, which a new run
+    re-anchors away — so the page can say so instead of discarding them
+    silently. With no recording there is no run to redo and the count is
+    zero.
+    """
+    return {
+        "lyrics": {"path": str(session.lyrics_path), "name": session.lyrics_path.name},
+        "media": (
+            {"path": str(session.audio_path), "name": session.audio_path.name}
+            if session.audio_path
+            else None
+        ),
+        "lang": session.lang,
+        "model": session.model_size,
+        "info": song_information(session.song),
+        "tempo": session.tempo,
+        "tempoIncomplete": session.tempo_incomplete,
+        "handSetLines": 0 if session.manual else len(session.overrides),
+        "manual": session.manual,
+    }
+
+
 def default_out_path(session: Session) -> Path:
     """Where a write with no path of its own lands: `<stem>.json`, in the
     directory this run's working files are in.
@@ -998,6 +1034,10 @@ class Run:
                     staging,
                     Path(self.request["lyrics"]),
                     lang=self.request["lang"],
+                    # Carried even though nothing transcribes on this path:
+                    # the person chose it, and going back to step 1 keeps
+                    # every answer or it keeps none of them.
+                    model_size=self.request["model"],
                     info=self.request.get("info"),
                     manual=True,
                 )
@@ -1525,11 +1565,13 @@ class _Handler(BaseHTTPRequestHandler):
                 # which rather than guessing at a landing page.
                 self._redirect("/review" if self.holder.session else "/input")
             elif route == "/input":
+                session = self.holder.session
                 self._html(
                     pages.render_input(
                         browse_from=self.holder.browse_from,
                         song=self.holder.song,
                         header=self.holder.header,
+                        answers=answers_so_far(session) if session else None,
                     )
                 )
             elif route == "/processing":

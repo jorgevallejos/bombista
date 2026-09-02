@@ -276,6 +276,27 @@ would be equally wrong.
 `asr-words.jsonl` existed, without checking it was made from this run's recording. Re-transcribing
 costs ninety seconds; using the wrong words costs a timeline nobody can tell is wrong.
 
+## The fifth mismatch, and what finally caught it (2026-09-02)
+
+**`promote` refused the manual song the flow produces.** `v1.6.0` omits the five timing keys for a
+song with no recording on purpose; nothing checked what `promote` does with such a candidate, and
+`Save to the catalogue` failed on the file its own flow had just written. Fifth in two days, same
+shape every time: one side produces a value deliberately, the other refuses it, a walk finds it.
+
+**Tracing the whole contract rather than the reported error is what made this one different.** The
+manual candidate would have hit three refusals in a row — the absent version, then `len(None)`, then
+an envelope of three `None`s — and fixing only the first would have moved the failure one line down
+and cost another walk. The accept/refuse table is now in the spec (§11.21) and pinned by tests.
+
+**And there is a test that runs the real flow's output through the real `promote`**, which is the
+check all five mismatches lacked. Each of them lived in the gap between two components that were
+individually well tested.
+
+**Found and not fixed:** `promote` writes only the timeline envelope, so editing a title in the flow
+and saving over a song that already exists changes nothing, silently. Not new and not the manual
+path's fault, but it is what the flow now implies and does not do. Widening `promote` past the
+timeline is a contract change, and how an edit lands is Pregonero's decision.
+
 **Open, found while building this and not fixed here.** `skeleton.py` writes
 `lyrics: [{"<lang>": ""}]` — one empty lyric entry, deliberately, so the entry *shape* is visible to
 whoever writes the words in. Pregonero refuses that file: an empty lyric string is not a lyric line.

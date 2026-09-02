@@ -85,6 +85,7 @@ __all__ = [
     "load_session",
     "session_payload",
     "set_tempo",
+    "refuse_a_half_typed_tempo",
     "build_sp_json",
     "default_out_path",
     "emit_sp_json",
@@ -152,6 +153,19 @@ class Session:
     stripped_lines: list[dict] = field(default_factory=list)
     overrides: dict[int, float] = field(default_factory=dict)
     signed_off: str | None = None
+    tempo_incomplete: dict | None = None
+    """A tempo block that was typed in half, kept so the file can refuse it.
+
+    **Whole-or-nothing is right and stays** — half a tempo breaks
+    Pregonero's pulse while its scaling keeps working, which is worse than
+    no tempo at all. **What was too strict was the moment** (Jorge,
+    2026-09-02): alignment never reads a tempo, so an incomplete block is
+    no reason to refuse ninety seconds of transcription. The run goes; the
+    file is what gets refused.
+
+    `tempo` therefore still only ever holds a whole block or `None`, and
+    nothing partial can reach `_place_tempo`. This is the memory that a
+    tempo was asked for and could not be written."""
     """The live state of the review, and the reason this is not frozen.
 
     `tempo` starts as whatever the song already carried and is what page 2
@@ -795,6 +809,31 @@ def _unknown_provenance(session: Session) -> dict:
     }
 
 
+def refuse_a_half_typed_tempo(session: Session) -> None:
+    """Raise if this session carries a tempo that was typed in half.
+
+    **The moment moved; the rule did not** (Jorge, 2026-09-02). A partial
+    block breaks Pregonero's pulse while its scaling keeps working, which
+    is worse than no tempo at all — so it must never reach a file. What
+    changed is that the run no longer refuses one: alignment never reads a
+    tempo, and ninety seconds of transcription is a strange price for a
+    field nobody had finished filling in.
+
+    So this guards **every door that produces the song file** — `Save to
+    the catalogue` and both JSON downloads. Guarding only the one the
+    walk found would be two gates that disagree, which is the shape this
+    project has already been caught by more than once.
+    """
+    if session.tempo_incomplete is None:
+        return
+    findings = validate_tempo(session.tempo_incomplete)
+    raise ValueError(
+        f"{one_line(findings)}. A tempo is written whole or not at all — half "
+        "of one gives a broken pulse with correct scaling and no error "
+        "anywhere. Go back to step 1 to finish it, or clear it."
+    )
+
+
 def default_out_path(session: Session) -> Path:
     """Where a write with no path of its own lands: `<stem>.json`, in the
     directory this run's working files are in.
@@ -820,6 +859,8 @@ def emit_sp_json(session: Session, overrides: dict[int, float], out_path: Path) 
     so it signs off: there is no path in this tool to an SP JSON that
     cannot say whether a human read it.
     """
+    refuse_a_half_typed_tempo(session)
+
     resolved = out_path.resolve()
     if resolved in session.input_paths:
         raise ValueError(
@@ -962,6 +1003,7 @@ class Run:
                 )
                 if "tempo" in self.request:
                     self.holder.session.tempo = self.request["tempo"]
+                    self.holder.session.tempo_incomplete = self.request.get("tempoIncomplete")
                 self.state = "done"
                 return
 
@@ -1031,6 +1073,7 @@ class Run:
             # assignment rather than a second judgement of the same block.
             if "tempo" in self.request:
                 session.tempo = self.request["tempo"]
+                session.tempo_incomplete = self.request.get("tempoIncomplete")
             if self.cancelled:
                 return
             self._finish("anchor")
@@ -1155,7 +1198,25 @@ def start_run(holder: Holder, body: dict) -> dict:
     # a review keeps whatever the song declares, while four emptied fields
     # on page 1 clear the key.
     if "tempo" in body:
-        request["tempo"] = normalise_tempo(body["tempo"])
+        # **The run is not the place to refuse a tempo.** Nothing in
+        # transcription or anchoring reads one, so a half-typed block costs
+        # the person ninety seconds and tells them nothing they could not
+        # have been told at the field. It is carried and refused at the
+        # file, where it actually matters.
+        try:
+            request["tempo"] = normalise_tempo(body["tempo"])
+        except ValueError:
+            request["tempo"] = None
+            # Stripped the same way a whole block is, so the refusal names
+            # what the person left out and nothing else. The bars field
+            # always carries a value and `0` means no count-in; a message
+            # that also complained about it would send them to fix a field
+            # that was never wrong.
+            request["tempoIncomplete"] = (
+                without_zero_count_in(body["tempo"])
+                if isinstance(body["tempo"], dict)
+                else body["tempo"]
+            )
 
     holder.session = None
     holder.run = Run(holder, request)
@@ -1716,6 +1777,9 @@ class _Handler(BaseHTTPRequestHandler):
         if kind not in ("song", "timeline"):
             raise ValueError(f"unknown download {kind!r}")
 
+        # Both JSON downloads produce the song file, so both answer to the
+        # whole-or-nothing rule. The report does not: it certifies nothing.
+        refuse_a_half_typed_tempo(session)
         sign_off(session)
         sp_json, _ = build_sp_json(session)
         payload = sp_json if kind == "song" else timing_block(sp_json)

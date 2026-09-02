@@ -341,6 +341,21 @@ def test_the_tap_control_starts_a_fresh_count_after_a_pause(page1):
     assert "no taps yet" in page1
 
 
+def test_a_half_typed_tempo_is_said_at_the_field(page1):
+    """**The moment moved** (Jorge, 2026-09-02). The run refused a partial
+    tempo, withholding ninety seconds of transcription over a value
+    nothing in transcription or anchoring reads. Whole-or-nothing stands,
+    the file answers for it, and this is the sentence that stops anyone
+    reaching that refusal."""
+    script = page1.split("<script>")[1]
+
+    assert "function checkTempo()" in script
+    assert 'id="t-state"' in page1
+    assert "written whole or not at all" in script
+    for control in ("t-bpm", "t-signature"):
+        assert control in script.split("function checkTempo()")[1][:400]
+
+
 def test_tapping_settles_on_halves_and_a_typed_value_stays_free(page1):
     """Jorge, 2026-09-02. A hand cannot resolve a hundredth of a beat per
     minute, so a long decimal from tapping is noise wearing the costume of

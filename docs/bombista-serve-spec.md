@@ -1856,6 +1856,78 @@ What makes *after the box* survivable is that the box is **bounded**: `max-heigh
 scroll, so the file is still shown in full with no fold and a long song does not push the button off
 the screen the way a paragraph did. Both the order and the one-sentence captions are pinned.
 
+## 11.21 `promote` refused the song this flow makes (2026-09-02)
+
+`v1.6.0` omits the five timing keys for a song with no recording, on purpose — `timelineSignedOff`
+would claim a review that never happened. **Nothing checked what `promote` does with a candidate
+that lacks them**, and `Save to the catalogue` failed on the file its own flow had just written:
+`timelineVersion must be exactly 2 — got None`. **The fifth contract mismatch in two days, and the
+same shape as the four before it**: one side produces a value deliberately, the other refuses it,
+and a walk finds it.
+
+**The whole of the contract was traced, not the reported key.** The manual candidate would have hit
+three separate refusals in a row, and fixing only the first would have moved the failure one line
+down: `extract_envelope` refusing the absent version, then `len(new_timeline)` raising `TypeError`
+on `None`, then `merge_envelope` refusing an envelope of three `None`s.
+
+### What `promote` accepts and refuses
+
+| candidate → target | verdict |
+|---|---|
+| no timeline → song does not exist | **accepted**, creates the song without one |
+| a v2 timeline → song does not exist | **accepted**, creates it with the timeline |
+| no timeline → song that has none | **accepted** — re-saving a manual song is ordinary |
+| a v2 timeline → song that has none | **accepted**, the song gains a timeline |
+| a v2 timeline → song that has one | **accepted**, the timeline is replaced |
+| **no timeline → song that HAS one** | **refused** — see below |
+| `timeline` with no `timelineVersion` | refused, never coerced |
+| `timelineVersion: 1` | refused, never coerced |
+| `timelineVersion: 2` with no `timeline` | refused — half-written |
+| a timeline whose length ≠ the lyrics count | refused |
+| a bare envelope → song does not exist | refused — there is no song in it to create |
+| a candidate not named `<stem>-song.json` or `<stem>.json` → creating | refused — a song's id is its filename |
+
+**Absence is a state; incompleteness is a fault**, and accepting the first did not soften the second.
+The rule is `carries_a_timeline`: **none** of the three keys is a manual song, **any** of them
+demands all three and a valid v2 envelope. It matches the receiving side's own branch —
+`pregonero/src/songState.ts` skips its timeline check entirely for a file with neither key — and is
+narrowly stricter, since a `leadIn` alone triggers this and not that. Stricter is the safe
+direction.
+
+**The one new refusal is a refusal to decide.** A candidate with no timeline over a song that has
+one: writing nothing leaves the old timings while the person believes they removed them, and writing
+an empty envelope destroys a measured timeline. Neither is what the candidate said, so it says so.
+
+**Found and not fixed: promote carries no general information into an existing song.** It writes the
+envelope and nothing else, so editing a title in the flow and saving over a song that already exists
+changes nothing, silently. That is not new and not the manual path's fault — it is true of every
+edit — but it is what the flow now implies and does not do. Recorded here rather than repaired,
+because widening `promote` past the timeline is a contract change and the decision about how an edit
+lands is Pregonero's.
+
+## 11.22 The tempo refused the run; it should only refuse the file
+
+Jorge chose a time signature, left the pulse empty, and `Process song` refused to start.
+**Whole-or-nothing is right and stays** — half a tempo breaks Pregonero's pulse while its scaling
+keeps working, which is worse than no tempo at all. **What was too strict was the moment**: nothing
+in transcription or anchoring reads a tempo, so a half-typed block is a strange reason to withhold
+ninety seconds of work.
+
+- **The field says it**, live, as soon as one half is filled and the other is not. Silent when the
+  block is whole and silent when it is empty, because no tempo is a real answer.
+- **The run carries it.** `Session.tempo` still only ever holds a whole block or `None`, so nothing
+  partial can reach `_place_tempo`; `tempo_incomplete` is the memory that one was asked for.
+- **Every door that produces the song file refuses it** — `Save to the catalogue` and both JSON
+  downloads. Guarding only the one the walk hit would be two gates that disagree, which this
+  project has already been caught by more than once.
+- **The refusal names only what is missing.** The bars field always carries a value and `0` means no
+  count-in, so it is stripped before the message is built; naming it would send the person to fix a
+  field that was never wrong.
+
+**The cost, recorded.** A tempo left half-typed can only be finished by going back to step 1, which
+re-runs and discards page 2's corrections — the same cost §11.15 recorded when the control moved
+there. The field message exists so nobody reaches the refusal; it is a backstop, not a workflow.
+
 ## 12. What *using* it found
 
 §11 is what building B20 found. This is what the first real sessions found — a different and more

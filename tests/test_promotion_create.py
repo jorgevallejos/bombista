@@ -235,3 +235,111 @@ def test_a_candidate_that_is_not_json_at_all_is_still_refused(tmp_path: Path):
 
     assert "-song.json" in str(exc.value)
     assert not target.exists()
+
+
+# ---------------------------------------------------------------------------
+# a candidate with NO timeline — the manual song this flow now produces
+#
+# **The fifth contract mismatch in two days, and the same shape as the four
+# before it**: `v1.6.0` omits the five timing keys for a song with no
+# recording, on purpose, and nothing checked what `promote` does with such a
+# candidate. `Save to the catalogue` failed on the file its own flow wrote.
+#
+# The whole of the contract is exercised below rather than the one key the
+# walk hit, because reading only the reported error is how the previous four
+# were each found one round after the last.
+# ---------------------------------------------------------------------------
+
+
+def manual_candidate(**over) -> dict:
+    """What `Save to the catalogue` writes for a song with no recording:
+    the words and the general information, and none of the five timing
+    keys."""
+    data = {
+        "title": "Libertad",
+        "artist": "Chango Pepper",
+        "notes": "",
+        "title_translations": {"es": "Libertad"},
+        "lyrics": [{"es": "una línea"}],
+    }
+    data.update(over)
+    return data
+
+
+def test_a_candidate_with_no_timeline_creates_a_song_without_one(tmp_path: Path):
+    """**A manual song is a complete song**: it is performed by advancing
+    the lines by hand, which is a normal night, and it is the path this
+    suite now offers by design."""
+    candidate = write(tmp_path / "libertad.json", manual_candidate())
+    target = tmp_path / "songs" / "libertad.json"
+
+    outcome = promote_candidate(candidate, target)
+
+    written = json.loads(target.read_text(encoding="utf-8"))
+    assert written["title"] == "Libertad"
+    assert written["lyrics"] == [{"es": "una línea"}]
+    for key in ("timelineVersion", "leadIn", "timeline"):
+        assert key not in written, f"a song with no recording was given {key}"
+    assert outcome.diff == ["no timeline — this song is advanced by hand"]
+
+
+def test_a_manual_candidate_may_be_promoted_over_a_manual_song(tmp_path: Path):
+    """Re-saving a manual song is an ordinary act — the edit flow's normal
+    ending — and must not be refused."""
+    candidate = write(tmp_path / "libertad-song.json", manual_candidate())
+    target = write(tmp_path / "libertad.json", manual_candidate(notes="Capo 3"))
+
+    promote_candidate(candidate, target)
+
+    assert "timeline" not in json.loads(target.read_text(encoding="utf-8"))
+
+
+def test_a_manual_candidate_is_refused_over_a_song_that_has_a_timeline(tmp_path: Path):
+    """The one refusal this adds, and it is a refusal to decide. Writing
+    nothing would leave the old timings while the person believes they
+    removed them; writing an empty envelope would destroy a measured
+    timeline. Neither is what the candidate said."""
+    candidate = write(tmp_path / "libertad-song.json", manual_candidate())
+    target = write(tmp_path / "libertad.json", {**manual_candidate(), **envelope()})
+    before = target.read_text(encoding="utf-8")
+
+    with pytest.raises(ValueError) as exc:
+        promote_candidate(candidate, target)
+
+    assert "carries no timeline and this song has one" in str(exc.value)
+    assert target.read_text(encoding="utf-8") == before, "the song file was touched"
+
+
+@pytest.mark.parametrize(
+    "broken, why",
+    [
+        ({"timeline": [{"start": 0.0, "end": 2.0}]}, "timelineVersion"),
+        ({**envelope(), "timelineVersion": 1}, "timelineVersion"),
+        ({"timelineVersion": 2, "leadIn": envelope()["leadIn"]}, "timeline"),
+    ],
+)
+def test_a_half_written_timeline_is_still_refused(tmp_path: Path, broken, why):
+    """**Absence is a state; incompleteness is a fault**, and accepting the
+    first must not soften the second. A candidate carrying some of the
+    three keys is a v1 leftover or a truncated file, and it is refused
+    exactly as before — never coerced into either meaning."""
+    candidate = write(tmp_path / "libertad-song.json", manual_candidate(**broken))
+
+    with pytest.raises(ValueError) as exc:
+        promote_candidate(candidate, tmp_path / "libertad.json")
+
+    assert why in str(exc.value)
+
+
+def test_the_lyrics_count_guard_still_runs_for_a_timed_candidate(tmp_path: Path):
+    """Skipping the length check for a manual candidate must not skip it
+    for anything else."""
+    candidate = write(
+        tmp_path / "libertad-song.json",
+        manual_candidate(**envelope(), lyrics=[{"es": "una"}, {"es": "dos"}]),
+    )
+
+    with pytest.raises(ValueError) as exc:
+        promote_candidate(candidate, tmp_path / "libertad.json")
+
+    assert "timeline length" in str(exc.value)

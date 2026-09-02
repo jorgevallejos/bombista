@@ -395,24 +395,74 @@ def test_bars_alone_is_not_a_tempo_block(serve_client, libertad, tmp_path):
     assert "tempo" not in json.loads(payload)
 
 
-def test_a_partial_block_refuses_the_run_before_it_starts(serve_client, libertad, tmp_path):
-    """Refused at the door, naming every missing key — not after ninety
-    seconds of transcription, and not by a second opinion about what a
-    valid tempo is."""
-    from tests.test_flow import _start
+def test_a_partial_block_lets_the_run_go_and_refuses_the_file(
+    serve_client, libertad, tmp_path, staging_root
+):
+    """**The moment moved; the rule did not** (Jorge, 2026-09-02). Jorge
+    chose a time signature, left the pulse empty, and `Process song`
+    refused to start — ninety seconds of transcription withheld over a
+    field that nothing in transcription or anchoring reads.
+
+    Whole-or-nothing still stands, and it is the FILE that answers for it:
+    the run goes, and every door that produces the song file refuses,
+    naming what is missing.
+    """
+    from unittest import mock
+
+    from tests.conftest import words_for
+    from tests.test_flow import _start, wait_for
 
     client = serve_client(None)
     txt = tmp_path / "cancion.txt"
     txt.write_text("uno dos\ntres cuatro\n", encoding="utf-8")
 
-    status, payload, _ = _start(
-        client, libertad, lyrics=str(txt), info={"title": "Canción"}, tempo={"bpm": 66.67}
-    )
+    with mock.patch.object(
+        server, "transcribe_words", return_value=words_for(["uno dos", "tres cuatro"])
+    ):
+        status, _, _ = _start(
+            client,
+            libertad,
+            lyrics=str(txt),
+            info={"title": "Canción"},
+            tempo={"numerator": 6, "denominator": 8, "countInBars": 0},
+        )
+        assert status == 200, "the run was refused over a field alignment never reads"
+        wait_for(client, "done")
+
+    for door in ("/api/download?kind=song", "/api/download?kind=timeline"):
+        status, payload, _ = client.get(door)
+        assert status == 400, f"{door} handed over a file with half a tempo"
+        assert "bpm" in payload["error"]
+
+    status, payload = client.post("/api/emit", {"out": str(tmp_path / "out.json")})[:2]
 
     assert status == 400
-    for key in ("numerator", "denominator"):
-        assert key in payload["error"]
-    assert "countInBars" not in payload["error"], (
-        "countInBars is optional on the receiving side and must not be demanded here"
-    )
-    assert client.get("/api/run")[1]["state"] == "idle"
+    assert "bpm" in payload["error"]
+    assert not (tmp_path / "out.json").exists(), "a half-typed tempo reached a file"
+    # The bars field always carries a value and `0` means no count-in, so a
+    # refusal naming it would send the person to fix a field that was never
+    # wrong. Only what they left out is named.
+    assert "countInBars" not in payload["error"]
+
+
+def test_a_whole_block_still_reaches_the_file(serve_client, libertad, tmp_path, staging_root):
+    """The other side of the same door: nothing above makes a complete
+    tempo harder to write."""
+    from unittest import mock
+
+    from tests.conftest import words_for
+    from tests.test_flow import _start, wait_for
+
+    client = serve_client(None)
+    txt = tmp_path / "cancion.txt"
+    txt.write_text("uno dos\ntres cuatro\n", encoding="utf-8")
+
+    with mock.patch.object(
+        server, "transcribe_words", return_value=words_for(["uno dos", "tres cuatro"])
+    ):
+        _start(client, libertad, lyrics=str(txt), info={"title": "C"}, tempo=WHOLE)
+        wait_for(client, "done")
+
+    _, payload, _ = client.get("/api/download?kind=song", raw=True)
+
+    assert json.loads(payload)["tempo"] == WHOLE

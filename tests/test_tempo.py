@@ -1,13 +1,19 @@
-"""Tempo, typed in on the review page (round A, item 3).
+"""Tempo, typed in on page 1 (step 6; round A, item 3, moved).
 
 **This reverses §11.5's removal of the control, and the reversal is
 narrow.** The control came off page 1 on 2026-08-16 because a whole block
 needs four fields on a page whose rule is four rows total, and because
 Bombista had no business owning a tempo at all. The second half of that
 has changed: Pregonero loses tempo ownership later in this integration, so
-Bombista becomes the only remaining home for typing one in. The review
-page is the right surface, because it is where the timeline is visible
-while it is being changed.
+Bombista becomes the only remaining home for typing one in.
+
+**Round A put the control on the review page; step 6 moves it to page 1**
+(journey-setup, 2026-09-02). Round A's reason for page 2 was that the
+timeline is visible there while it is being changed — but a tempo changes
+no timing in this tool and is never read against the audio, so nothing
+about typing one waits on having heard the take. It belongs with the rest
+of the song's general information, on the screen that collects it. There
+is one place a tempo may be typed, and page 2 no longer has a control.
 
 **What §11.5 exists for does not change, and is pinned below:**
 
@@ -249,36 +255,89 @@ def test_the_only_tempo_gate_in_the_server_is_the_shared_one():
 
 
 @pytest.fixture
+def page1():
+    return pages.render_input()
+
+
+@pytest.fixture
 def page2(synthetic_session):
     return pages.render_review(server.session_payload(synthetic_session))
 
 
-def test_the_review_page_asks_for_all_four_values(page2):
+def test_page_1_asks_for_all_four_values(page1):
     """A control that cannot ask for a whole block should not ask for part
     of one — the sentence §11.5 was written around. Four fields is what
-    makes the reversal safe."""
+    makes the reversal safe, wherever the fields sit."""
     for field in ("t-bpm", "t-numerator", "t-denominator", "t-countinbars"):
-        assert f'id="{field}"' in page2, f"the control has no {field} input"
+        assert f'id="{field}"' in page1, f"the control has no {field} input"
 
 
-def test_the_review_page_says_the_value_is_typed_not_measured(page2):
+def test_page_1_says_the_value_is_typed_not_measured(page1):
     from tests.test_pages import visible_text
 
-    text = visible_text(page2)
+    text = visible_text(page1)
 
     assert "never measures" in text
     assert "all four" in text.lower()
 
 
-def test_the_review_page_shows_the_songs_current_tempo(page2):
-    assert 'value="66.67"' in page2
+def test_the_review_page_no_longer_carries_a_tempo_control(page2):
+    """One place a tempo may be typed. Two controls writing one fact is
+    two places to look when the file says something nobody typed."""
+    assert 'id="t-bpm"' not in page2
+    assert 'id="t-set"' not in page2
 
 
-def test_page_1_still_has_no_tempo_control():
-    """The reversal is narrow: the review page gained a control, page 1 did
-    not get its old one back. §11.5's other reason stands — a whole block
-    needs four fields on a page whose rule is four rows total."""
-    page1 = pages.render_input()
+def test_the_lyrics_route_reports_the_songs_current_tempo(client, synthetic):
+    """Page 1 prefills from the file, so the block a song already declares
+    is on screen before it is retyped — the same reason round A read it
+    back onto the review control."""
+    status, payload, _ = client.get("/api/lyrics?path=" + str(synthetic["song_path"]))
 
-    assert 'id="tempo"' not in page1
-    assert not __import__("re").search(r"<input[^>]*tempo", page1, __import__("re").I)
+    assert status == 200
+    assert payload["tempo"] == FIXTURE_TEMPO
+
+
+def test_a_whole_block_posted_with_the_run_lands_in_the_file(
+    serve_client, libertad, tmp_path, staging_root
+):
+    """The control moved, so the run route is now where a typed tempo
+    arrives — and it is the only door page 1 has."""
+    from unittest import mock
+
+    from tests.conftest import words_for
+    from tests.test_flow import _start, wait_for
+
+    client = serve_client(None)
+    txt = tmp_path / "cancion.txt"
+    txt.write_text("uno dos\ntres cuatro\n", encoding="utf-8")
+
+    with mock.patch.object(
+        server, "transcribe_words", return_value=words_for(["uno dos", "tres cuatro"])
+    ):
+        _start(client, libertad, lyrics=str(txt), info={"title": "Canción"}, tempo=WHOLE)
+        wait_for(client, "done")
+
+    _, payload, _ = client.get("/api/download?kind=song", raw=True)
+
+    assert json.loads(payload)["tempo"] == WHOLE
+
+
+def test_a_partial_block_refuses_the_run_before_it_starts(serve_client, libertad, tmp_path):
+    """Refused at the door, naming every missing key — not after ninety
+    seconds of transcription, and not by a second opinion about what a
+    valid tempo is."""
+    from tests.test_flow import _start
+
+    client = serve_client(None)
+    txt = tmp_path / "cancion.txt"
+    txt.write_text("uno dos\ntres cuatro\n", encoding="utf-8")
+
+    status, payload, _ = _start(
+        client, libertad, lyrics=str(txt), info={"title": "Canción"}, tempo={"bpm": 66.67}
+    )
+
+    assert status == 400
+    for key in ("numerator", "denominator", "countInBars"):
+        assert key in payload["error"]
+    assert client.get("/api/run")[1]["state"] == "idle"

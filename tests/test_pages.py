@@ -63,7 +63,11 @@ def page3(libertad):
     from bombista import server
 
     session = server.load_session(libertad["staging"], libertad["song_path"], lang="es")
-    return pages.render_output(server.build_sp_json(session, {})[0], filename="libertad.json")
+    return pages.render_output(
+        server.build_sp_json(session, {})[0],
+        filename="libertad.json",
+        save_path=str(server.default_out_path(session)),
+    )
 
 
 @pytest.fixture
@@ -167,30 +171,50 @@ def test_the_current_step_is_marked(name, rendered):
 # ---------------------------------------------------------------------------
 
 
-def test_page_1_renders_exactly_four_rows(page1):
-    """§9.3: four rows, and that is the whole form. The plain-text branch
-    grows it in place with three more, and is hidden until a .txt is
-    chosen — so the form the user meets is always four."""
-    main_form = page1[: page1.index('<div id="txtbranch"')]
+def test_page_1_still_opens_on_exactly_four_rows(page1):
+    """§9.3's four rows survive the augmentation: the form the user meets
+    before choosing anything is still Lyrics, Media source, Language,
+    Model. The song block that step 6 adds is hidden until a lyrics file
+    is chosen, because until then there is no song to describe."""
+    main_form = page1[: page1.index('<div id="songbranch"')]
     rows = re.findall(r'<label class="flabel">([^<]+)</label>', main_form)
 
     assert rows == ["Lyrics", "Media source", "Language", "Model"]
 
 
-def test_page_1_has_no_free_text_input(page1):
-    """§3, taken literally: every field is a picker, a dropdown, a radio or
-    a stepper. The title is the one exception and it belongs to the .txt
-    branch, which is hidden until a .txt is chosen."""
-    inputs = re.findall(r"<input[^>]*>", page1)
-    text_inputs = [i for i in inputs if 'type="text"' in i]
+def test_page_1_collects_the_general_information_a_txt_cannot_carry(page1):
+    """journey-setup step 6, 2026-09-02: this is where the metadata a
+    lyrics `.txt` cannot carry is collected — title, artist, notes, title
+    translations. It is Bombista's own screen and appears when Bombista is
+    used on its own, which is the point of putting it here."""
+    branch = re.search(r'<div id="songbranch".*?<!--/songbranch-->', page1, re.S)
 
-    assert len(text_inputs) == 1
-    assert 'id="title"' in text_inputs[0]
-    branch = re.search(r'<div id="txtbranch"[^>]*>.*?</div>\s*<!--/txtbranch-->', page1, re.S)
-    assert branch and text_inputs[0] in branch.group(0), (
-        "the title input must live inside the plain-text branch"
-    )
-    assert "pageoff" in branch.group(0), "the .txt branch must start hidden"
+    assert branch, "page 1 has no song block"
+    for field in ("title", "artist", "notes"):
+        assert f'id="{field}"' in branch.group(0), f"no {field} field"
+    for code in ("es", "en", "nl", "fr"):
+        assert f'id="tt-{code}"' in branch.group(0), f"no {code} title translation field"
+
+
+def test_the_song_block_starts_hidden(page1):
+    """There is nothing to describe until a lyrics file has been chosen,
+    and a form of empty fields over no song is the wall of text step 6's
+    walk failed on."""
+    branch = re.search(r'<div id="songbranch"[^>]*>', page1).group(0)
+
+    assert "pageoff" in branch
+
+
+def test_every_free_text_field_on_page_1_belongs_to_the_song_block(page1):
+    """§3's *no free text* is now *no free text about the run*. What the
+    machine is told — the files, the language, the model — is still
+    pickers and dropdowns; what only a human can supply is typed."""
+    branch = re.search(r'<div id="songbranch".*?<!--/songbranch-->', page1, re.S).group(0)
+    text_inputs = [i for i in re.findall(r"<input[^>]*>", page1) if 'type="text"' in i]
+
+    assert text_inputs, "page 1 has no text field at all"
+    for field in text_inputs:
+        assert field in branch, f"a text field lives outside the song block: {field}"
 
 
 def test_page_1_has_no_output_directory_control_and_no_format_checkboxes(page1):
@@ -250,37 +274,40 @@ def test_page_1_offers_the_three_models_with_their_cost(page1):
     assert "~50 s" in models
 
 
-def test_page_1_has_no_tempo_control_at_all(page1):
-    """§9.3 and §11.5, decided 2026-08-16: the control comes out. PR 4
-    shipped it as a stepper that could only ever produce `{"bpm": …}`, and
-    a bpm-only block NaNs Pregonero's `getBeatsPerBar` — correct scaling,
-    broken pulse. A control that cannot ask for a whole tempo block should
-    not ask for part of one."""
-    assert 'id="tempo"' not in page1
-    assert not re.search(r"<input[^>]*tempo", page1, re.I)
+def test_page_1_asks_for_the_whole_tempo_block(page1):
+    """§11.5 removed a tempo control from this page in 2026-08-16 and
+    round A put a four-field one on page 2. Step 6 moves it here, which is
+    where Jorge asked for it: a tempo is typed from the source that
+    produced the audio, so nothing about it waits on having heard the take.
+
+    §11.5's actual rule is untouched, and it was never *not on page 1* —
+    it was *whole or not at all*. Four fields, and a run route that
+    refuses anything less."""
+    for field in ("t-bpm", "t-numerator", "t-denominator", "t-countinbars"):
+        assert f'id="{field}"' in page1, f"the control has no {field} input"
 
 
-def test_page_1_points_at_step_2_for_the_tempo_and_names_all_four_keys(page1):
-    """The note that replaces the control (§9.3), rewritten in round A.
-
-    It used to read *Tempo is not Bombista's business* and send the reader
-    to a text editor. Half of that is now false — the review page has a
-    control — so the note points there instead. The half that is not false
-    is why it still names all four keys: *type the tempo in* is bad advice
-    on its own, because it leads to exactly the bpm-only block §11.5
-    exists to prevent."""
+def test_page_1_still_names_all_four_keys_and_says_a_tempo_is_typed(page1):
+    """*Type the tempo in* is bad advice on its own, because it leads to
+    exactly the bpm-only block §11.5 exists to prevent."""
     text = visible_text(page1)
 
-    assert "Tempo is typed in, never measured" in text
-    assert "step 2" in text
+    assert "never measures" in text
+    assert "all four" in text.lower()
     for key in ("bpm", "numerator", "denominator", "countInBars"):
         assert key in text, f"the note does not name {key}"
 
 
-def test_page_1_shows_the_slug_read_only(page1):
-    branch = re.search(r'<div id="txtbranch".*?<!--/txtbranch-->', page1, re.S).group(0)
+def test_page_1_does_not_send_the_reader_to_another_step_for_the_tempo(page1):
+    """The note that used to point at step 2 goes with the control."""
+    assert "step 2" not in visible_text(page1)
 
-    assert "Slug" in branch
+
+def test_page_1_shows_the_slug_read_only(page1):
+    """It names the file the song will be written as, and it comes from
+    the lyrics filename — so it is shown, beside the title it is not."""
+    branch = re.search(r'<div id="songbranch".*?<!--/songbranch-->', page1, re.S).group(0)
+
     assert 'id="slug"' in branch
     assert not re.search(r'<input[^>]*id="slug"', branch), "the slug is shown, not typed"
 
@@ -369,6 +396,50 @@ def test_page_3_has_no_ready_to_write_line_and_no_file_list(page3):
 
 def test_page_3_links_back_to_review(page3):
     assert 'href="/review"' in page3
+
+
+def test_page_3_offers_saving_beside_the_downloads_not_instead_of_them(page3):
+    """journey-setup step 6: `Save to the catalogue`, beside the three
+    downloads rather than replacing them. The words are chosen because the
+    flow is also how an existing song is edited, which rules out *Add to
+    the library*; and on a screen where everything else hands over bytes,
+    naming the destination is the distinction."""
+    assert 'id="save"' in page3
+    assert "Save to the catalogue" in visible_text(page3)
+
+    buttons = re.findall(r'<button[^>]*id="dl-([a-z]+)"[^>]*>([^<]*)</button>', page3)
+    assert [kind for kind, _ in buttons] == ["song", "timeline", "report"]
+
+
+def test_page_3_names_the_path_it_will_write_before_it_is_pressed(page3):
+    """A button that says *the catalogue* and a tool that writes beside the
+    working files for this run are only reconcilable if the page says which
+    file. It is stated ahead of the press, not only reported after it."""
+    assert "libertad.json" in visible_text(page3)
+    assert 'id="savepath"' in page3
+
+
+def test_only_one_control_on_page_3_carries_the_accent(page3):
+    """§10.3 — contrast is a budget and the accent marks one thing at a
+    time. Adding a second clay button left the page with two endings and
+    no answer about which one it is. `Save to the catalogue` is the one
+    that ends the flow — inside Pregonero the downloads are not an ending
+    at all — so the download that used to be primary is a plain button."""
+    primaries = re.findall(r'<button[^>]*class="btn1"[^>]*id="([a-z-]+)"', page3)
+
+    assert primaries == ["save"]
+
+
+def test_page_3_does_not_send_the_reader_to_step_2_for_the_tempo(page3):
+    """The caption named step 2 because the control was there. It moved."""
+    assert "step 2" not in visible_text(page3)
+
+
+def test_saving_is_not_a_download(page3):
+    """The three downloads hand over bytes and write nothing; this one
+    writes a file. Giving it a `dl-` id would fold it into the row that
+    chooses no path."""
+    assert not re.search(r'<button[^>]*id="dl-save"', page3)
 
 
 # ---------------------------------------------------------------------------

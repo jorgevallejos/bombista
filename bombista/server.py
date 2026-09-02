@@ -15,11 +15,14 @@ Output` — and the JSON routes behind it:
                           ASR context, leadIn and the run's provenance
     POST   /api/reanchor  {"overrides": {"<line>": <seconds>}} -> the full
                           per-line result, RE-ANCHORED against the audio
-    POST   /api/emit      write a new SP JSON through the one merge path
+    POST   /api/emit      write a new SP JSON through the one merge path.
+                          With no `out`, it writes `default_out_path` — which
+                          is what page 3's `Save to the catalogue` presses
     POST   /api/tempo     {"tempo": {...}|null} -> the session, with the
                           typed-in block set or cleared. Whole, or refused.
     POST   /api/run       start a run; GET it for phases; DELETE to cancel
-    GET    /api/lyrics    what a lyrics file declares, before it is run
+    GET    /api/lyrics    what a lyrics file declares, and the general
+                          information page 1 prefills from it, before it is run
     GET    /api/browse    a directory listing, because the server needs a
                           real path and a browser File object has none (§9.6)
     GET    /api/download  the three downloads, as bytes — song, timeline, report
@@ -66,6 +69,7 @@ from .models import Word
 from .pipeline import build_timeline, lyric_lines, normalize_to_lead_in
 from .provenance import build_provenance, compute_lines_hash, words_meta
 from .readers import read_lyrics_input
+from .skeleton import title_from_song_id
 from .report import band_counts, render_qa_report
 from .serializer import to_dict
 from .validation import TEMPO_KEYS, one_line, validate_tempo
@@ -79,6 +83,7 @@ __all__ = [
     "session_payload",
     "set_tempo",
     "build_sp_json",
+    "default_out_path",
     "emit_sp_json",
     "lead_in_source",
 ]
@@ -175,7 +180,7 @@ def _input_paths(staging_dir: Path, lyrics_path: Path, stem: str) -> frozenset[P
     return frozenset(path.resolve() for path in paths)
 
 
-def _from_scratch_song(song: dict, *, lang: str, title: str | None) -> dict:
+def _from_scratch_song(song: dict, *, lang: str, info: dict | None) -> dict:
     """§10.2.1's from-scratch shape — a `.txt` came in, so the song file
     does not exist yet and Bombista writes one with only what a plain text
     plus step 1 can honestly supply.
@@ -193,13 +198,139 @@ def _from_scratch_song(song: dict, *, lang: str, title: str | None) -> dict:
     `4/4` — and therefore it does not write it. The performer supplies
     these values and types them in by hand, where they are exact.
     """
-    resolved_title = title or song.get("title") or ""
+    info = info or {}
+    resolved_title = _text(info.get("title")) or song.get("title") or ""
+    translations = _merge_translations({}, info.get("title_translations"))
     return {
         "title": resolved_title,
-        "artist": "",
-        "notes": "",
-        "title_translations": {lang: resolved_title},
+        "artist": _text(info.get("artist")),
+        "notes": _text(info.get("notes")),
+        # The own-language entry is the from-scratch default and nothing
+        # more: Jorge's sketch of 2026-08-15 fixes it, and a `.txt` plus
+        # page 1 can honestly supply no other. A page that named some
+        # translations is taken at its word instead.
+        "title_translations": translations or {lang: resolved_title},
         "lyrics": song.get("lyrics", []),
+    }
+
+
+# ---------------------------------------------------------------------------
+# the song's general information — what a `.txt` cannot carry (step 6)
+# ---------------------------------------------------------------------------
+
+INFO_KEYS = ("title", "artist", "notes", "title_translations")
+"""The four keys page 1 collects, and the reason it collects them: a plain
+text file carries words and nothing else, so without this the flow can
+only ever make a song with no artist, no notes and no translated title.
+
+They are the song file's own key names on the wire too. A second
+vocabulary between the page and the format would be a second thing to keep
+true (§10.2)."""
+
+CATALOGUE_ORDER = ("title", "artist", "notes", "title_translations", "tempo", "intro", "lyrics")
+"""§10.2's key order, fixed against `songs/pimiento.json` — the order a key
+Bombista adds is inserted in.
+
+It decides **placement only**, never rewriting: a song that already
+declares a key keeps the position it gave it, because the catalogue's real
+files disagree with each other (`tempo` sits before `title_translations`
+in libertad, after it in pimiento) and both are valid."""
+
+
+def _text(value: object) -> str:
+    """A typed-in string, trimmed. Anything else is not a string the
+    performer typed, and reads as blank rather than as a `null` a consumer
+    would have to step around."""
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _place_key(song: dict, key: str, value: object) -> dict:
+    """Return *song* with *key* set, in `CATALOGUE_ORDER`'s position when
+    the song does not already have one.
+
+    Appending at the end would be valid JSON and would still make every
+    file Bombista touched look unlike every file it did not.
+    """
+    if key in song:
+        return {name: (value if name == key else held) for name, held in song.items()}
+
+    follows = CATALOGUE_ORDER[CATALOGUE_ORDER.index(key) + 1 :]
+    placed: dict = {}
+    for name, held in song.items():
+        if name in follows and key not in placed:
+            placed[key] = value
+        placed[name] = held
+    if key not in placed:
+        placed[key] = value
+    return placed
+
+
+def _merge_translations(original: object, posted: object) -> dict:
+    """The title translations after page 1 has had its say.
+
+    *posted* maps **every language the page offered** to what stands in its
+    field, an empty string meaning cleared. A language the page did not
+    offer is not in *posted* at all and survives untouched — the page
+    offers four and a song file may carry a fifth, and a field that was
+    never on screen must not be able to delete a value.
+
+    The original's order is kept for the keys that survive it. Rewriting
+    the order of a block nobody reads by position is exactly the
+    normalising this tool refuses elsewhere.
+    """
+    held = original if isinstance(original, dict) else {}
+    offered = posted if isinstance(posted, dict) else {}
+
+    merged = {}
+    for code, value in held.items():
+        if code in offered:
+            if _text(offered[code]):
+                merged[code] = _text(offered[code])
+        elif isinstance(value, str):
+            merged[code] = value
+    for code, value in offered.items():
+        if code not in merged and _text(value):
+            merged[code] = _text(value)
+    return merged
+
+
+def _place_info(song: dict, info: dict | None) -> dict:
+    """Apply page 1's general information to *song*.
+
+    **`None` is not the same as an empty block.** A session booted straight
+    into a review (`serve <staging> <song>`) was never asked these
+    questions, and passes every key through byte for byte; page 1 always
+    answers them, and an answer it gives is the answer.
+    """
+    if info is None:
+        return song
+
+    placed = song
+    for key in INFO_KEYS:
+        if key not in info:
+            continue
+        value = (
+            _merge_translations(song.get(key), info[key])
+            if key == "title_translations"
+            else _text(info[key])
+        )
+        placed = _place_key(placed, key, value)
+    return placed
+
+
+def song_information(song: dict) -> dict:
+    """What page 1 shows in the general-information block before anyone
+    retypes it — read off the file, never assembled twice."""
+    translations = song.get("title_translations")
+    return {
+        "title": _text(song.get("title")),
+        "artist": _text(song.get("artist")),
+        "notes": _text(song.get("notes")),
+        "title_translations": {
+            code: value
+            for code, value in (translations or {}).items()
+            if isinstance(value, str) and value
+        },
     }
 
 
@@ -247,7 +378,7 @@ def load_session(
     lang: str = "es",
     audio_path: Path | None = None,
     model_size: str = "medium",
-    title: str | None = None,
+    info: dict | None = None,
 ) -> Session:
     """Boot a session from a staging directory and the lyrics it was
     aligned against.
@@ -270,9 +401,9 @@ def load_session(
     normalised = read_lyrics_input(lyrics_path, lang=lang)
     from_scratch = normalised.bombista.get("completeness") == "partial"
     song = (
-        _from_scratch_song(normalised.song, lang=lang, title=title)
+        _from_scratch_song(normalised.song, lang=lang, info=info)
         if from_scratch
-        else normalised.song
+        else _place_info(normalised.song, info)
     )
     items = song.get("lyrics")
     if not isinstance(items, list):
@@ -471,7 +602,8 @@ def set_tempo(session: Session, tempo: object) -> None:
     anywhere (docs/bombista-serve-spec.md §11.5), which is why a half-typed
     control must not be able to reach a file.
 
-    **`None` clears the key**, and that is not the same as writing a null:
+    **`None` — or an empty block, which is what four emptied fields post —
+    clears the key**, and that is not the same as writing a null:
     absent is the honest state and Pregonero is already built for it — no
     pulse, no count-in, scale pinned to 1 (`songs@c5adf65`).
 
@@ -483,27 +615,29 @@ def set_tempo(session: Session, tempo: object) -> None:
     Raises ValueError listing every problem — the caller renders it, and
     the route turns it into a 400.
     """
-    if tempo is None:
-        session.tempo = None
-        return
+    session.tempo = normalise_tempo(tempo)
+
+
+def normalise_tempo(tempo: object) -> dict | None:
+    """A typed-in block, checked and put in `TEMPO_KEYS` order — or `None`.
+
+    Extracted when the control moved to page 1: the run route has to
+    refuse a bad block **before** ninety seconds of transcription, and
+    there is no session yet at that point. It is the same single gate
+    either way — `validation.validate_tempo` — so a partial block cannot
+    get in through one door and not the other.
+
+    The block is rebuilt rather than stored as handed in: it is small
+    enough that a browser's key order should not decide a song file's.
+    """
+    if tempo is None or tempo == {}:
+        return None
 
     findings = validate_tempo(tempo)
     if findings:
         raise ValueError(one_line(findings))
 
-    # Rebuilt in TEMPO_KEYS order rather than stored as handed in: the
-    # block is small enough that a browser's key order should not decide a
-    # song file's.
-    session.tempo = {key: tempo[key] for key in TEMPO_KEYS}
-
-
-_TEMPO_FOLLOWS = ("intro", "lyrics")
-"""Where a tempo key goes into a song that never had one. §10.2 fixes the
-catalogue order against `songs/pimiento.json` — `title_translations`,
-`tempo`, `intro`, `lyrics` — so the block is inserted before the first of
-these that exists. Appending at the end would be valid JSON and would
-still make every file Bombista touched look unlike every file it did
-not."""
+    return {key: tempo[key] for key in TEMPO_KEYS}
 
 
 def _place_tempo(song: dict, tempo: dict | None) -> dict:
@@ -512,22 +646,13 @@ def _place_tempo(song: dict, tempo: dict | None) -> dict:
     A song that already declares one keeps **its own position** — files in
     the catalogue disagree about whether `tempo` comes before or after
     `title_translations`, both are valid, and normalising would rewrite
-    files this tool is supposed to pass through.
+    files this tool is supposed to pass through. That rule is
+    `_place_key`'s, shared with the general-information keys: one
+    insertion rule, not one per key.
     """
     if tempo is None:
         return {key: value for key, value in song.items() if key != "tempo"}
-
-    if "tempo" in song:
-        return {key: (tempo if key == "tempo" else value) for key, value in song.items()}
-
-    placed: dict = {}
-    for key, value in song.items():
-        if key in _TEMPO_FOLLOWS and "tempo" not in placed:
-            placed["tempo"] = tempo
-        placed[key] = value
-    if "tempo" not in placed:
-        placed["tempo"] = tempo
-    return placed
+    return _place_key(song, "tempo", tempo)
 
 
 def sign_off(session: Session) -> str:
@@ -664,6 +789,20 @@ def _unknown_provenance(session: Session) -> dict:
         "extractedAt": "unknown",
         "toolVersion": "unknown",
     }
+
+
+def default_out_path(session: Session) -> Path:
+    """Where a write with no path of its own lands: `<stem>.json`, in the
+    directory this run's working files are in.
+
+    **It is a new file beside them, never one of them.** Invariant 6
+    refuses every path the session read as an input, `align`'s
+    `<stem>-song.json` included, so this is what is left — and it is what
+    page 3's `Save to the catalogue` writes. One owner for the answer,
+    because the page names the file before the press and the route writes
+    it, and those two must not be able to disagree.
+    """
+    return session.staging_dir / f"{session.lyrics_path.stem}.json"
 
 
 def emit_sp_json(session: Session, overrides: dict[int, float], out_path: Path) -> dict:
@@ -840,8 +979,12 @@ class Run:
                 lang=self.request["lang"],
                 audio_path=media,
                 model_size=self.request["model"],
-                title=self.request.get("title"),
+                info=self.request.get("info"),
             )
+            # Checked at the door and stored normalised, so this is an
+            # assignment rather than a second judgement of the same block.
+            if "tempo" in self.request:
+                session.tempo = self.request["tempo"]
             if self.cancelled:
                 return
             self._finish("anchor")
@@ -905,8 +1048,19 @@ def start_run(holder: Holder, body: dict) -> dict:
         "lang": lang,
         "model": model,
         "staging": str(staging),
-        "title": body.get("title"),
+        "info": body.get("info"),
     }
+    # The tempo is checked HERE, at the door, and not after ninety seconds
+    # of transcription — through the one shared gate, so a partial block is
+    # refused in the same words `bombista validate` refuses it in.
+    #
+    # It is carried only when the body said something. **Said nothing and
+    # said nothing is there are different answers**: a session booted into
+    # a review keeps whatever the song declares, while four emptied fields
+    # on page 1 clear the key.
+    if "tempo" in body:
+        request["tempo"] = normalise_tempo(body["tempo"])
+
     holder.session = None
     holder.run = Run(holder, request)
     holder.run.start()
@@ -949,8 +1103,9 @@ def _declared(normalised) -> list[str]:
 
 def describe_lyrics(lyrics_path: Path, *, lang: str = "es") -> dict:
     """What page 1 needs to know about a lyrics file the moment it is
-    chosen: which branch it takes, what it declares, and — before the run,
-    never after — what the normaliser will strip out of it (§3, §9.3).
+    chosen: which branch it takes, what it declares, what the normaliser
+    will strip out of it — before the run, never after (§3, §9.3) — and,
+    since step 6, the general information and tempo to prefill.
 
     The stripped lines come from `readers.py`'s own `strippedLines`, never
     recounted here: two implementations of "what counts as a lyric line" is
@@ -958,6 +1113,7 @@ def describe_lyrics(lyrics_path: Path, *, lang: str = "es") -> dict:
     """
     normalised = read_lyrics_input(lyrics_path, lang=lang)
     complete = normalised.bombista.get("completeness") == "complete"
+    declared_tempo = normalised.song.get("tempo") if complete else None
     return {
         "path": str(lyrics_path),
         "name": lyrics_path.name,
@@ -966,6 +1122,22 @@ def describe_lyrics(lyrics_path: Path, *, lang: str = "es") -> dict:
         "declaredLanguages": _declared(normalised),
         "strippedLines": normalised.bombista.get("strippedLines") or [],
         "lineCount": len(normalised.song.get("lyrics", [])),
+        # Step 6: page 1 collects the song's general information, so it
+        # shows what the file already says before anyone retypes it. A
+        # `.txt` says none of it, and gets the same title seed
+        # `bombista new` writes — two doors into one tool should not
+        # disagree about the first thing they put in a file.
+        "info": (
+            song_information(normalised.song)
+            if complete
+            else {
+                "title": title_from_song_id(lyrics_path.stem),
+                "artist": "",
+                "notes": "",
+                "title_translations": {},
+            }
+        ),
+        "tempo": declared_tempo if isinstance(declared_tempo, dict) else None,
     }
 
 
@@ -1099,7 +1271,12 @@ class _Handler(BaseHTTPRequestHandler):
             elif route == "/api/browse":
                 self._respond(200, browse(Path(params.get("path", [self.holder.home])[0])))
             elif route == "/api/lyrics":
-                self._respond(200, describe_lyrics(Path(params["path"][0])))
+                self._respond(
+                    200,
+                    describe_lyrics(
+                        Path(params["path"][0]), lang=params.get("lang", ["es"])[0]
+                    ),
+                )
             elif route == "/api/download":
                 self._download(params.get("kind", ["song"])[0])
             else:
@@ -1167,9 +1344,7 @@ class _Handler(BaseHTTPRequestHandler):
             else session.overrides
         )
         out = body.get("out")
-        out_path = (
-            Path(out) if out else session.staging_dir / f"{session.lyrics_path.stem}.json"
-        )
+        out_path = Path(out) if out else default_out_path(session)
         return emit_sp_json(session, overrides, out_path)
 
     def _start_run(self, body: dict) -> dict:
@@ -1255,6 +1430,7 @@ class _Handler(BaseHTTPRequestHandler):
             pages.render_output(
                 sp_json,
                 filename=f"{session.lyrics_path.stem}.json",
+                save_path=str(default_out_path(session)),
                 from_scratch=session.from_scratch,
             )
         )

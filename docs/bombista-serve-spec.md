@@ -562,12 +562,18 @@ it would say the flow has four steps when it has three. Its heading is **Process
 
 ### 9.3 Page 1 — input
 
-Heading **Input song**, lede *Two files. Two defaults. Nothing typed.*
+Heading **Input song**, lede *Two files, two defaults, and the song itself.*
 
-**No free text anywhere except the title**, and the title only appears on the plain-text branch,
-where there is no other source for it. Everything else is a file picker or a dropdown — §3's rule,
-taken literally. Revised 2026-08-15 on Jorge's review; the governing note is his, and it is the same
-note that governs page 2: *a lean interface, few options for this first version.*
+**Amended at step 6 (2026-09-02) — see §11.15.** The four rows below are unchanged and are still
+the whole of the form the user meets; what follows them is **the song block**, hidden until a
+lyrics file has been chosen, carrying the song's general information and its tempo.
+
+**§3's *no free text* survives as a sharper rule.** What the machine is told — which files, which
+language, which model — is still pickers and dropdowns, because those are answers with a right
+shape and a control that restates a file can disagree with it. What only a human is the source of
+record for is typed, because there is no other way to get it. Revised 2026-08-15 on Jorge's review;
+the governing note is his, and it is the same note that governs page 2: *a lean interface, few
+options for this first version.*
 
 A flat list of labelled rows separated by 3px rules, one control each, no panels. **Every row
 carries a mono caption under the control** — this is the one place the page explains itself, because
@@ -694,7 +700,20 @@ Top to bottom:
   **The buttons do not disable after the press.** Wanting the timing block as well as the whole file
   is normal; the sign-off is recorded once and is not a budget.
 
-5. **`← Back to review`**, because noticing something in the JSON is a legitimate reason to go back.
+5. **`Save to the catalogue`** — added at step 6 (§11.15), **beside the three downloads rather
+   than instead of them**. It is the one control on this page that writes a file, so it is not in
+   the download row and does not carry a `dl-` id. It presses `POST /api/emit` with no path of its
+   own, which lands on `default_out_path` — `<stem>.json` in the run's own directory, a **new file
+   beside** `align`'s `<stem>-song.json` rather than over it, because invariant 6 refuses every
+   path the session read as an input. **The path is printed under the button before it is pressed
+   and replaced by the path actually written after it.**
+
+6. **`← Back to review`**, because noticing something in the JSON is a legitimate reason to go back.
+
+**One accent, and it is on `Save`.** §10.3 spends contrast on one thing at a time, and adding a
+second filled button left the page with two endings and no answer about which one it was.
+`Save to the catalogue` ends the flow — inside Pregonero the downloads are not an ending at all —
+so `Download JSON file` is a plain button. Its sign-off behaviour is untouched.
 
 **Why `timeline only` is the five keys and not just `timeline`.** Someone who maintains a song file
 by hand wants the block they can paste in — and `timeline` without `linesHash` is the exact
@@ -1460,6 +1479,75 @@ passes through. A tempo added to a song that had none is inserted before the fir
 **The `timeline only` download is unchanged** and still carries exactly the five timing keys.
 `tempo` is not a timing key and does not join them; someone who typed one takes the whole file,
 which is the normal path anyway (§9.5, and B22's rule that the returned file *is* the vault file).
+
+## 11.15 The song's own information, and a way to finish (step 6, 2026-09-02)
+
+**Where this comes from.** `changopepper/projects/tramoya-integration/journey-setup.md`, step 6 —
+the walk from a cold install to an armed gig, and the acceptance test this round was measured
+against. Two changes, both Bombista's own and both visible when Bombista is used on its own.
+**Nothing here knows Pregonero exists**; a file path and a URL are still the only things that pass
+between the two.
+
+### Page 1 gains the song
+
+Title, artist, notes, title translations and the tempo, in a block below the four rows, revealed
+when a lyrics file is chosen. **This is the metadata a lyrics `.txt` cannot carry** — the thing the
+skeleton `bombista new` writes existed to supply. Without it the flow can only ever produce a song
+with no artist and no translated title, whatever the recording says.
+
+- **An SP JSON prefills every field from itself.** `GET /api/lyrics` carries `info` and `tempo`
+  alongside what it already reported, read off the file by the reader that already normalises it.
+  A screen that showed these empty over a file that has them invites a human to retype a value that
+  was already right — and this flow is **also how an existing song is edited**, which is the other
+  half of §11.15's wording below.
+- **A `.txt` gets a title seeded the way `bombista new` seeds one**: `title_from_song_id`, so
+  `hasta-calmar-el-alma` becomes `Hasta calmar el alma`. Page 1 used to seed the raw slug. Two
+  doors into one tool should not disagree about the first thing they write into a file.
+- **`null` and empty are different answers.** A session booted straight into a review
+  (`serve <staging> <song>`) was never asked these questions and passes every key through byte for
+  byte; page 1 always answers them, and an answer it gives is the answer — including an emptied
+  field, which clears the key.
+- **A language the page did not offer survives.** The page offers four; a song file may carry a
+  fifth. `_merge_translations` decides only the languages that were actually posted, so a field
+  that was never on screen cannot delete a value. The original's key order is kept for what
+  survives.
+- **One insertion rule.** `_place_key` puts a key Bombista adds in `CATALOGUE_ORDER`'s position and
+  leaves a key the song already has where the song put it. `_place_tempo` composes it rather than
+  carrying a second copy of the same rule.
+
+### The tempo control moves from page 2 to page 1
+
+**§11.14 put it on page 2 and this moves it, and the move is the whole of the change.** Round A's
+argument for page 2 was that the timeline is visible there while it is being changed. That argument
+does not survive contact with what a tempo is in this tool: **it changes no timing, is never read
+against the audio, and is never derived from anything**. Nothing about typing one waits on having
+heard the take. It belongs with the rest of the song's general information.
+
+**Everything §11.5 exists for is untouched**, and its rule was never *not on page 1* — it was
+*whole or not at all*. Four fields still; the difference is that they travel with `Process song →`
+like every other answer on the page, so **there is no `Set` button**: the run route refuses the
+whole run rather than one control, through `validation.validate_tempo`, the same single gate. It is
+refused **at the door**, before ninety seconds of transcription rather than after it.
+
+**The cost, recorded rather than resolved.** A tempo typed wrong on page 1 can only be corrected by
+going back to step 1 and running again, and a re-run discards the line corrections made on page 2.
+Page 2's control could fix one in place. `POST /api/tempo` survives and still does, so the
+capability is in the tool and only the surface is gone; whether page 2 should offer it again is
+Jorge's call, not a thing to settle by leaving two controls writing one fact.
+
+### Page 3 gains `Save to the catalogue`
+
+See §9.5. **The wording is chosen, not incidental:** the flow is not always about a new song — it is
+also how an existing one is edited, which rules out *Add to the library* — and on a screen where
+everything else hands over bytes, naming the destination is the distinction. `Confirm` was rejected:
+the timeline is confirmed one screen earlier, so a third would stop meaning anything.
+
+**The honest gap, on the record.** *The catalogue* is what the destination is called from where the
+person is standing. What Bombista actually writes is `<stem>.json` in the run's own directory —
+`~/.cache/bombista/<slug>/` for a run started from page 1, which is a cache directory and nobody's
+catalogue. Bombista has no idea where a catalogue is and must not acquire one. **What closes the
+gap is the path**, printed under the button before the press and replaced by what was written
+after it: the button carries the name and the line carries the fact.
 
 ## 12. What *using* it found
 

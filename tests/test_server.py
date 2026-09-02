@@ -603,6 +603,35 @@ def test_emitting_twice_to_the_same_path_is_not_an_input_collision(client, tmp_p
     )
 
 
+def test_save_writes_a_new_file_beside_the_runs_own_and_reports_its_path(
+    client, session, staging
+):
+    """`Save to the catalogue` presses `/api/emit` with no path of its own.
+    Invariant 6 means it cannot land on `<stem>-song.json`, so it writes
+    `<stem>.json` beside it — and the response says which file, because
+    that is the only way the person finds out where *the catalogue* was."""
+    status, payload = client.post("/api/emit", {})
+    written = Path(payload["path"])
+
+    assert status == 200
+    assert written == server.default_out_path(session)
+    assert written.parent == staging
+    assert written.name == "numeros.json"
+    assert written != staging / "numeros-song.json"
+    assert json.loads(written.read_text(encoding="utf-8"))["timelineSignedOff"]
+
+
+def test_saving_signs_off_exactly_as_a_download_does(client):
+    """Writing a file is the programmatic equivalent of pressing a
+    download, so there is no path in this tool to an SP JSON that cannot
+    say whether a human read it."""
+    _, before = client.get("/api/session")
+    _, payload = client.post("/api/emit", {})
+
+    assert before["timelineSignedOff"] is None
+    assert payload["timelineSignedOff"]
+
+
 def test_emit_refuses_an_input_path_reached_by_another_route(client, staging, tmp_path):
     """`..` and a symlink both reach the same file under a different
     spelling; the refusal compares resolved paths, not strings."""

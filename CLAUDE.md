@@ -38,6 +38,9 @@ bombista --version          # `bombista <version>` — the SAME string that land
 # The flow, front door to gate (round A closed both ends of it):
 bombista new <song-id> [-o <song.json>] [--lang es] [--title TEXT]
 #   ... an LLM session (or a human) writes the words into the skeleton ...
+#   NOTE: `serve` no longer needs this door. Page 1 collects the general
+#   information a `.txt` cannot carry (§11.15), so the browser flow goes
+#   straight from words + recording to a complete song file.
 bombista align <audio.wav> <song.json|lyrics.txt> -o <staging-dir> \
     [--model-size medium] [--lang es] [--anchor LINE=SECONDS] [--words <staging>/asr-words.jsonl] \
     [--emit timeline|songjson|report-json|srt|lrc|html]
@@ -185,11 +188,21 @@ bombista/
                    media file NAME (never the path), model, lead-in — and nothing
                    else; sha256, device, toolVersion, extractedAt and duration are
                    filed in <stem>-report.json, which is the audit artifact (§8.2).
-                   Page 1 still has NO TEMPO CONTROL (§11.5) — but page 2 does,
-                   as of round A: four fields, because a block is written whole or
-                   not at all. §11.5's removal is reversed only in WHERE a value may
-                   be typed; nothing derives, measures or guesses one, and the fields
-                   start empty rather than at a plausible 120/4/4.
+                   Page 1 carries the SONG BLOCK (§11.15, step 6): title,
+                   artist, notes, title translations and the tempo, hidden
+                   until a lyrics file is chosen and prefilled from an SP
+                   JSON. It is the metadata a `.txt` cannot carry. The tempo
+                   control lives HERE and nowhere else — round A put it on
+                   page 2, step 6 moved it, because a tempo changes no timing
+                   and is never read against the audio, so nothing about
+                   typing one waits on having heard the take. Four fields,
+                   because a block is written whole or not at all, and NO Set
+                   button: they travel with `Process song →` and the run route
+                   refuses the whole run. Nothing derives, measures or guesses
+                   one, and the fields start empty rather than at a plausible
+                   120/4/4. Page 3 carries `Save to the catalogue` BESIDE the
+                   three downloads — the one control here that writes a file,
+                   with the path it will write printed under it.
                    String composition,
                    stdlib only, inline CSS/JS, no build step, NO WEBFONT. STYLESHEET is
                    the whole of §10.3's skin and is defined ONCE — page 2 inherits it
@@ -201,10 +214,18 @@ bombista/
                    an explicit argument that refuses every other value). Holds one
                    Session (lines, words, QA state of a previous `align`) and answers
                    GET /api/session, POST /api/reanchor, POST /api/emit, POST
-                   /api/tempo. The tempo route defers entirely to
-                   validation.validate_tempo — server.py must never judge a bpm,
+                   /api/tempo. The tempo route and the run route both defer
+                   entirely to validation.validate_tempo through
+                   `normalise_tempo` — server.py must never judge a bpm,
                    numerator, denominator or countInBars itself, and a test pins
-                   that by AST rather than by grep. Imports
+                   that by AST rather than by grep. `/api/run` also carries page
+                   1's `info` (title, artist, notes, title_translations), which
+                   `_place_info` applies: absent means the song was never asked
+                   and passes through byte for byte, a posted empty field clears
+                   the key, and a language the page did not offer is left alone.
+                   `default_out_path` is THE answer to where a write with no path
+                   of its own lands — page 3 names it and /api/emit writes it, so
+                   the promise and the write cannot disagree. Imports
                    NOTHING from cli.py (invariant 1): it calls the same extracted
                    anchoring/pipeline/merge the CLI calls, so the two cannot drift.
                    An override RE-ANCHORS — there is no code here that adds an offset

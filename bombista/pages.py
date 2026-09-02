@@ -40,7 +40,7 @@ __all__ = [
     "render_output",
 ]
 
-VERSION = "v1.5.0"
+VERSION = "v1.6.0"
 """The masthead's version string — the package version with a `v` in front.
 
 It is a second copy of what `pyproject.toml` declares, and a second copy
@@ -166,6 +166,15 @@ a:hover { border-bottom-color: var(--clay); color: var(--clay); }
 .steps a.on { color: var(--clay); background: var(--surface-2); }
 .steps a.on:hover { color: var(--clay); background: var(--surface-2); }
 .steps a .n { font-variant-numeric: tabular-nums; color: var(--dimmer); }
+/* a step that did not happen: present, so the flow still reads as three,
+   but not a link and not silent about why (2026-09-02) */
+.steps .skip { display: flex; align-items: center; gap: .5rem;
+               font: 400 .72rem/1 var(--mono); text-transform: uppercase;
+               letter-spacing: .12em; color: var(--dimmer);
+               padding: .55rem .85rem; border-right: 1px solid var(--line-2);
+               text-decoration: line-through; text-decoration-color: var(--line-2); }
+.steps .skip .n { font-variant-numeric: tabular-nums; }
+.steps .skip .why { text-decoration: none; color: var(--clay-dim); letter-spacing: .1em; }
 .steps a.on .n { color: var(--clay); }
 
 /* ---------- buttons ---------- */
@@ -262,6 +271,30 @@ input[type="text"], input[type="number"] {
 .picker .foot button.pickgo { background: #4a4a44; border-color: #565650; color: var(--paper); }
 .picker .foot button.pickgo:hover:not(:disabled) { background: #565650; border-color: #6a6a62;
                                                    color: var(--paper); }
+
+/* ---------- the one consent popup (2026-09-02) ----------
+   The third and last kind of popup the suite allows: a commitment whose
+   consequence is not visible on the screen, asked AT the commitment rather
+   than while the page is still being filled in. Interrupting someone
+   mid-form to say what they have not done yet is nagging; asking once as
+   they commit is consent. It borrows the file dialog's calm shape because
+   both are asking, not announcing. */
+.ask { position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.55);
+       display: flex; align-items: center; justify-content: center; padding: 2rem; }
+.ask.pageoff { display: none; }
+.ask .inner { background: var(--surface-2); border: 1px solid var(--line-2);
+              border-radius: 6px; box-shadow: 0 16px 48px rgba(0,0,0,.55);
+              width: min(28rem, 100%); padding: 1.1rem 1.2rem 1rem; }
+.ask .head { font: 700 .95rem/1.3 var(--sans); color: var(--paper); margin-bottom: .5rem; }
+.ask p { margin: 0 0 .7rem; font: 400 .84rem/1.5 var(--sans); color: var(--dim); }
+.ask p b { color: var(--paper); font-weight: 600; }
+.ask .foot { text-align: right; font-size: 0; margin-top: 1rem; }
+.ask .foot button { display: inline-block; vertical-align: top; margin-left: .55rem;
+                    text-transform: none; letter-spacing: 0; border-radius: 4px;
+                    font: 400 .82rem/2rem var(--sans); padding: 0 1.1rem;
+                    min-width: 6.5rem; height: 2rem; color: var(--paper); }
+.ask .foot button.askgo { background: #4a4a44; border-color: #565650; }
+.ask .foot button.askgo:hover { background: #565650; border-color: #6a6a62; }
 
 /* ---------- page 1.5 — the run (§9.4) ---------- */
 .phase { display: flex; align-items: center; gap: .8rem; padding: .8rem 0;
@@ -430,6 +463,10 @@ tr.divider td { background: var(--bg); border-bottom: none;
 .tempo .tapstate { font: 400 .72rem/1 var(--mono); color: var(--dim);
                    font-variant-numeric: tabular-nums; min-width: 8rem; }
 .tapbar { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin: .7rem 0 0; }
+/* `.pageoff` is declared earlier, so a later `display: flex` beats it at equal
+   specificity — the player showed itself over a song with no recording. Every
+   component that sets its own display has to say this. */
+.tapbar.pageoff { display: none; }
 /* the native transport refuses the palette; invert it down to the ground the
    way page 2's player is, rather than leaving a light slab on a dark page */
 .tapbar audio { height: 32px; max-width: 22rem; flex: 1 1 16rem;
@@ -581,7 +618,15 @@ _INPUT_JS = """\
     taps.push(now);
     if (taps.length < 2) { tapSay("keep tapping\u2026"); return; }
     var span = taps[taps.length - 1] - taps[0];
-    var bpm = Math.round((60000 * (taps.length - 1)) / span * 100) / 100;
+    /* **Settles on halves, and only what tapping produces** (2026-09-02).
+       A hand cannot resolve a hundredth of a beat per minute, so a long
+       decimal here is noise wearing the costume of precision. A HALF is
+       the finest thing tapping can honestly claim.
+
+       A TYPED value is left alone: `66.67` is a real felt pulse, exact
+       from the source that produced the audio, and rounding it to `67` is
+       drift a long song will show. Only this function rounds. */
+    var bpm = Math.round((60000 * (taps.length - 1)) / span * 2) / 2;
     document.getElementById("t-bpm").value = String(bpm);
     tapSay(taps.length + " taps \u00b7 " + bpm);
   }
@@ -616,6 +661,20 @@ _INPUT_JS = """\
      carries all of this, and a screen that showed it empty would invite a
      human to retype a value that was already right. */
   function prefill(data) {
+    /* **The take the file was aligned against** (2026-09-02). The lyrics
+       field prefilled and this one did not, so nothing told you whether
+       the app had forgotten or was waiting. It stays changeable:
+       re-aligning against a different take is the normal reason to edit a
+       song, not an edge case. */
+    if (data.media && !state.media) {
+      state.media = data.media.path;
+      document.getElementById("media-name").textContent = data.media.name;
+      document.getElementById("t-audio").src =
+        "/api/audio?path=" + encodeURIComponent(data.media.path);
+      document.getElementById("tapbar").className = "tapbar";
+      document.getElementById("clear-media").className = "";
+    }
+
     var info = data.info || {};
     document.getElementById("title").value = info.title || "";
     document.getElementById("artist").value = info.artist || "";
@@ -659,6 +718,7 @@ _INPUT_JS = """\
       document.getElementById("t-audio").src =
         "/api/audio?path=" + encodeURIComponent(path);
       document.getElementById("tapbar").className = "tapbar";
+      document.getElementById("clear-media").className = "";
       ready();
     });
   });
@@ -712,14 +772,48 @@ _INPUT_JS = """\
       data.lineCount + " lyric lines remain.";
   }
 
+  /* **The lyrics alone are enough** (2026-09-02). A song with words and no
+     recording is performed by advancing the lines by hand; there is
+     nothing to align, so there is nothing to require. */
   function ready() {
-    document.getElementById("process").disabled = !(state.lyrics && state.media);
+    document.getElementById("process").disabled = !state.lyrics;
   }
 
+  function clearMedia() {
+    state.media = null;
+    document.getElementById("media-name").textContent = "\u2014";
+    document.getElementById("clear-media").className = "pageoff";
+    document.getElementById("t-audio").removeAttribute("src");
+    document.getElementById("tapbar").className = "tapbar pageoff";
+    ready();
+  }
+
+  document.getElementById("clear-media").addEventListener("click", clearMedia);
+
+  /* Asked ONCE, at the commitment, and never while the page is being
+     filled in. The consequence of going on without a recording is not
+     visible on this screen, which is exactly what earns a popup here —
+     and nagging about it from the moment the page loads is what does
+     not. */
+  var ask = document.getElementById("ask-manual");
+
+  document.getElementById("ask-no").addEventListener("click", function () {
+    ask.className = "ask pageoff";
+  });
+  document.getElementById("ask-yes").addEventListener("click", function () {
+    ask.className = "ask pageoff";
+    start();
+  });
+
   document.getElementById("process").addEventListener("click", function () {
+    if (!state.media) { ask.className = "ask"; return; }
+    start();
+  });
+
+  function start() {
     var body = {
       lyrics: state.lyrics,
-      media: state.media,
+      media: state.media || "",
       lang: langSel.value,
       model: document.getElementById("model").value,
       info: information(),
@@ -734,7 +828,7 @@ _INPUT_JS = """\
         if (pair[0] >= 400) { refuse(pair[1].error); return; }
         location.href = "/processing";
       });
-  });
+  }
 
   /* A refusal is rendered in the page's own warning component rather than
      a browser alert — the skin has one, and a modal from another design
@@ -831,12 +925,17 @@ _OUTPUT_JS = """\
   document.getElementById("dl-song").addEventListener("click", function () {
     download("song", true);
   });
-  document.getElementById("dl-timeline").addEventListener("click", function () {
-    download("timeline", true);
-  });
-  document.getElementById("dl-report").addEventListener("click", function () {
-    download("report", false);
-  });
+  /* Absent on a song with no recording — there is no timeline to paste
+     and no report to write. `on` rather than a bare getElementById, so
+     this page keeps the rule that a script never reaches for an id its
+     markup does not carry. */
+  function on(id, run) {
+    var el = document.getElementById(id);
+    if (el) { el.addEventListener("click", run); }
+  }
+
+  on("dl-timeline", function () { download("timeline", true); });
+  on("dl-report", function () { download("report", false); });
 
   /* Save (step 6). It writes a file rather than handing over bytes, so
      unlike the three downloads it can fail — and it reports the path it
@@ -896,13 +995,28 @@ def _masthead() -> str:
     )
 
 
-def _step_bar(current: str) -> str:
+def _step_bar(current: str, *, skipped: str = "") -> str:
     """Every step clickable, including backwards: going back to step 1 is
     how you re-run with a different model, and going back to step 2 from
     step 3 is how you fix something you noticed while reading the file.
-    Nothing is destroyed by moving between them."""
+    Nothing is destroyed by moving between them.
+
+    *skipped* names a step that did not happen — step 2 on a song with no
+    recording, where there is no timeline to review. **It is rendered as a
+    span rather than a link**, struck through and labelled: a bar that
+    still offered `2 Review` would say a review is available, and one that
+    silently marked step 3 current would say a review happened. Neither is
+    true, and the difference matters on the one screen that reports what
+    the file contains.
+    """
     segments = []
     for number, label, href in STEPS:
+        if number == skipped:
+            segments.append(
+                f'<span class="skip"><span class="n">{number}</span> {label}'
+                f'<span class="why">skipped</span></span>'
+            )
+            continue
         on = ' class="on"' if number == current else ""
         segments.append(f'<a href="{href}"{on}><span class="n">{number}</span> {label}</a>')
     return '<nav class="steps">' + "".join(segments) + "</nav>"
@@ -921,7 +1035,13 @@ def _version_line() -> str:
 
 
 def _shell(
-    *, title: str, current: str, body: str, script: str = "", header: bool = True
+    *,
+    title: str,
+    current: str,
+    body: str,
+    script: str = "",
+    header: bool = True,
+    skipped: str = "",
 ) -> str:
     """One page, inline CSS and JS, nothing fetched from anywhere but
     this process (§8.1).
@@ -943,7 +1063,7 @@ def _shell(
         "<body>\n"
         '<div class="wrap">\n'
         + (_masthead() if header else "")
-        + _step_bar(current)
+        + _step_bar(current, skipped=skipped)
         + ("" if header else _version_line())
         + body
         + "\n</div>\n"
@@ -1251,7 +1371,8 @@ _REVIEW_JS = """\
      marked so the ear and the eye are on the same line. */
   audio.addEventListener("timeupdate", function () {
     var t = audio.currentTime;
-    document.getElementById("ph").textContent = t.toFixed(2);
+    /* A tenth here too: this is a readout, not a value anything keeps. */
+    document.getElementById("ph").textContent = t.toFixed(1);
     var all = rows();
     for (var i = 0; i < all.length; i++) {
       var s = startOf(all[i]), e = parseFloat(all[i].getAttribute("data-end"));
@@ -1274,8 +1395,22 @@ _REVIEW_JS = """\
 """
 
 
-def _f2(value: float | None) -> str:
-    return "" if value is None else f"{value:.2f}"
+def _f1(value: float | None) -> str:
+    """A time as the LIST shows it: one decimal, and the value is not
+    touched.
+
+    **Round the display, never the value** (Jorge, 2026-09-02). Hundredths
+    on a cue nobody can place to a tenth is precision a person cannot act
+    on, and it made the column harder to read for nothing. What must not
+    be rounded is the stored number: it comes from alignment, and coarsening
+    it to half-seconds would put a cue a quarter of a second out on lines
+    three seconds apart.
+
+    So this is a formatter and nothing else. The row still carries the full
+    value in `data-start`, the popup edits it at hundredths, and what
+    reaches the file is what the aligner measured.
+    """
+    return "" if value is None else f"{value:.1f}"
 
 
 def _why_cell(line: dict) -> str:
@@ -1353,10 +1488,10 @@ def _row(line: dict, *, pivot: int | None, machine_duration: float | None) -> st
         f'<td><button class="play" data-start="{start:.2f}">▶</button></td>'
         f'<td class="idx">line {i}</td>'
         f'<td class="text">{html_escape(line["text"])}</td>'
-        f'<td class="num"><span class="was mono">{_f2(was_start)}</span>'
-        f'<button class="tbtn" data-open="{i}">{start:.2f}</button></td>'
-        f'<td class="num"><span class="was mono">{_f2(was_duration)}</span>'
-        f'<span class="mono">{duration:.2f}</span></td>'
+        f'<td class="num"><span class="was mono">{_f1(was_start)}</span>'
+        f'<button class="tbtn" data-open="{i}">{_f1(start)}</button></td>'
+        f'<td class="num"><span class="was mono">{_f1(was_duration)}</span>'
+        f'<span class="mono">{_f1(duration)}</span></td>'
         f'<td>{_band_cell(line)}</td>'
         f'<td class="why">{_why_cell(line)}</td>'
         "</tr>"
@@ -1667,7 +1802,11 @@ def render_input(*, browse_from: str = "", song: str = "", header: bool = True) 
     <div class="ctl">
       <button type="button" id="pick-media">Choose file</button>
       <span class="fname" id="media-name">—</span>
+      <button type="button" id="clear-media" class="pageoff">Remove</button>
     </div>
+    <p class="hint"><b>With a recording, the lines change themselves as the song plays</b> and
+      the projection follows without you touching it. Without one, you advance them by hand.
+      That is a real way to perform a song, and it is what happens if you leave this empty.</p>
     <p class="hint">MP3 · M4A · WAV · FLAC · MP4 · MOV. The audio track is read from video too.</p>
   </div>
 
@@ -1723,6 +1862,19 @@ def render_input(*, browse_from: str = "", song: str = "", header: bool = True) 
 
 <div id="refused" class="pageoff"><b>The run did not start</b><span id="refused-why"></span></div>
 
+<div class="ask pageoff" id="ask-manual">
+  <div class="inner">
+    <div class="head">No recording</div>
+    <p>This song will be <b>advanced by hand</b> during the performance: you move to the next
+      line yourself, and nothing follows the audio on its own.</p>
+    <p>You can give it a recording later, and the lines will follow it on their own.</p>
+    <div class="foot">
+      <button type="button" id="ask-no">Go back</button>
+      <button type="button" class="askgo" id="ask-yes">Continue</button>
+    </div>
+  </div>
+</div>
+
 <p class="go"><button class="btn1" id="process" disabled>Process song →</button></p>
 """
     script = (
@@ -1769,25 +1921,53 @@ def render_processing(
 
 
 _CAPTION_PASS = (
-    "This is your <b>Song Performance JSON</b> — the file you started from, with the timing "
-    "keys filled in. Bombista wrote five: <code>linesHash</code>, "
-    "<code>timelineSignedOff</code>, <code>timelineVersion</code>, <code>leadIn</code>, "
-    "<code>timeline</code>. Entry 0 is <code>0.00</code> and the lead-in is banked. Everything "
-    "above them is passed through untouched, all four languages included — the one exception "
-    "is a <code>tempo</code> you typed on step 1, which comes from you rather than from the "
-    "audio. Bands, signals and the record of what you set by hand are in the <b>report</b>, "
-    "not here."
+    "Your song file, with the timeline you just confirmed in it. Everything you loaded is "
+    "passed through untouched, translations included."
 )
 
 _CAPTION_NEW = (
-    "There was no song file, so this is a new <b>Song Performance JSON</b> built from your "
-    "<code>.txt</code>. It carries only what a plain text plus step 1 can honestly supply: "
-    "<code>artist</code> and <code>notes</code> are empty for you to fill in, and "
-    "<code>lyrics</code> carries the one language you chose. A <code>tempo</code> block is "
-    "here only if you typed one on step 1 — Bombista never measures one, and a partial one "
-    "breaks Pregonero's pulse. Add the other languages later; <code>linesHash</code> will "
-    "catch it if the line count changes."
+    "A new song file: the lines in the language you chose, the timeline you just confirmed, "
+    "and the tempo if you typed one. Anything else is empty and can be filled in later."
 )
+
+_CAPTION_MANUAL = (
+    "A new song file with the words and no timeline: <b>this song is advanced by hand during "
+    "the performance.</b> Give it a recording later and the lines will follow it on their "
+    "own."
+)
+"""Three sentences, one per ending, and each is one sentence because that is
+what it took to get `Save to the catalogue` above the fold (walked
+2026-09-02): the button that finishes the flow was reachable only by
+scrolling, behind a paragraph explaining what a `.txt` can honestly supply.
+
+**There are two endings and not one**, because a single caption cannot
+claim a timeline that is not there. A song with no recording gets the third
+one, which says what will happen on the night rather than what is missing
+from the file."""
+
+
+def _timeline_downloads(manual: bool) -> str:
+    """The two downloads that only exist when a timeline does.
+
+    A song with no recording has no timing keys to paste and no bands to
+    report, so offering either would hand over an empty file or a refusal.
+    The whole-file download stays: it carries the words, which is the whole
+    of what this song is.
+    """
+    if manual:
+        return ""
+    return """  <div class="dl">
+    <button type="button" id="dl-timeline">Download timeline only</button>
+    <p class="hint">The five timing keys only &mdash; <code>linesHash</code>,
+      <code>timelineSignedOff</code>, <code>timelineVersion</code>, <code>leadIn</code>,
+      <code>timeline</code> &mdash; to paste into a song file you already maintain.</p>
+  </div>
+  <div class="dl">
+    <button type="button" id="dl-report">Download report</button>
+    <p class="hint">Bands, signals, provenance and every hand-set line, as markdown. Does not
+      count as sign-off.</p>
+  </div>
+"""
 
 
 def render_output(
@@ -1796,6 +1976,7 @@ def render_output(
     filename: str,
     save_path: str,
     from_scratch: bool = False,
+    manual: bool = False,
     header: bool = True,
 ) -> str:
     """Page 3 (§9.5). Read-only, the JSON in full, and a way to finish.
@@ -1806,6 +1987,11 @@ def render_output(
     before it can be used. The argument for folding — that 19 lines × 4
     languages buries the timing keys — is answered by the caption saying
     which five keys Bombista wrote, not by hiding the rest.
+
+    **`← Back to review` is absent on a manual song.** There is no review
+    to go back to — `/review` would only send you here again — and a link
+    that returns you to the page you are on is the flow pretending a step
+    exists.
 
     **`Save to the catalogue` is step 6's addition, and since the walk of
     2026-09-02 it sits ABOVE the three downloads rather than below them.**
@@ -1826,14 +2012,17 @@ def render_output(
     promise and the write cannot disagree.
     """
     rendered = json.dumps(sp_json, indent=2, ensure_ascii=False)
+    if manual:
+        caption = _CAPTION_MANUAL
+    elif from_scratch:
+        caption = _CAPTION_NEW
+    else:
+        caption = _CAPTION_PASS
     body = f"""
 <h1>Output</h1>
 <p class="lede">A new file. Nothing you loaded was modified.</p>
 
-<p class="hint">{_CAPTION_NEW if from_scratch else _CAPTION_PASS}</p>
-
-<div class="jsonhead"><span class="fn">{html_escape(filename)}</span></div>
-<pre class="json" id="json">{html_escape(rendered)}</pre>
+<p class="hint">{caption}</p>
 
 <div class="save">
   <button type="button" class="btn1" id="save">Save to the catalogue</button>
@@ -1843,6 +2032,9 @@ def render_output(
   <p class="sstate" id="savestate"></p>
 </div>
 
+<div class="jsonhead"><span class="fn">{html_escape(filename)}</span></div>
+<pre class="json" id="json">{html_escape(rendered)}</pre>
+
 <p class="hint dlhead">Or take the bytes yourself, if you keep this song somewhere else.</p>
 
 <div class="dlrow">
@@ -1850,20 +2042,16 @@ def render_output(
     <button type="button" id="dl-song">Download JSON file</button>
     <p class="hint">The whole file above. This is the one Tramoya reads.</p>
   </div>
-  <div class="dl">
-    <button type="button" id="dl-timeline">Download timeline only</button>
-    <p class="hint">The five timing keys only — <code>linesHash</code>,
-      <code>timelineSignedOff</code>, <code>timelineVersion</code>, <code>leadIn</code>,
-      <code>timeline</code> — to paste into a song file you already maintain.</p>
-  </div>
-  <div class="dl">
-    <button type="button" id="dl-report">Download report</button>
-    <p class="hint">Bands, signals, provenance and every hand-set line, as markdown. Does not
-      count as sign-off.</p>
-  </div>
-</div>
+{_timeline_downloads(manual)}</div>
 
 <p><span class="pageoff" id="signoff"></span></p>
-<p class="go"><a href="/review">← Back to review</a></p>
+{'' if manual else '<p class="go"><a href="/review">← Back to review</a></p>'}
 """
-    return _shell(title="Output", current="3", body=body, script=_OUTPUT_JS, header=header)
+    return _shell(
+        title="Output",
+        current="3",
+        body=body,
+        script=_OUTPUT_JS,
+        header=header,
+        skipped="2" if manual else "",
+    )

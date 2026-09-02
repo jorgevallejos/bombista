@@ -85,9 +85,15 @@ has a tool. **`tempo` and the timing keys are absent, not scaffolded**: a missin
 state and a fake one is a bug that reaches a stage (`songs@c5adf65`), and a human starting a song
 does not write timings.
 
+**A RECORDING IS OPTIONAL** (§11.18, 2026-09-02). A song with words and no recording is a
+legitimate song — it is performed by advancing the lines by hand — so `serve`'s page 1 lets you
+through with the lyrics alone, there is nothing to align, step 2 is skipped and the flow lands on
+step 3. Such a file carries **none of the five timing keys**, and `--for-performance` reports
+`manual only: no timeline` and exits 0 rather than refusing it.
+
 `validate` is the **gate, and it asks two different questions**. The default asks *is this file
 sane* and tolerates work in progress — a song fresh from `new` has no timeline and must still be
-savable. `--for-performance` asks *is this song finished*: a timeline present and consistent with
+savable. `--for-performance` asks *which performance is this song ready for*: a timeline present and consistent with
 the lyrics, and a declared `media` that resolves. **A missing `tempo` is a warning there, not a
 failure** (pedal-driven mode works without one); a *partial* tempo block is a failure at both
 levels. Every problem is listed, never just the first. **Playability is checked here and not in
@@ -178,6 +184,13 @@ bombista/
                    ONE representation and it is absence, because the receiver refuses
                    a zero. tests/test_validation.py carries the receiver's accept/refuse
                    table; a divergence is a failing test rather than a walk.
+                   THREE severities since 2026-09-02: ERROR, WARNING and MODE.
+                   A MODE is a PROPERTY of the song, not a problem — `manual
+                   only: no timeline` — so it never fails a gate and it joins
+                   the HEADLINE rather than the list, because it says which
+                   performance the verdict is about. A song with no timeline
+                   is performed by hand, which is a normal night; refusing it
+                   was the gate answering a question nobody asked.
                    Pure, stdlib-only, prints nothing
   writers.py     — everything downstream of the canonical CP form: songjson, report-json,
                    srt, lrc, html — plus merge_envelope, THE one merge path (shared with
@@ -216,7 +229,14 @@ bombista/
                    signature from TIME_SIGNATURES, and bars before the first
                    line, with a TAP button beside the pulse and the chosen take
                    playable, because nobody counts beats for a minute and tapping
-                   is the only method that yields the FELT pulse.
+                   is the only method that yields the FELT pulse. TAPPING SETTLES
+                   ON HALVES and a TYPED value stays free: a hand cannot resolve
+                   a hundredth of a bpm, but `66.67` typed from the source is
+                   exact and rounding it to `67` is drift a long song will show.
+                   Page 2 ROUNDS THE DISPLAY AND NEVER THE VALUE — a tenth in the
+                   list, hundredths in the popup, which is the instrument. The
+                   0.05 stepper is unchanged: invariant 2 forbids a control
+                   coarser than the 0.07 s correction loop.
                    `numerator`/`denominator` are the format's business,
                    split at the boundary, never a question put to a musician.
                    NO Set button: the block travels with `Process song →` and

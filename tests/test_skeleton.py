@@ -114,7 +114,13 @@ def test_a_song_id_that_cannot_name_a_file_is_refused(song_id):
         song_skeleton(song_id, lang="es")
 
 
-def test_a_skeleton_with_no_timeline_fails_for_performance():
-    """The default level tolerates work in progress; the performance gate
-    does not. A song without a timeline cannot enter a setlist."""
-    assert errors(validate_song(song_skeleton("libertad", lang="es"), for_performance=True))
+def test_a_skeleton_with_no_timeline_is_named_manual_not_refused():
+    """**Reversed 2026-09-02.** A song without a timeline is performed by
+    advancing the lines by hand, which is a normal night — so the
+    performance gate names the mode instead of turning the song away."""
+    from bombista.validation import modes
+
+    found = validate_song(song_skeleton("libertad", lang="es"), for_performance=True)
+
+    assert errors(found) == []
+    assert [f.where for f in modes(found)] == ["timeline"]

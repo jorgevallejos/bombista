@@ -341,6 +341,26 @@ def test_the_tap_control_starts_a_fresh_count_after_a_pause(page1):
     assert "no taps yet" in page1
 
 
+def test_tapping_settles_on_halves_and_a_typed_value_stays_free(page1):
+    """Jorge, 2026-09-02. A hand cannot resolve a hundredth of a beat per
+    minute, so a long decimal from tapping is noise wearing the costume of
+    precision — a half is the finest thing tapping can honestly claim.
+
+    **A typed value is left alone**, and that is the other half of the
+    rule: `66.67` is a real felt pulse, exact from the source that
+    produced the audio, and rounding it to `67` is drift a long song will
+    show. Only the tap function rounds.
+    """
+    script = page1.split("<script>")[1]
+    tap = script[script.index("function tap()") : script.index("function information()")]
+
+    assert "* 2) / 2" in tap, "tapping does not settle on halves"
+
+    block = script[script.index("function tempoBlock()") :]
+    block = block[: block.index("\n  }")]
+    assert "Math.round" not in block, "a typed tempo must reach the server as typed"
+
+
 def test_the_bpm_caption_asks_for_the_felt_pulse_and_warns_off_the_daw(page1):
     """**The 1.5x error this exists to stop, walked 2026-09-02.** The old
     caption read *type it from the source that produced this audio, where
@@ -693,15 +713,18 @@ def test_the_skin_has_one_palette_no_radius_and_no_blue():
     no border radius anywhere, no blue — `--edit: #4b57c4` is gone and clay
     took its jobs.
 
-    **The file picker is the one exception and it is scoped to it**
-    (2026-09-02). Everything else here is brutalist by decision; a file
-    dialog is the one place a person expects their system's own furniture,
-    so it gets soft corners. The rule holds everywhere it is not
-    `.picker`, which is what this now asserts — the exception cannot leak
-    into the rest of the skin without turning this red.
+    **Dialogs are the exception and they are named one by one**
+    (2026-09-02). Everything else here is brutalist by decision; a dialog
+    is where a person expects their system's own furniture, so it gets
+    soft corners. Two of them exist — the file picker and the one consent
+    popup — and the rule holds everywhere else, which is what this
+    asserts. A third would have to be added here on purpose.
     """
     css = pages.STYLESHEET
-    outside_the_picker = "".join(block for block in _rules(css) if ".picker" not in block)
+    dialogs = (".picker", ".ask")
+    outside_the_picker = "".join(
+        block for block in _rules(css) if not any(d in block for d in dialogs)
+    )
 
     assert "color-scheme: dark" in css
     assert "prefers-color-scheme" not in css
@@ -733,6 +756,32 @@ def test_no_class_inside_the_picker_collides_with_a_page_wide_one():
     assert not (applied & bare), (
         f"{sorted(applied & bare)} is styled page-wide and inside the dialog"
     )
+
+
+def test_every_component_that_sets_a_display_also_beats_pageoff():
+    """`.pageoff` is declared early, so any later rule setting `display`
+    on the same element wins at equal specificity and the thing stays
+    visible. The tap player did exactly that over a song with no
+    recording (2026-09-02), showing a transport for a take that was never
+    chosen.
+
+    So a class that both sets `display` and is used with `pageoff` has to
+    say so explicitly.
+    """
+    hidden_by_pageoff = {
+        match
+        for markup in (pages.render_input(), pages._PICKER_JS)
+        for match in re.findall(r'class="([a-z-]+) pageoff"', markup)
+    }
+    css = pages.STYLESHEET
+
+    for name in sorted(hidden_by_pageoff):
+        sets_display = re.search(rf"^\.{name} \{{[^}}]*display:", css, re.M | re.S)
+        if not sets_display:
+            continue
+        assert f".{name}.pageoff" in css, (
+            f".{name} sets its own display and will beat .pageoff — say so explicitly"
+        )
 
 
 def test_the_file_picker_has_no_voice():

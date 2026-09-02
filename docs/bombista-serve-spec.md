@@ -1718,6 +1718,84 @@ The dialog is built in JavaScript, where nothing shows you the rest of the page'
 foot is also a plain block with two pinned inline-blocks rather than a flex row — the dullest thing
 that cannot do this again.
 
+## 11.18 A song with no recording, and what step 7 found (2026-09-02)
+
+Step 7 passed for the first time on `v1.5.0`. Eight changes came out of it, and the largest reverses
+a rule this spec has assumed since §3.
+
+### A recording is optional, and a manual song is a whole song
+
+**A song with words and no recording is legitimate**: it is performed by advancing the lines by
+hand, which is a normal night. The rule that a song could not leave step 1 without audio was written
+when a timeline was assumed, and it was wrong.
+
+What the flow does with no recording, at every step:
+
+| step | what happens |
+|---|---|
+| 1 | `Process song →` is enabled by the lyrics alone. Pressing it asks **once**, at the press. |
+| 1.5 | Both phases report **`skipped`**, not `done` — a run that claimed work it never did would be §9.4's state degraded into a lie. |
+| 2 | **Never shown.** `/review` redirects to `/output`; a page of empty rows would be the flow pretending a step happened. |
+| step bar | Step 2 renders as a struck-through span reading `2 Review skipped` — not a link, because there is nothing to visit, and not silent, because step 3 marked current would imply a review happened. |
+| 3 | The second caption, no `Download timeline only`, no `Download report`, no `← Back to review`. |
+| the file | **None of the five timing keys** — not `linesHash`, which guards a timeline that is not there, and not `timelineSignedOff`, which would claim a human reviewed one. |
+| the gate | `ok — manual only: no timeline`, exit **0**. |
+
+### The gate names the mode instead of refusing the song
+
+A new severity, `MODE`, beside `ERROR` and `WARNING`. It is not a warning: nothing here wants
+fixing, and a warning invites someone to fix it. It never fails a gate, and it joins the **headline**
+rather than the list below it, because it qualifies the verdict — *ready for which night?* is the
+question the old `not ready` was answering without being asked.
+
+### Say what a timeline buys, where the choice is made
+
+One line at the media source: *with a recording, the lines change themselves as the song plays and
+the projection follows without you touching it; without one, you advance them by hand.* The flow
+explained what a timeline **is** and never why it is worth the wait.
+
+### Asked once, at the commitment
+
+The third and last kind of popup the suite allows: a commitment whose consequence is not visible on
+the screen. **Asked at the press, never while the page is being filled in** — interrupting someone
+mid-form to say what they have not done yet is nagging; asking once as they commit is consent. It
+borrows the file dialog's calm shape because both are asking rather than announcing, and it is the
+second and last dialog exempt from §10.3's no-radius rule.
+
+### Tapping settles on halves; a typed value stays free
+
+A hand cannot resolve a hundredth of a beat per minute. A **half** is the finest thing tapping can
+honestly claim, and a long decimal from it is noise wearing the costume of precision. A typed `66.67`
+is left exactly alone: it is a real felt pulse and rounding it to `67` is drift a long song will show.
+
+### Round the display, never the value
+
+The list, the start button, the duration and the playhead show **one decimal**. What is stored is
+untouched: it comes from alignment, and coarsening it to half-seconds would put a cue a quarter of a
+second out on lines three seconds apart. The row still carries the exact value in `data-start`.
+
+**Invariant 2 is unchanged and the stepper is unchanged, deliberately.** The prompt for this round
+asked to nudge in tenths as well. A `0.1` step is coarser than the 0.07 s correction loop the
+stepper exists to land inside, which invariant 2 forbids by number and `test_page2.py` pins. The
+list is a **readout** and the popup is the **instrument**: the readout rounds to a tenth, the
+instrument keeps hundredths, and nothing shows a value changing by less than it moves — during a
+nudge the number under the cursor is the popup's field, which updates on every press. **Recorded as
+a deviation from what was asked, with the reason, rather than taken silently.**
+
+### Page 3 is one sentence and three endings
+
+`Save to the catalogue` was below the fold behind a paragraph explaining what a `.txt` can honestly
+supply. Each caption is now one sentence, and there are **three** rather than one, because a single
+caption cannot claim a timeline that is not there. The JSON window moves below the button.
+
+### An edit prefills the take as well as the words
+
+`previous_take` resolves it from `asr-words.meta.json` in the staging directory — this tool's own
+record of what a run listened to, with an absolute path — and failing that from the song's own
+`media.src`, looked for beside the song file and in the directory the pickers open in. **Never
+another file**: the same rule `audio_path_for` follows. Being asked is not the problem; being asked
+silently is.
+
 ## 12. What *using* it found
 
 §11 is what building B20 found. This is what the first real sessions found — a different and more

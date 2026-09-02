@@ -135,6 +135,19 @@ class Session:
     audio_path: Path | None = None
     model_size: str = "medium"
     from_scratch: bool = False
+    manual: bool = False
+    """No recording, so no timeline, so nothing to review.
+
+    **A song with words and no recording is a legitimate song** (Jorge,
+    2026-09-02): it is performed by advancing the lines by hand, which is a
+    normal night. The rule that a song could not leave step 1 without audio
+    was written when a timeline was assumed.
+
+    A manual session carries no words and no anchors, `/review` sends you
+    to the output, and `build_sp_json` writes **none of the five timing
+    keys** — not even `linesHash`, which guards a timeline that is not
+    there, and not `timelineSignedOff`, which would claim a human reviewed
+    one."""
     tempo: dict | None = None
     stripped_lines: list[dict] = field(default_factory=list)
     overrides: dict[int, float] = field(default_factory=dict)
@@ -348,6 +361,7 @@ def load_session(
     audio_path: Path | None = None,
     model_size: str = "medium",
     info: dict | None = None,
+    manual: bool = False,
 ) -> Session:
     """Boot a session from a staging directory and the lyrics it was
     aligned against.
@@ -361,7 +375,7 @@ def load_session(
     Raises ValueError naming what is missing. The caller renders it.
     """
     words_path = staging_dir / WORDS_FILENAME
-    if not words_path.exists():
+    if not manual and not words_path.exists():
         raise ValueError(
             f"{staging_dir}: no {WORDS_FILENAME} — this is not an `align` "
             "staging directory, or the run did not finish"
@@ -382,8 +396,12 @@ def load_session(
     if not lines:
         raise ValueError(f"{lyrics_path}: no lyric lines carry the {lang!r} language key")
 
-    words = load_words(words_path)
-    machine = anchor_lines(words, lines)
+    # A manual session has nothing to transcribe and nothing to anchor. The
+    # empty word list is not a degraded run — it is the honest state of a
+    # song that was never given a recording, and everything downstream
+    # branches on `manual` rather than on the emptiness.
+    words = [] if manual else load_words(words_path)
+    machine = [] if manual else anchor_lines(words, lines)
 
     # Read, not computed: whatever the song already declares. `align` has
     # no opinion about a tempo and neither does this, but a review that
@@ -397,6 +415,7 @@ def load_session(
         audio_path=audio_path,
         model_size=model_size,
         from_scratch=from_scratch,
+        manual=manual,
         tempo=declared if isinstance(declared, dict) else None,
         stripped_lines=normalised.bombista.get("strippedLines") or [],
         staging_dir=staging_dir,
@@ -663,7 +682,18 @@ def build_sp_json(
     Bands, signals and the per-line hand-set record are NOT in here. They
     belong to the report (§10.2): a song file is a song, and every consumer
     downstream would otherwise have to step around a QA blob.
+
+    **A manual session returns early with none of the five.** A song with
+    no recording has no timeline to describe, and writing an empty envelope
+    would be a claim about timing that nothing measured.
     """
+    if session.manual:
+        # No recording, so no timeline, so **none of the five keys** — and
+        # that includes `linesHash`, which guards a timeline that is not
+        # there, and `timelineSignedOff`, which would claim a human read
+        # one. The file is the song: the words, and whatever was typed.
+        return _place_tempo(session.song, session.tempo), []
+
     overrides = session.overrides if overrides is None else overrides
     result = _anchor(session, overrides)
     envelope = to_dict(
@@ -797,7 +827,11 @@ def emit_sp_json(session: Session, overrides: dict[int, float], out_path: Path) 
             "input — emit always writes a new file"
         )
 
-    sign_off(session)
+    # Signing off records that a human read a timeline. A manual song has
+    # none, so there is nothing to sign — and stamping one would be the
+    # file claiming a review that never happened.
+    if not session.manual:
+        sign_off(session)
     merged, hand_set = build_sp_json(session, overrides)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -807,10 +841,11 @@ def emit_sp_json(session: Session, overrides: dict[int, float], out_path: Path) 
 
     return {
         "path": str(out_path),
-        "linesHash": session.lines_hash,
-        "timelineSignedOff": merged["timelineSignedOff"],
-        "leadIn": merged["leadIn"],
-        "timeline": merged["timeline"],
+        "manual": session.manual,
+        "linesHash": merged.get("linesHash"),
+        "timelineSignedOff": merged.get("timelineSignedOff"),
+        "leadIn": merged.get("leadIn"),
+        "timeline": merged.get("timeline"),
         "handSet": hand_set,
     }
 
@@ -907,7 +942,28 @@ class Run:
             staging = Path(self.request["staging"])
             staging.mkdir(parents=True, exist_ok=True)
             words_path = staging / WORDS_FILENAME
-            media = Path(self.request["media"])
+            manual = not self.request["media"]
+            media = Path(self.request["media"]) if not manual else None
+
+            if manual:
+                # Nothing to transcribe and nothing to anchor. Both phases
+                # are marked skipped rather than done, because a run that
+                # reported *done* on work it never did would be page 1.5
+                # lying about the only thing it exists to show.
+                self._finish("transcribe", "skipped")
+                self._begin("anchor")
+                self._finish("anchor", "skipped")
+                self.holder.session = load_session(
+                    staging,
+                    Path(self.request["lyrics"]),
+                    lang=self.request["lang"],
+                    info=self.request.get("info"),
+                    manual=True,
+                )
+                if "tempo" in self.request:
+                    self.holder.session.tempo = self.request["tempo"]
+                self.state = "done"
+                return
 
             if words_path.exists():
                 # §9.4's one line of copy, and the whole ergonomics of the
@@ -1040,7 +1096,11 @@ def start_run(holder: Holder, body: dict) -> dict:
         raise Busy("a run is already going — cancel it before starting another")
 
     lyrics = _existing_file(body.get("lyrics"), "lyrics")
-    media = _existing_file(body.get("media"), "media source")
+    # **A recording is optional** (Jorge, 2026-09-02). Words and no
+    # recording is a legitimate song, advanced by hand during the
+    # performance; there is nothing to align, so there is nothing to
+    # require. The old rule assumed a timeline.
+    media = _existing_file(body["media"], "media source") if body.get("media") else None
     lang = body.get("lang") or "es"
     model = body.get("model") or "medium"
 
@@ -1064,7 +1124,7 @@ def start_run(holder: Holder, body: dict) -> dict:
         staging = DEFAULT_STAGING_ROOT / lyrics.stem
     request = {
         "lyrics": str(lyrics),
-        "media": str(media),
+        "media": str(media) if media else "",
         "lang": lang,
         "model": model,
         "staging": str(staging),
@@ -1121,7 +1181,65 @@ def _declared(normalised) -> list[str]:
     return list(seen)
 
 
-def describe_lyrics(lyrics_path: Path, *, lang: str = "es") -> dict:
+def previous_take(
+    lyrics_path: Path, *, staging: Path | None, browse_from: Path | None
+) -> dict | None:
+    """The recording this song was last aligned against, if it can be
+    found — `{"path": ..., "name": ...}` or None.
+
+    **Being asked is not the problem; being asked silently is** (Jorge,
+    2026-09-02). On an edit the lyrics field prefilled and this one did
+    not, so nothing on the screen said whether the app had forgotten the
+    take or was waiting to be told. It stays changeable either way:
+    re-aligning against a different take is the normal reason to edit a
+    song, not an edge case.
+
+    Two sources, in this order, each reached only when the one above
+    yields nothing:
+
+    1. **`asr-words.meta.json` in the staging directory**, which records
+       the ABSOLUTE path of the take a run listened to (§11.11). It is
+       this tool's own record of the answer, and it is exact.
+    2. **The song's own `media.src`**, which is a logical filename rather
+       than a path, so it is looked for beside the song file and in the
+       directory the pickers open in — and nowhere else, because guessing
+       more widely is how a player ends up on the wrong take.
+
+    **Never another file.** The same rule `audio_path_for` follows: a
+    prefill that quietly names a different recording would make every
+    judgement about it wrong, and the person would not know.
+    """
+    if staging is not None:
+        filed = (load_words_meta(staging / WORDS_FILENAME) or {}).get("audio")
+        if isinstance(filed, str) and filed and Path(filed).is_file():
+            return {"path": str(Path(filed).resolve()), "name": Path(filed).name}
+
+    if lyrics_path.suffix.lower() != ".json":
+        return None
+    try:
+        declared = json.loads(lyrics_path.read_text(encoding="utf-8")).get("media")
+    except (OSError, ValueError):
+        return None
+    src = (declared or {}).get("src") if isinstance(declared, dict) else None
+    if not isinstance(src, str) or not src:
+        return None
+
+    for root in (lyrics_path.parent, browse_from):
+        if root is None:
+            continue
+        candidate = Path(root) / src
+        if candidate.is_file():
+            return {"path": str(candidate.resolve()), "name": candidate.name}
+    return None
+
+
+def describe_lyrics(
+    lyrics_path: Path,
+    *,
+    lang: str = "es",
+    staging: Path | None = None,
+    browse_from: Path | None = None,
+) -> dict:
     """What page 1 needs to know about a lyrics file the moment it is
     chosen: which branch it takes, what it declares, what the normaliser
     will strip out of it — before the run, never after (§3, §9.3) — and,
@@ -1153,6 +1271,7 @@ def describe_lyrics(lyrics_path: Path, *, lang: str = "es") -> dict:
             else {"title": title_from_song_id(lyrics_path.stem), "artist": "", "notes": ""}
         ),
         "tempo": declared_tempo if isinstance(declared_tempo, dict) else None,
+        "media": previous_take(lyrics_path, staging=staging, browse_from=browse_from),
     }
 
 
@@ -1316,7 +1435,10 @@ class _Handler(BaseHTTPRequestHandler):
                 self._respond(
                     200,
                     describe_lyrics(
-                        Path(params["path"][0]), lang=params.get("lang", ["es"])[0]
+                        Path(params["path"][0]),
+                        lang=params.get("lang", ["es"])[0],
+                        staging=self.holder.staging,
+                        browse_from=Path(self.holder.browse_from),
                     ),
                 )
             elif route == "/api/download":
@@ -1414,6 +1536,11 @@ class _Handler(BaseHTTPRequestHandler):
         if session is None:
             self._redirect("/input")
             return
+        if session.manual:
+            # There is no timeline to review. Sending the person to a page
+            # of empty rows would be the flow pretending a step happened.
+            self._redirect("/output")
+            return
         self._html(
             pages.render_review(
                 session_payload(session, session.overrides), header=self.holder.header
@@ -1496,6 +1623,7 @@ class _Handler(BaseHTTPRequestHandler):
                 filename=f"{session.lyrics_path.stem}.json",
                 save_path=str(default_out_path(session)),
                 from_scratch=session.from_scratch,
+                manual=session.manual,
                 header=self.holder.header,
             )
         )
@@ -1510,6 +1638,12 @@ class _Handler(BaseHTTPRequestHandler):
         """
         session = self._session()
         stem = session.lyrics_path.stem
+
+        if session.manual and kind != "song":
+            raise ValueError(
+                f"this song has no recording, so there is no {kind} to take — "
+                "the whole file is the only download, and it carries the words"
+            )
 
         if kind == "report":
             self._attachment(

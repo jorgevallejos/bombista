@@ -420,20 +420,53 @@ def test_a_finished_song_passes_for_performance(tmp_path):
     assert found == []
 
 
-def test_a_missing_timeline_is_a_hard_failure_for_performance():
-    """Nothing can be displayed without one."""
-    found = errors(validate_song(song(tempo=REAL_TEMPO), for_performance=True))
+def test_a_missing_timeline_names_the_mode_rather_than_refusing_the_song():
+    """**Reverses the old rule** (Jorge, 2026-09-02). A song with words and
+    no timeline is a legitimate song: it is performed by advancing the
+    lines by hand, which is a normal night. Calling it *not ready* was the
+    gate answering a question nobody asked — ready for **which** night?
 
-    assert wheres(found) == ["timeline"]
+    So the verdict names the mode. It is not a warning either: nothing
+    here wants fixing, and a warning invites someone to fix it.
+    """
+    from bombista.validation import MODE, modes
+
+    found = validate_song(song(tempo=REAL_TEMPO), for_performance=True)
+
+    assert errors(found) == [], "a manual song is not a broken song"
+    assert wheres(modes(found)) == ["timeline"]
+    assert modes(found)[0].severity == MODE
+    assert modes(found)[0].message.startswith("manual only: no timeline")
 
 
-def test_a_song_fresh_from_new_passes_the_default_level_and_fails_for_performance():
+def test_the_verdict_line_says_which_performance_it_is_a_verdict_about():
+    """`ok — manual only: no timeline`. The mode joins the headline rather
+    than the list below it, because it qualifies the verdict."""
+    from bombista.validation import render_findings
+
+    head = render_findings(
+        "libertad.json", validate_song(song(tempo=REAL_TEMPO), for_performance=True)
+    )[0]
+
+    assert head.startswith("libertad.json: ok — manual only: no timeline")
+
+
+def test_a_song_that_does_carry_a_timeline_gets_no_mode_line():
+    """The mode is a property of songs without one, not a decoration."""
+    from bombista.validation import modes
+
+    assert modes(validate_song(timed(tempo=REAL_TEMPO), for_performance=True)) == []
+
+
+def test_a_song_fresh_from_new_passes_both_levels_and_is_named_manual():
     from bombista.skeleton import song_skeleton
 
     fresh = song_skeleton("hasta-calmar-el-alma", lang="es")
 
     assert validate_song(fresh) == []
-    assert errors(validate_song(fresh, for_performance=True)) != []
+    # No longer an error: a skeleton has no timeline and a song with no
+    # timeline is performed by hand. What the gate owes is the mode.
+    assert errors(validate_song(fresh, for_performance=True)) == []
 
 
 def test_a_missing_tempo_is_a_warning_for_performance_not_a_failure():

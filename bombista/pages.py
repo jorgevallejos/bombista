@@ -40,7 +40,7 @@ __all__ = [
     "render_output",
 ]
 
-VERSION = "v1.1.0"
+VERSION = "v1.2.0"
 """The masthead's version string — the package version with a `v` in front.
 
 It is a second copy of what `pyproject.toml` declares, and a second copy
@@ -58,6 +58,16 @@ fourth segment would say the flow has four steps when it has three."""
 
 # The format's five Bombista-owned keys, in the order §10.2 fixes them.
 TIMING_KEYS = ("linesHash", "timelineSignedOff", "timelineVersion", "leadIn", "timeline")
+
+LANGUAGES = (("es", "Spanish"), ("en", "English"), ("nl", "Dutch"), ("fr", "French"))
+"""The languages page 1 offers, and it is ONE list because two controls
+read it: the dropdown that says what was sung, and the title-translation
+fields the song block collects. A dropdown offering a language the
+translation row does not is a language whose title can never be typed.
+
+A song file may of course carry a language this list does not — the merge
+in `server._merge_translations` leaves those alone rather than deleting
+what was never on screen."""
 
 FORMAT_DOC_URL = "https://changopepper.com/tramoya/song-performance-json"
 """§9.6's canonical home for the Song Performance JSON, live since
@@ -170,7 +180,7 @@ button:focus-visible { outline: 2px solid var(--clay); outline-offset: 2px; }
 
 /* ---------- page 1 — the form (§9.3) ---------- */
 .form { margin: 1.3rem 0 0; border-top: 1px solid var(--line-2); }
-#txtbranch .form { margin-top: 0; border-top: none; }
+#songbranch .form { margin-top: .9rem; }
 .frow { padding: .85rem 0; border-bottom: 1px solid var(--line); }
 .frow .flabel { display: block; font: 400 .7rem/1 var(--mono); text-transform: uppercase;
                 letter-spacing: .14em; margin: 0 0 .5rem; color: var(--dim); }
@@ -187,6 +197,11 @@ input[type="text"], input[type="number"] {
          font: 400 .86rem/1 var(--mono); padding: .42rem .5rem;
          border: 1px solid var(--line-2); border-radius: 0;
          background: var(--surface); color: var(--paper); }
+/* the song block's own heading (step 6) — it is a second half of the page,
+   not a fifth row, and it says so once rather than in every caption */
+.secthead { font: 800 .78rem/1 var(--sans); text-transform: uppercase;
+            letter-spacing: .13em; color: var(--dim); margin: 2.2rem 0 .35rem; }
+.sectlede { margin: 0; }
 .warnbox { border-left: 2px solid var(--review); background: transparent;
            padding: .1rem 0 .1rem .8rem; margin: 1rem 0 0;
            font: 400 .78rem/1.55 var(--mono); color: var(--dim); max-width: 46rem; }
@@ -338,12 +353,31 @@ tr.divider td { background: var(--bg); border-bottom: none;
                font: 400 .68rem/1 var(--mono); font-variant-numeric: tabular-nums; }
 .confirm { margin: 1.7rem 0 0; }
 
-/* ---------- page 2 — tempo, typed in (round A; §11.5's removal reversed) ----------
+/* ---------- page 3 — save (step 6) ----------
+   It is not a download and does not sit in the download row: those hand over
+   bytes and choose no path, this one writes a file. The path is printed
+   before the press and again after it, because *the catalogue* is a name and
+   a file is a fact. */
+.save { margin: 1.9rem 0 0; padding-top: 1.1rem; border-top: 1px solid var(--line-2);
+        display: flex; flex-direction: column; gap: .5rem; align-items: flex-start; }
+.save .hint { margin: 0; }
+.save .path { font: 400 .76rem/1.5 var(--mono); color: var(--paper);
+              overflow-wrap: anywhere; }
+.save .sstate { font: 400 .74rem/1.5 var(--mono); color: var(--dimmer); }
+.save .sstate.bad { color: var(--fail); }
+.save .sstate.ok { color: var(--high); }
+
+/* ---------- page 1 — tempo, typed in (round A; moved here at step 6) ----------
    Quiet register on purpose: this is a fact about the song, so it sits with
-   the provenance line rather than competing with the flagged row for the
-   contrast budget. Four fields, because a control that cannot ask for a
-   whole block should not ask for part of one. */
-.tempo { padding: .65rem 0 .7rem; border-bottom: 1px solid var(--line); }
+   the rest of the song's general information rather than competing with the
+   pickers for the contrast budget. Four fields, because a control that
+   cannot ask for a whole block should not ask for part of one. */
+.tempo { padding: .85rem 0; border-bottom: 1px solid var(--line); }
+.ttrow { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.ttrow label { display: inline-flex; align-items: center; gap: .35rem;
+               font: 400 .7rem/1 var(--mono); color: var(--dimmer); }
+.frow input[type="text"] { width: 100%; max-width: 34rem; }
+.ttrow input[type="text"] { width: 10rem; }
 .tempo .trow { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 .tempo .tlabel { font: 400 .7rem/1 var(--mono); text-transform: uppercase;
                  letter-spacing: .14em; color: var(--dim); margin-right: .25rem; }
@@ -416,7 +450,57 @@ _INPUT_JS = """\
 (function () {
   var state = { lyrics: null, media: null, declaredLanguages: [], branch: null };
   var langSel = document.getElementById("lang");
-  var txtbranch = document.getElementById("txtbranch");
+  var songbranch = document.getElementById("songbranch");
+
+  /* The four tempo fields and the general information travel with
+     `Process song →`, like every other answer on this page. There is no
+     Set button and no pre-flight check here: the SERVER decides whether a
+     block is whole, because a second opinion about what a valid tempo is
+     is exactly what §11.5's rule exists to prevent. A blank field is left
+     out, so the refusal names it. */
+  var T_FIELDS = { bpm: "t-bpm", numerator: "t-numerator",
+                   denominator: "t-denominator", countInBars: "t-countinbars" };
+
+  function val(id) { return document.getElementById(id).value.trim(); }
+
+  function tempoBlock() {
+    var block = {}, key, raw;
+    for (key in T_FIELDS) {
+      raw = val(T_FIELDS[key]);
+      if (raw !== "") { block[key] = Number(raw); }
+    }
+    return block;
+  }
+
+  function information() {
+    var translations = {};
+    LANGS.forEach(function (code) { translations[code] = val("tt-" + code); });
+    return {
+      title: val("title"),
+      artist: val("artist"),
+      notes: val("notes"),
+      title_translations: translations
+    };
+  }
+
+  /* Prefilled from the file, never invented here: an SP JSON already
+     carries all of this, and a screen that showed it empty would invite a
+     human to retype a value that was already right. */
+  function prefill(data) {
+    var info = data.info || {};
+    document.getElementById("title").value = info.title || "";
+    document.getElementById("artist").value = info.artist || "";
+    document.getElementById("notes").value = info.notes || "";
+    var translations = info.title_translations || {};
+    LANGS.forEach(function (code) {
+      document.getElementById("tt-" + code).value = translations[code] || "";
+    });
+    var tempo = data.tempo || {};
+    for (var key in T_FIELDS) {
+      document.getElementById(T_FIELDS[key]).value =
+        tempo[key] === undefined || tempo[key] === null ? "" : String(tempo[key]);
+    }
+  }
 
   document.getElementById("pick-lyrics").addEventListener("click", function () {
     browse(HOME, function (path) {
@@ -453,11 +537,9 @@ _INPUT_JS = """\
         if (langSel.selectedOptions[0] && langSel.selectedOptions[0].disabled) {
           langSel.value = state.declaredLanguages[0];
         }
-        txtbranch.className = data.branch === "txt" ? "" : "pageoff";
+        songbranch.className = "";
         document.getElementById("slug").textContent = data.slug;
-        if (data.branch === "txt" && !document.getElementById("title").value) {
-          document.getElementById("title").value = data.slug;
-        }
+        prefill(data);
         stripped(data);
         ready();
       });
@@ -494,11 +576,10 @@ _INPUT_JS = """\
       lyrics: state.lyrics,
       media: state.media,
       lang: langSel.value,
-      model: document.getElementById("model").value
+      model: document.getElementById("model").value,
+      info: information(),
+      tempo: tempoBlock()
     };
-    if (state.branch === "txt") {
-      body.title = document.getElementById("title").value;
-    }
     fetch("/api/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -571,18 +652,22 @@ _OUTPUT_JS = """\
      nothing and taking it is not a decision. Nothing here disables after
      the press: wanting the timing block as well as the whole file is
      normal, and the sign-off is recorded once, not spent. */
+  function signedOff(stamp) {
+    if (!stamp) { return; }
+    var el = document.getElementById("signoff");
+    el.className = "signoff";
+    el.textContent = "Signed off " + stamp + " · your inputs untouched";
+    var json = document.getElementById("json");
+    json.textContent = json.textContent.replace(
+      /"timelineSignedOff": null/, '"timelineSignedOff": "' + stamp + '"');
+  }
+
   function download(kind, signs) {
     location.href = "/api/download?kind=" + kind;
     if (!signs) { return; }
     setTimeout(function () {
       fetch("/api/session").then(function (r) { return r.json(); }).then(function (data) {
-        if (!data.timelineSignedOff) { return; }
-        var el = document.getElementById("signoff");
-        el.className = "signoff";
-        el.textContent = "Signed off " + data.timelineSignedOff + " · your inputs untouched";
-        var json = document.getElementById("json");
-        json.textContent = json.textContent.replace(
-          /"timelineSignedOff": null/, '"timelineSignedOff": "' + data.timelineSignedOff + '"');
+        signedOff(data.timelineSignedOff);
       });
     }, 300);
   }
@@ -595,6 +680,35 @@ _OUTPUT_JS = """\
   });
   document.getElementById("dl-report").addEventListener("click", function () {
     download("report", false);
+  });
+
+  /* Save (step 6). It writes a file rather than handing over bytes, so
+     unlike the three downloads it can fail — and it reports the path it
+     actually wrote rather than the one the page promised, because those
+     are two different claims. Signing off is the server's, on the same
+     footing as a download: writing a file is the programmatic equivalent
+     of pressing one. */
+  var savestate = document.getElementById("savestate");
+
+  function ssay(text, kind) {
+    savestate.textContent = text;
+    savestate.className = "sstate" + (kind ? " " + kind : "");
+  }
+
+  document.getElementById("save").addEventListener("click", function () {
+    ssay("Saving\u2026", "");
+    fetch("/api/emit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}"
+    }).then(function (r) {
+      return r.json().then(function (data) { return { ok: r.ok, data: data }; });
+    }).then(function (res) {
+      if (!res.ok) { ssay(res.data.error || "Refused.", "bad"); return; }
+      document.getElementById("savepath").textContent = res.data.path;
+      ssay("Saved.", "ok");
+      signedOff(res.data.timelineSignedOff);
+    });
   });
 })();
 """
@@ -1184,20 +1298,6 @@ def _provenance(payload: dict) -> str:
     return f'<p class="prov">{html_escape(" · ".join(parts))}</p>'
 
 
-def _tempo_value(value: object) -> str:
-    """A stored tempo value as the field should show it: `66.67`, `4`, `0`.
-
-    Read back verbatim, never reformatted into something else — the number
-    was typed by the performer from the source that produced the audio, and
-    a control that rounds it is a control that quietly edits it.
-    """
-    if value is None:
-        return ""
-    if isinstance(value, float) and value.is_integer():
-        return str(int(value))
-    return str(value)
-
-
 _TEMPO_FIELDS = (
     ("bpm", "bpm", "any", "0"),
     ("numerator", "beats", "1", "1"),
@@ -1206,45 +1306,50 @@ _TEMPO_FIELDS = (
 )
 
 
-def _tempo(payload: dict) -> str:
-    """The tempo control (round A), and the four fields are the design.
+def _tempo() -> str:
+    """The tempo control, and the four fields are the design.
 
-    **§11.5 removed this control from page 1 on 2026-08-16 and this
-    reverses that, narrowly.** The half that changed: Pregonero loses
-    tempo ownership later in the Tramoya integration, so Bombista becomes
-    the only remaining home for typing one in, and the review page is
-    where the timeline is visible while it is being changed. The half that
-    did not: a block is written **whole or not at all** — `beatScheduler`
-    needs `numerator` and `denominator` and computes `numerator % 3`, so a
-    bpm-only block gives a broken pulse while the scaling keeps working,
-    with no error anywhere. Hence four fields, one Set, and a server that
-    refuses anything less.
+    **§11.5 removed this control from page 1 on 2026-08-16; round A put a
+    four-field one on page 2; step 6 brings it back here.** The half that
+    changed in round A: Pregonero loses tempo ownership later in the
+    Tramoya integration, so Bombista becomes the only remaining home for
+    typing one in. The half that changed at step 6: page 2's claim to it
+    was that the timeline is visible there while it is being changed — but
+    **a tempo changes no timing in this tool and is never read against the
+    audio**, so nothing about typing one waits on having heard the take.
+    It belongs with the rest of the song's general information.
 
-    **Nothing here proposes a value.** The fields start empty on a song
-    that has no tempo, rather than at a plausible 120/4/4 — a placeholder
-    that looks real is the bug `songs@c5adf65` deleted ten of.
+    The half that has never changed: a block is written **whole or not at
+    all** — `beatScheduler` needs `numerator` and `denominator` and
+    computes `numerator % 3`, so a bpm-only block gives a broken pulse
+    while the scaling keeps working, with no error anywhere. Hence four
+    fields, and a run route that refuses anything less.
+
+    **There is no Set button any more**, because there is nothing to set
+    yet: the block travels with `Process song →` like every other answer
+    on this page, and the server refuses the whole run rather than one
+    control. **Nothing here proposes a value** — the fields start empty
+    rather than at a plausible 120/4/4, since a placeholder that looks
+    real is the bug `songs@c5adf65` deleted ten of.
     """
-    block = payload.get("tempo") or {}
     fields = "".join(
         f'<label>{html_escape(label)} <input type="number" id="t-{key.lower()}" '
-        f'step="{step}" min="{minimum}" autocomplete="off" '
-        f'value="{html_escape(_tempo_value(block.get(key)))}"></label>'
+        f'step="{step}" min="{minimum}" autocomplete="off" value=""></label>'
         for key, label, step, minimum in _TEMPO_FIELDS
     )
     return f"""
-<div class="tempo">
-  <div class="trow">
-    <span class="tlabel">Tempo</span>
-    {fields}
-    <button type="button" id="t-set">Set</button>
-    <button type="button" id="t-clear">Clear</button>
-    <span class="tstate" id="t-state"></span>
+  <div class="tempo">
+    <div class="trow">
+      <span class="tlabel">Tempo</span>
+      {fields}
+      <span class="tstate" id="t-state"></span>
+    </div>
+    <p class="hint">Bombista never measures a tempo — type it from the source that produced
+      this audio, where it is exact. <b>All four together, or none</b> —
+      <code>bpm</code>, <code>numerator</code>, <code>denominator</code>,
+      <code>countInBars</code>: a partial block breaks Pregonero's pulse while its
+      scaling keeps working, which is worse than leaving it out.</p>
   </div>
-  <p class="hint">Bombista never measures a tempo — type it from the source that produced
-    this audio, where it is exact. <b>All four together, or none:</b> a partial block
-    breaks Pregonero's pulse while its scaling keeps working, which is worse than
-    leaving it out.</p>
-</div>
 """
 
 
@@ -1271,8 +1376,6 @@ def render_review(payload: dict) -> str:
 <p class="lede">{len(payload["lines"])} lines · raw audio-clock seconds</p>
 
 {_provenance(payload)}
-
-{_tempo(payload)}
 
 <div class="sticky">
   <audio id="audio" controls preload="metadata" src="/api/audio"></audio>
@@ -1301,22 +1404,42 @@ def render_review(payload: dict) -> str:
 
 
 def render_input(*, home: str = "") -> str:
-    """Page 1 (§9.3). Four rows, and that is the whole form.
+    """Page 1 (§9.3), augmented at step 6 with the song itself.
 
-    No output-folder picker and no *also write* checkboxes — both cut
-    2026-08-15. Step 3 offers downloads and the app does not choose where
-    they land.
+    **Four rows still, until a lyrics file is chosen.** The form the user
+    meets is the same one §9.3 fixed — Lyrics, Media source, Language,
+    Model — and the song block below it is hidden until there is a song to
+    describe. No output-folder picker and no *also write* checkboxes,
+    both cut 2026-08-15: step 3 offers downloads and the app does not
+    choose where they land.
 
-    **Still no tempo control**, and round A did not give it one back. The
-    control that came off here in §11.5 reappeared on the review page
-    instead: a whole block needs four fields, this page's rule is four rows
-    total, and step 2 is where the timeline is visible while it is being
-    changed. What stands here is the note, now pointing at step 2 rather
-    than at a text editor.
+    **The song block is what step 6 adds** (journey-setup, 2026-09-02):
+    title, artist, notes, title translations and the tempo. This is the
+    metadata a lyrics `.txt` cannot carry, and without it the flow can only
+    ever make a song with no artist and no translated title — which is
+    what the skeleton `bombista new` writes existed to supply. It is
+    Bombista's own screen and it appears when Bombista is used on its own.
+
+    **§3's *no free text* survives as a sharper rule.** What the machine is
+    told — which files, which language, which model — is still pickers and
+    dropdowns, because those are answers with a right shape. What only a
+    human is the source of record for is typed, because there is no other
+    way to get it.
+
+    An SP JSON prefills every field from itself, which is the other half of
+    step 6's wording: this flow is also how an existing song is edited.
     """
+    lang_options = "".join(
+        f'<option value="{code}">{code} — {name}</option>' for code, name in LANGUAGES
+    )
+    tempo = _tempo()
+    translation_fields = "".join(
+        f'<label>{code} <input type="text" id="tt-{code}" value="" autocomplete="off"></label>'
+        for code, _ in LANGUAGES
+    )
     body = f"""
 <h1>Input song</h1>
-<p class="lede">Two files. Two defaults. Nothing typed.</p>
+<p class="lede">Two files, two defaults, and the song itself.</p>
 
 <div class="form">
   <div class="frow">
@@ -1342,12 +1465,7 @@ def render_input(*, home: str = "") -> str:
   <div class="frow">
     <label class="flabel">Language</label>
     <div class="ctl">
-      <select id="lang">
-        <option value="es">es — Spanish</option>
-        <option value="en">en — English</option>
-        <option value="nl">nl — Dutch</option>
-        <option value="fr">fr — French</option>
-      </select>
+      <select id="lang">{lang_options}</select>
     </div>
     <p class="hint">The language on the recording and the lyrics file.</p>
   </div>
@@ -1367,37 +1485,49 @@ def render_input(*, home: str = "") -> str:
   </div>
 </div>
 
-<div id="txtbranch" class="pageoff">
+<div id="songbranch" class="pageoff">
+  <h2 class="secthead">The song</h2>
+  <p class="hint sectlede">What the recording and the words cannot say. A
+    <code>.txt</code> carries none of it; a <b>Song Performance JSON</b> carries all of it,
+    and what is below is then what that file already says.</p>
+
   <div class="form">
     <div class="frow">
-      <label class="flabel">Slug</label>
-      <div class="ctl"><span class="fname" id="slug">—</span>
-        <span class="aside">from the filename</span></div>
+      <label class="flabel">Title</label>
+      <div class="ctl"><input type="text" id="title" value="" autocomplete="off">
+        <span class="aside" id="slug">—</span></div>
+      <p class="hint">The name of the song, as you would print it on a poster.</p>
     </div>
     <div class="frow">
-      <label class="flabel">Title</label>
-      <div class="ctl"><input type="text" id="title" value=""></div>
-      <p class="hint">The one text field in the whole flow. A <code>.txt</code> carries no
-        title.</p>
+      <label class="flabel">Artist</label>
+      <div class="ctl"><input type="text" id="artist" value="" autocomplete="off"></div>
     </div>
-  </div>
-  <div class="warnbox">
-    <b>Tempo is typed in, never measured</b>
-    Bombista answers <i>when</i> a line happens, not in which beat, so it never works one
-    out for you. Type it on <b>step 2</b>, from the source that produced this audio, where
-    it is exact: all four values together (<code>bpm</code>, <code>numerator</code>,
-    <code>denominator</code>, <code>countInBars</code>), because a partial block breaks
-    Pregonero's pulse.
-  </div>
+    <div class="frow">
+      <label class="flabel">Notes</label>
+      <div class="ctl"><input type="text" id="notes" value="" autocomplete="off"></div>
+      <p class="hint">For you, at a music stand. <code>Capo 5, acordes de Lam</code>.</p>
+    </div>
+    <div class="frow">
+      <label class="flabel">Title translations</label>
+      <div class="ctl ttrow">{translation_fields}</div>
+      <p class="hint">One field per language, and a blank one is not written. The language
+        of the words usually repeats the title above; the rest are the translated ones.</p>
+    </div>
+{tempo}  </div>
   <p class="hint pageoff" id="stripped"></p>
 </div>
-<!--/txtbranch-->
+<!--/songbranch-->
 
 <div id="refused" class="pageoff"><b>The run did not start</b><span id="refused-why"></span></div>
 
 <p class="go"><button class="btn1" id="process" disabled>Process song →</button></p>
 """
-    script = f'var HOME = {json.dumps(home)};\n' + _PICKER_JS + _INPUT_JS
+    script = (
+        f"var HOME = {json.dumps(home)};\n"
+        f"var LANGS = {json.dumps([code for code, _ in LANGUAGES])};\n"
+        + _PICKER_JS
+        + _INPUT_JS
+    )
     return _shell(title="Input song", current="1", body=body, script=script)
 
 
@@ -1437,7 +1567,7 @@ _CAPTION_PASS = (
     "<code>timelineSignedOff</code>, <code>timelineVersion</code>, <code>leadIn</code>, "
     "<code>timeline</code>. Entry 0 is <code>0.00</code> and the lead-in is banked. Everything "
     "above them is passed through untouched, all four languages included — the one exception "
-    "is a <code>tempo</code> you typed on step 2, which comes from you rather than from the "
+    "is a <code>tempo</code> you typed on step 1, which comes from you rather than from the "
     "audio. Bands, signals and the record of what you set by hand are in the <b>report</b>, "
     "not here."
 )
@@ -1447,14 +1577,16 @@ _CAPTION_NEW = (
     "<code>.txt</code>. It carries only what a plain text plus step 1 can honestly supply: "
     "<code>artist</code> and <code>notes</code> are empty for you to fill in, and "
     "<code>lyrics</code> carries the one language you chose. A <code>tempo</code> block is "
-    "here only if you typed one on step 2 — Bombista never measures one, and a partial one "
+    "here only if you typed one on step 1 — Bombista never measures one, and a partial one "
     "breaks Pregonero's pulse. Add the other languages later; <code>linesHash</code> will "
     "catch it if the line count changes."
 )
 
 
-def render_output(sp_json: dict, *, filename: str, from_scratch: bool = False) -> str:
-    """Page 3 (§9.5). Read-only, and the JSON in full.
+def render_output(
+    sp_json: dict, *, filename: str, save_path: str, from_scratch: bool = False
+) -> str:
+    """Page 3 (§9.5). Read-only, the JSON in full, and a way to finish.
 
     **No fold, no expand control, no truncation.** An earlier pass added
     one and Jorge cut it: the window scrolls, the file is the file, and a
@@ -1462,6 +1594,22 @@ def render_output(sp_json: dict, *, filename: str, from_scratch: bool = False) -
     before it can be used. The argument for folding — that 19 lines × 4
     languages buries the timing keys — is answered by the caption saying
     which five keys Bombista wrote, not by hiding the rest.
+
+    **`Save to the catalogue` is step 6's addition, and it sits beside the
+    three downloads rather than replacing them** (journey-setup,
+    2026-09-02). The words are chosen for two reasons: the flow is not
+    always about a new song — it is also how an existing one is edited,
+    which rules out *Add to the library* — and on a screen where
+    everything else hands over bytes, naming the destination is the
+    distinction that was invisible on 2026-09-02. `Confirm` was rejected:
+    the timeline is confirmed one screen earlier, so a third would stop
+    meaning anything.
+
+    **The path is on the page before the button is pressed.** *The
+    catalogue* is a name; a file is a fact, and the two are only
+    reconcilable if the person can see which file. `save_path` comes from
+    `server.default_out_path`, the same one the route writes to, so the
+    promise and the write cannot disagree.
     """
     rendered = json.dumps(sp_json, indent=2, ensure_ascii=False)
     body = f"""
@@ -1475,7 +1623,7 @@ def render_output(sp_json: dict, *, filename: str, from_scratch: bool = False) -
 
 <div class="dlrow">
   <div class="dl">
-    <button type="button" class="btn1" id="dl-song">Download JSON file</button>
+    <button type="button" id="dl-song">Download JSON file</button>
     <p class="hint">The whole file above. This is the one Tramoya reads.</p>
   </div>
   <div class="dl">
@@ -1489,6 +1637,13 @@ def render_output(sp_json: dict, *, filename: str, from_scratch: bool = False) -
     <p class="hint">Bands, signals, provenance and every hand-set line, as markdown. Does not
       count as sign-off.</p>
   </div>
+</div>
+
+<div class="save">
+  <button type="button" class="btn1" id="save">Save to the catalogue</button>
+  <p class="hint">Writes the file above, and nothing you loaded is changed. It goes here:</p>
+  <p class="path mono" id="savepath">{html_escape(save_path)}</p>
+  <p class="sstate" id="savestate"></p>
 </div>
 
 <p><span class="pageoff" id="signoff"></span></p>

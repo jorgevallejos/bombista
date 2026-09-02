@@ -26,7 +26,7 @@ Deriving a timeline from a recording is a real subsystem (transcription, alignme
 
 These were tested against real proposals and hold as rules, established 2026-08-14:
 
-1. **No `tempo` block → no Auto mode.** Tempo is a prerequisite in Pregonero, not a nicety, and it is never derived. It is **supplied by the performer** (for the Chango Pepper catalogue, by Jorge, who is the source of record) and typed in by hand. *Amended in round A of the Tramoya integration:* the typing now happens **in Bombista**, on `serve`'s review page — see "Bombista became the place a tempo is typed" below. Never derived is unchanged; where a human types it is what moved.
+1. **No `tempo` block → no Auto mode.** Tempo is a prerequisite in Pregonero, not a nicety, and it is never derived. It is **supplied by the performer** (for the Chango Pepper catalogue, by Jorge, who is the source of record) and typed in by hand. *Amended in round A of the Tramoya integration, and again at step 6:* the typing now happens **in Bombista**, on `serve`'s page 1, with the rest of the song's general information — see "Bombista became the place a tempo is typed" below. Never derived is unchanged; where a human types it is what moved.
 2. **The pulse and the timeline are separate clocks.** A constant offset between them is fine; what must match is the *rate*, so any shift stays consistent instead of accumulating.
 3. **The timeline measures the recording; the performance is a playback-side transform.** Anything describing how a song is played on a given night — lead-in application, performed tempo — is applied by Pregonero at playback and never written back over the measured values. Bombista measures and records; the consumer decides.
 4. **Bombista answers "when," not "in which beat."** Its output is time: line *i* happens at *t*. Tempo, meter and any other musical structure are performer-owned metadata, entered by a human and consumed by Pregonero — never inferred from the timings.
@@ -129,9 +129,14 @@ not a blocker" (Jorge).
 2026-08-16 (serve-spec §11.5), leaving the note *"Tempo is not Bombista's business."* Round A of the
 Tramoya integration puts a control back — on **page 2, the review** — because Pregonero loses tempo
 ownership later in that integration, so Bombista becomes the only remaining home for typing one in.
-The review page is the right surface because it is where the timeline is visible while it is being
-changed, and page 1's own reason for refusing the control still stands: a whole block needs four
-fields, and page 1's rule is four rows total.
+
+**Step 6 moved it to page 1 (2026-09-02) and that is where it lives.** Round A's argument for page 2
+was that the timeline is visible there while it is being changed. It does not survive contact with
+what a tempo is in this tool: it changes no timing, is never read against the audio, and is never
+derived from anything, so **nothing about typing one waits on having heard the take**. It belongs
+with the rest of the song's general information, which page 1 now collects. Page 1's old objection —
+*four rows total* — was answered by the same change: the song block is a second half of the page,
+below the four rows and hidden until there is a song to describe.
 
 **What did not change, and this is the part §11.5 exists for.** `tempo` is written **whole** —
 `bpm`, `numerator`, `denominator`, `countInBars` — or not written at all. There is no valid partial
@@ -144,8 +149,43 @@ and 5 also stand in full: Bombista still never derives, measures or guesses a te
 dropped.
 
 **The one rule, in one place.** `validation.validate_tempo` is the whole definition of a valid tempo
-block, and both `bombista validate` and the review control call it. Two front ends with two
-opinions about a valid block is how a partial one gets in through the door the other one closed.
+block, and `bombista validate`, `POST /api/tempo` and the run route all call it. Two front ends with
+two opinions about a valid block is how a partial one gets in through the door the other one closed.
+
+**What the move cost, recorded rather than papered over.** A tempo typed wrong on page 1 can only be
+corrected by going back to step 1 and running again, and a re-run discards the line corrections made
+on page 2 — which the page-2 control could fix in place. `POST /api/tempo` survives and still can,
+so the capability is in the tool and only the surface is gone. Whether page 2 should offer it again
+is Jorge's call; two controls writing one fact is not the way to settle it.
+
+## The song's general information is collected on page 1 (step 6, 2026-09-02)
+
+**What a `.txt` cannot carry has to be asked for somewhere, and page 1 is that place.** Title,
+artist, notes and title translations, in a block below the four rows, revealed once a lyrics file is
+chosen. An SP JSON prefills every field from itself, because this flow is **also how an existing
+song is edited** — which is why page 3's new control reads `Save to the catalogue` rather than *Add
+to the library*.
+
+**This is what closes the skeleton's reason for existing on the `serve` path.** `bombista new` was
+kept because it supplies `artist`, `notes` and `title_translations`, which a plain text cannot and
+`bombista validate` wants; creating a skeleton up front is also what forecloses `promote`'s create
+path. With page 1 asking for them, the browser flow goes straight from words plus a recording to a
+complete song file, and nothing in it calls `new`. **The `new` command is unchanged and still the
+CLI's front door** — see the finding below.
+
+**`Save to the catalogue` writes through `POST /api/emit`**, which signs off exactly as pressing a
+download does. Emit refuses every path the session read as an input, so it cannot land on `align`'s
+`<stem>-song.json`; it writes `<stem>.json` beside it and **reports the path**, which is printed on
+the page before the button is pressed and replaced by what was actually written after it. Bombista
+has no idea where a catalogue is and must not acquire one: the button carries the name and the line
+carries the fact.
+
+**Open, found while building this and not fixed here.** `skeleton.py` writes
+`lyrics: [{"<lang>": ""}]` — one empty lyric entry, deliberately, so the entry *shape* is visible to
+whoever writes the words in. Pregonero refuses that file: an empty lyric string is not a lyric line.
+Under this design nothing on the `serve` path calls `bombista new`, so it is off the walk, but
+`bombista new` is still the CLI's front door and still hands a file to a tool that rejects it.
+Named here, not resolved.
 
 ## Round A also gave the pipeline a front door and a gate (2026-08-24)
 

@@ -412,33 +412,29 @@ def test_a_failed_run_says_why_and_does_not_wedge_the_process(serve_client, libe
 # The two structural guards that used to live here — no bpm in the modules
 # that touch audio or lyrics, and no tempo anywhere in `server.py` — moved
 # to tests/test_validation.py's neighbour, tests/test_tempo.py, when round A
-# gave the review page a control. The first is unchanged; the second is
-# re-aimed, because `server.py` may now carry a tempo and what must not
-# exist is a SECOND opinion about a valid one. What stays here is the flow:
-# page 1 still has no control, and the run route still refuses a tempo
-# posted into it by hand.
+# gave the review page a control. Step 6 moved that control to page 1, so
+# the run route is now the door a typed tempo comes through; what it
+# accepts and what it refuses is pinned in test_tempo.py beside the gate
+# itself. What stays here is the flow's own rule: a run that was told no
+# tempo emits no tempo key.
 # ---------------------------------------------------------------------------
 
 
-def test_a_txt_run_ignores_a_tempo_offered_in_the_request_body(
-    serve_client, libertad, tmp_path
-):
-    """The control is gone from page 1, and the route does not honour one
-    posted by hand either — otherwise the bpm-only block comes back
-    through the door §11.5 closed."""
+def test_a_scalar_tempo_posted_by_hand_is_still_refused(serve_client, libertad, tmp_path):
+    """The bpm-only block §11.5 closed the door on, in its crudest form.
+    The route reaches for the shared gate rather than judging a number
+    itself, so `66.67` is refused in the same words `bombista validate`
+    refuses it in."""
     client = serve_client(None)
     txt = tmp_path / "cancion.txt"
     txt.write_text("uno dos\ntres cuatro\n", encoding="utf-8")
 
-    with mock.patch.object(
-        server, "transcribe_words", return_value=words_for(["uno dos", "tres cuatro"])
-    ):
-        _start(client, libertad, lyrics=str(txt), title="Canción", tempo=66.67)
-        wait_for(client, "done")
+    status, payload, _ = _start(
+        client, libertad, lyrics=str(txt), info={"title": "Canción"}, tempo=66.67
+    )
 
-    _, payload, _ = client.get("/api/download?kind=song", raw=True)
-
-    assert "tempo" not in json.loads(payload)
+    assert status == 400
+    assert "bpm" in payload["error"]
 
 
 def test_a_txt_run_with_no_tempo_emits_no_tempo_key(serve_client, libertad, tmp_path):
@@ -451,7 +447,7 @@ def test_a_txt_run_with_no_tempo_emits_no_tempo_key(serve_client, libertad, tmp_
     with mock.patch.object(
         server, "transcribe_words", return_value=words_for(["uno dos", "tres cuatro"])
     ):
-        _start(client, libertad, lyrics=str(txt), title="Canción")
+        _start(client, libertad, lyrics=str(txt), info={"title": "Canción"})
         wait_for(client, "done")
 
     _, payload, _ = client.get("/api/download?kind=song", raw=True)
@@ -505,6 +501,139 @@ def test_the_emitted_file_preserves_the_song_files_own_key_order(client, liberta
     ]
 
 
+def test_the_lyrics_route_reports_what_page_1_should_prefill(client, libertad):
+    """Step 6: page 1 collects the song's general information, so it has
+    to show what the file already says before anyone retypes it. The
+    prefill is read off the file by the reader that already normalises it,
+    never assembled a second time in the page."""
+    _, payload, _ = client.get("/api/lyrics?path=" + str(libertad["song_path"]))
+    info = payload["info"]
+
+    assert info["title"] == libertad["song"]["title"]
+    assert info["artist"] == libertad["song"]["artist"]
+    assert info["notes"] == libertad["song"]["notes"]
+    assert info["title_translations"] == libertad["song"]["title_translations"]
+
+
+def test_a_txt_prefills_a_title_seeded_from_the_slug(client, tmp_path):
+    """`hasta-calmar-el-alma` -> `Hasta calmar el alma`, which is what
+    `bombista new` seeds. Two doors into the same tool should not disagree
+    about the first thing they write."""
+    txt = tmp_path / "hasta-calmar-el-alma.txt"
+    txt.write_text("uno dos\n", encoding="utf-8")
+
+    _, payload, _ = client.get("/api/lyrics?path=" + str(txt))
+
+    assert payload["info"]["title"] == "Hasta calmar el alma"
+    assert payload["info"]["artist"] == ""
+    assert payload["info"]["title_translations"] == {}
+    assert payload["tempo"] is None
+
+
+def test_the_general_information_typed_on_page_1_lands_in_the_file(
+    serve_client, libertad, tmp_path
+):
+    """The whole reason the block is on page 1: this is the metadata a
+    `.txt` cannot carry, and without it a song made from words and a
+    recording has no artist and no translated titles."""
+    client = serve_client(None)
+    txt = tmp_path / "cancion.txt"
+    txt.write_text("uno dos\ntres cuatro\n", encoding="utf-8")
+
+    with mock.patch.object(
+        server, "transcribe_words", return_value=words_for(["uno dos", "tres cuatro"])
+    ):
+        _start(
+            client,
+            libertad,
+            lyrics=str(txt),
+            info={
+                "title": "Canción",
+                "artist": "Chango Pepper",
+                "notes": "Capo 5",
+                "title_translations": {"es": "Canción", "en": "Song", "nl": "", "fr": ""},
+            },
+        )
+        wait_for(client, "done")
+
+    _, payload, _ = client.get("/api/download?kind=song", raw=True)
+    emitted = json.loads(payload)
+
+    assert emitted["title"] == "Canción"
+    assert emitted["artist"] == "Chango Pepper"
+    assert emitted["notes"] == "Capo 5"
+    assert emitted["title_translations"] == {"es": "Canción", "en": "Song"}
+
+
+def test_an_existing_song_can_be_edited_through_the_same_screen(
+    serve_client, libertad, tmp_path
+):
+    """`Save to the catalogue` is worded for this: the flow is not always
+    about a new song. Editing one means the general information typed on
+    page 1 replaces what the file said, and everything else passes
+    through."""
+    client = serve_client(None)
+
+    with mock.patch.object(
+        server, "transcribe_words", return_value=words_for(libertad["lines"])
+    ):
+        _start(
+            client,
+            libertad,
+            info={"artist": "Alguien más", "title": libertad["song"]["title"]},
+        )
+        wait_for(client, "done")
+
+    _, payload, _ = client.get("/api/download?kind=song", raw=True)
+    emitted = json.loads(payload)
+
+    assert emitted["artist"] == "Alguien más"
+    assert emitted["title"] == libertad["song"]["title"]
+    assert emitted["lyrics"] == libertad["song"]["lyrics"]
+    assert list(emitted)[: len(libertad["song"]) - 1] == [
+        k for k in libertad["song"] if k != "timeline"
+    ]
+
+
+def test_a_language_page_1_did_not_offer_survives_an_edit(serve_client, libertad, tmp_path):
+    """The page offers four languages; a song file may carry a fifth. A
+    field that was never on screen must not be able to delete a value —
+    only the languages the page actually posted are the ones it decides."""
+    song = dict(libertad["song"])
+    song["title_translations"] = {**song["title_translations"], "de": "Freiheit"}
+    path = tmp_path / "with-german.json"
+    path.write_text(json.dumps(song, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    client = serve_client(None)
+    with mock.patch.object(
+        server, "transcribe_words", return_value=words_for(libertad["lines"])
+    ):
+        _start(
+            client,
+            libertad,
+            lyrics=str(path),
+            info={"title_translations": {"en": "Freedom", "es": "", "nl": "", "fr": ""}},
+        )
+        wait_for(client, "done")
+
+    _, payload, _ = client.get("/api/download?kind=song", raw=True)
+    emitted = json.loads(payload)
+
+    assert emitted["title_translations"] == {"en": "Freedom", "de": "Freiheit"}
+
+
+def test_a_run_that_says_nothing_about_the_song_changes_nothing(client, libertad):
+    """A session booted straight into the review — `serve <staging> <song>`
+    — was told no general information at all, and passes every key
+    through byte for byte. Page 1's block must not become a rule about
+    files that never met it."""
+    _, payload, _ = client.get("/api/download?kind=song", raw=True)
+    emitted = json.loads(payload)
+
+    for key in ("title", "artist", "notes", "title_translations"):
+        assert emitted[key] == libertad["song"][key]
+
+
 def test_a_txt_run_emits_the_from_scratch_shape(serve_client, libertad, tmp_path):
     """Jorge's sketch, 2026-08-15, is the contract."""
     client = serve_client(None)
@@ -514,7 +643,7 @@ def test_a_txt_run_emits_the_from_scratch_shape(serve_client, libertad, tmp_path
     with mock.patch.object(
         server, "transcribe_words", return_value=words_for(["uno dos", "tres cuatro"])
     ):
-        _start(client, libertad, lyrics=str(txt), title="Canción", lang="es")
+        _start(client, libertad, lyrics=str(txt), info={"title": "Canción"}, lang="es")
         wait_for(client, "done")
 
     _, payload, _ = client.get("/api/download?kind=song", raw=True)

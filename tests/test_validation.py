@@ -1,8 +1,8 @@
 """`bombista validate` — the gate, as a pure function (round A, item 2).
 
 Two strictness levels. The default asks *is this file sane* and must
-tolerate work in progress: a song fresh from `bombista new` has no
-timeline yet and must still be savable. `--for-performance` asks *is this
+tolerate work in progress: a song whose words are written but not yet
+timed has no timeline and must still be savable. `--for-performance` asks *is this
 song finished* and is what a song must pass before it can be put in a
 setlist.
 
@@ -106,7 +106,7 @@ def test_every_problem_is_reported_not_just_the_first():
     assert "lyrics[2]" in wheres(found)
 
 
-# --- required fields, per the skeleton `new` writes ------------------------
+# --- required fields, per the canonical skeleton ---------------------------
 
 
 @pytest.mark.parametrize("field", ["title", "artist", "notes", "title_translations", "lyrics"])

@@ -1,8 +1,14 @@
-"""`bombista new` and `bombista validate` at the terminal (round A).
+"""`bombista validate` at the terminal (round A).
 
-The three jobs that had no home before this round: supplying a tempo,
-checking a song file is well-formed, and creating one. All three belong in
-Bombista, because it is already the only thing that writes SP JSON.
+Two of the three jobs that had no home before that round: supplying a
+tempo, and checking a song file is well-formed. Both belong in Bombista,
+because it is already the only thing that writes SP JSON.
+
+**The third was creating one, and it was `bombista new`.** It went on
+2026-09-03 with its tests: `serve`'s page 1 collects the metadata the
+skeleton existed to supply, and what was left was a command whose output
+`promote` refuses. A song starts from its words now, not from an empty
+file.
 """
 from __future__ import annotations
 
@@ -37,75 +43,6 @@ def write(tmp_path, data, name="libertad.json"):
     path = tmp_path / name
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
-
-
-# ---------------------------------------------------------------------------
-# new
-# ---------------------------------------------------------------------------
-
-
-def test_new_writes_a_skeleton_to_stdout(runner):
-    result = runner.invoke(main, ["new", "hasta-calmar-el-alma"])
-
-    assert result.exit_code == 0
-    skeleton = json.loads(result.output)
-    assert skeleton["title"] == "Hasta calmar el alma"
-    assert skeleton["lyrics"] == [{"es": ""}]
-
-
-def test_new_writes_to_a_named_path(runner, tmp_path):
-    out = tmp_path / "libertad.json"
-
-    result = runner.invoke(main, ["new", "libertad", "-o", str(out)])
-
-    assert result.exit_code == 0
-    assert json.loads(out.read_text(encoding="utf-8"))["title"] == "Libertad"
-    assert str(out) in result.output
-
-
-def test_new_refuses_to_overwrite_an_existing_file(runner, tmp_path):
-    out = write(tmp_path, song())
-
-    result = runner.invoke(main, ["new", "libertad", "-o", str(out)])
-
-    assert result.exit_code != 0
-    assert json.loads(out.read_text(encoding="utf-8"))["artist"] == "Chango Pepper"
-
-
-def test_what_new_writes_passes_validate(runner, tmp_path):
-    out = tmp_path / "libertad.json"
-    runner.invoke(main, ["new", "libertad", "-o", str(out)])
-
-    result = runner.invoke(main, ["validate", str(out)])
-
-    assert result.exit_code == 0, result.output
-
-
-def test_new_honours_the_language(runner):
-    result = runner.invoke(main, ["new", "libertad", "--lang", "nl"])
-
-    assert json.loads(result.output)["lyrics"] == [{"nl": ""}]
-
-
-def test_new_takes_an_explicit_title(runner):
-    result = runner.invoke(main, ["new", "la-pajita", "--title", "La Pajita"])
-
-    assert json.loads(result.output)["title"] == "La Pajita"
-
-
-def test_new_refuses_a_song_id_that_cannot_name_a_file(runner):
-    result = runner.invoke(main, ["new", "songs/libertad"])
-
-    assert result.exit_code != 0
-
-
-def test_new_help_states_the_whole_flow(runner):
-    """The reason the pipeline has silent failures today is that the first
-    step is folklore. `--help` is where that stops being true."""
-    result = runner.invoke(main, ["new", "--help"])
-
-    for step in ("bombista new", "align", "validate"):
-        assert step in result.output
 
 
 # ---------------------------------------------------------------------------

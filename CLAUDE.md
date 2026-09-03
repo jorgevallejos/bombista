@@ -35,12 +35,14 @@ bombista --version          # `bombista <version>` — the SAME string that land
                             # a run's `toolVersion`, so a version quoted out of a
                             # song file and one read off the terminal compare directly
 
-# The flow, front door to gate (round A closed both ends of it):
-bombista new <song-id> [-o <song.json>] [--lang es] [--title TEXT]
-#   ... an LLM session (or a human) writes the words into the skeleton ...
-#   NOTE: `serve` no longer needs this door. Page 1 collects the general
-#   information a `.txt` cannot carry (§11.15), so the browser flow goes
-#   straight from words + recording to a complete song file.
+# The flow, words to gate:
+#   ... an LLM session (or a human) writes the words into a plain .txt ...
+#   THERE IS NO `bombista new` (deleted 2026-09-03). It wrote a skeleton
+#   because a `.txt` could not carry artist, notes and title_translations;
+#   page 1 collects all three (§11.15), so the flow goes straight from
+#   words + recording to a complete song file. What was left was a command
+#   whose output `promote` refuses — a skeleton's one placeholder lyric
+#   line against a real recording's lines.
 bombista align <audio.wav> <song.json|lyrics.txt> -o <staging-dir> \
     [--model-size medium] [--lang es] [--anchor LINE=SECONDS] [--words <staging>/asr-words.jsonl] \
     [--emit timeline|songjson|report-json|srt|lrc|html]

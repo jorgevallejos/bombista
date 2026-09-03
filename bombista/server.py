@@ -1156,9 +1156,12 @@ class Holder:
 
         self.header = header
         """Whether to draw the product header — name, tagline, version,
-        *a Tramoya tool by Chango Pepper*. Off, the version still shows:
-        two builds calling themselves the same number is the trap that has
-        cost this project a day."""
+        *a Tramoya tool by Chango Pepper*. **The version goes off with it**
+        (Jorge, 2026-09-03): the embedded flow is clean, and the rule that
+        *the version has to survive somewhere* is met by standalone
+        Bombista and by `--version`. Somewhere, not everywhere — two builds
+        calling themselves the same number is the trap that has cost this
+        project a day, and one visible answer defeats it."""
         self.deal = deal
         """Whether the flow opens on the deal — `None` to work it out here.
 
@@ -1487,9 +1490,9 @@ def describe_lyrics(
         "lineCount": len(normalised.song.get("lyrics", [])),
         # Step 6: page 1 collects the song's general information, so it
         # shows what the file already says before anyone retypes it. A
-        # `.txt` says none of it, and gets the same title seed
-        # `bombista new` writes — two doors into one tool should not
-        # disagree about the first thing they put in a file.
+        # `.txt` says none of it, and gets the title seed
+        # `title_from_song_id` derives — the catalogue's own convention,
+        # and a seed to edit rather than a claim.
         "info": (
             song_information(normalised.song)
             if complete

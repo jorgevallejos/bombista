@@ -1,11 +1,18 @@
-"""`bombista new` — the canonical SP JSON skeleton, and nothing else.
+"""The canonical SP JSON skeleton, and the title seed derived from a slug.
 
-**Why this exists.** A song's life is `bombista new` → an LLM session
-writes the words into the skeleton → `bombista align` times it against the
-audio → `bombista validate` gates the result. Bombista owns both ends of
-the one un-tooled step. Until this module, the first step was folklore: a
-file appeared, and that was the whole process — which is precisely why the
-pipeline had silent failures at the far end.
+**What this was for, and what it is for now.** It backed `bombista new`,
+which wrote a skeleton for a song about to be written into. **`new` was
+deleted on 2026-09-03** (Jorge): `serve`'s page 1 collects `artist`,
+`notes` and `title_translations`, which is the whole reason a skeleton had
+to exist, and what was left was a command whose output `promote` refuses —
+align 24 real lines against the one placeholder line and the count guard
+rejects the result.
+
+**What survives is the shape, and one function of it is live.**
+`title_from_song_id` is what `serve` seeds a `.txt`'s title from.
+`song_skeleton` is now reached only from the tests, where it is the
+executable statement of the canonical field set and key order that
+`validation` asserts against.
 
 **Two absences are load-bearing, and neither is an oversight:**
 

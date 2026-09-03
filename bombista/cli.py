@@ -1,21 +1,29 @@
 """
 bombista CLI entrypoint — forced-alignment pipeline.
 
-    bombista new <song-id>
-    bombista align <audio> <song-json> -o <staging-dir>
+    bombista align <audio> <song-json-or-lyrics-txt> -o <staging-dir>
     bombista promote <timeline-json> <song-json>
     bombista validate <song-json> [--for-performance]
+    bombista serve
     bombista migrate <song-json>
 
-`new` writes the skeleton a song starts from — the front door of the flow,
-and the step that used to be folklore. `align` transcribes the audio
-(faster-whisper word timestamps), anchors each lyric line, and writes a
-candidate timeline + QA report to a staging directory. It never writes to
-the song JSON. `promote` copies an approved timeline into the song JSON
-(backup + diff), touching nothing else. `validate` is the gate at both
-ends: is this file sane, and is this song finished. `migrate` (B13)
-rebases a stored v1 timeline onto the v2 start cue in place — a one-off
-for songs timed before v2, not part of the loop.
+`align` transcribes the audio (faster-whisper word timestamps), anchors
+each lyric line, and writes a candidate timeline + QA report to a staging
+directory. It never writes to the song JSON. `promote` copies an approved
+timeline into the song JSON (backup + diff), or creates the song from a
+lyrics file when there is none yet. `validate` is the gate at both ends:
+is this file sane, and is this song finished. `serve` is the same pipeline
+as a flow in a browser. `migrate` (B13) rebases a stored v1 timeline onto
+the v2 start cue in place — a one-off for songs timed before v2, not part
+of the loop.
+
+**There is no `new`, and its absence is the design** (Jorge, 2026-09-03).
+It wrote a skeleton because a `.txt` could not carry `artist`, `notes` and
+`title_translations`; `serve`'s page 1 collects all three, so the flow
+stopped calling it. What was left was a command whose output its own
+sibling refuses: align 24 real lines against the skeleton's one
+placeholder line and `promote` rejects the result. **A song starts from
+its words** — a lyrics file, or page 1 — not from an empty file.
 """
 from __future__ import annotations
 
@@ -48,7 +56,6 @@ from .readers import read_lyrics_input
 from .report import band_counts, render_qa_report
 from .serializer import to_dict, write_timeline
 from .server import LOOPBACK_HOST, create_server, load_session
-from .skeleton import song_skeleton
 from .songfile import back_up_and_replace, timeline_diff
 from .validation import has_errors, load_and_validate, render_findings
 from .writers import (
@@ -74,11 +81,10 @@ Timeline times are only meaningful relative to the audio you feed in.
 
 _FLOW = """\
 \b
-A song's life, and Bombista owns both ends of the one un-tooled step:
-    bombista new <song-id>     the skeleton — a legal song file with nothing in it
-    (an LLM session, or you, writes the words into it)
+A song's life, and it starts from the words rather than from an empty file:
+    (the words, in a lyrics file — written by you or in an LLM session)
     bombista align ...         the timeline, aligned against the audio
-    bombista promote ...       the timeline, written into the song
+    bombista promote ...       the song, created from the words or updated in place
     bombista validate ...      the gate — is it sane, and is it finished
 """
 
@@ -91,56 +97,6 @@ A song's life, and Bombista owns both ends of the one un-tooled step:
 )
 def main() -> None:
     """Derive a lyric timeline from audio via forced alignment."""
-
-
-@main.command(name="new", epilog=_FLOW)
-@click.argument("song_id")
-@click.option(
-    "-o",
-    "--output",
-    "out_path",
-    type=click.Path(dir_okay=False, path_type=Path),
-    help="Write the skeleton here instead of to stdout. Never overwrites.",
-)
-@click.option("--lang", default="es", show_default=True, help="Language key the blocks are keyed by.")
-@click.option(
-    "--title",
-    help="The song's title. Defaults to SONG_ID de-slugified, which is a seed to edit.",
-)
-def new(song_id: str, out_path: Path | None, lang: str, title: str | None) -> None:
-    """Write a canonical Song Performance JSON skeleton for SONG_ID.
-
-    **This is the front door of the flow above**, and the reason it exists
-    is that the first step used to be folklore: a file appeared, and that
-    was the whole process — which is why the pipeline had silent failures
-    at the far end. What comes out here is already a legal song file, so
-    `bombista validate` passes it on the way in as well as on the way out.
-
-    Two absences are deliberate. **`tempo` is absent, not a placeholder** —
-    a missing tempo is a real state and a fake one is a bug that reaches a
-    stage; type it in on `bombista serve`'s review page, where the value is
-    yours to supply. **The timing keys are absent** until `align` and
-    `promote` write them: a human starting a song does not write timings.
-    """
-    try:
-        skeleton = song_skeleton(song_id, lang=lang, title=title)
-    except ValueError as exc:
-        raise click.BadParameter(str(exc), param_hint="SONG_ID")
-
-    payload = json.dumps(skeleton, indent=2, ensure_ascii=False) + "\n"
-
-    if out_path is None:
-        click.echo(payload, nl=False)
-        return
-
-    if out_path.exists():
-        raise click.ClickException(
-            f"{out_path}: already exists — refusing to overwrite a song file "
-            "with an empty skeleton"
-        )
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(payload, encoding="utf-8")
-    click.echo(f"wrote: {out_path}")
 
 
 @main.command(epilog=_ALIGN_EPILOG)
@@ -462,8 +418,8 @@ def validate(
     \b
     Two strictness levels, because there are two questions:
       (default)           is this file SANE? Tolerates work in progress — a
-                          song fresh from `bombista new` has no timeline
-                          yet and must still be savable.
+                          song whose words are written but not yet timed
+                          has no timeline and must still be savable.
       --for-performance   is this song FINISHED? The gate a song passes
                           before it can be put in a setlist.
 
@@ -550,7 +506,8 @@ def validate(
     help=(
         "Draw the product header — the name, the tagline, the version and "
         "who made it. Turn it off inside a window that already has a "
-        "title of its own. The version still shows either way."
+        "title of its own. The version goes with it, and survives here in "
+        "standalone Bombista and in `--version`."
     ),
 )
 @click.option(

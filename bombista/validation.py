@@ -4,8 +4,9 @@ Two strictness levels, and the difference between them is the difference
 between two questions:
 
 - **the default** asks *is this file sane*, and must tolerate work in
-  progress. A song fresh from `bombista new` has no timeline yet and must
-  still be savable, or the front door writes files the gate rejects.
+  progress. A song whose words are written but not yet timed has no
+  timeline and must still be savable, or the flow writes files its own
+  gate rejects.
 - **`--for-performance`** asks *is this song finished*. It is the gate a
   song passes before it can be put in a setlist: a timeline must be
   present and consistent with the lyrics, and declared `media` must
@@ -108,10 +109,10 @@ REQUIRED_SONG_FIELDS: tuple[str, ...] = (
     "title_translations",
     "lyrics",
 )
-"""The fields a song file must carry — the skeleton `bombista new` writes,
-minus `intro`.
+"""The fields a song file must carry — the canonical skeleton
+(`skeleton.song_skeleton`) minus `intro`.
 
-`intro` is offered by the skeleton but not required, because `serve`'s
+`intro` is in the skeleton but not required, because `serve`'s
 from-scratch branch cannot supply one: a `.txt` has no source for it
 (docs/bombista-serve-spec.md §10.2.1). Requiring it here would make
 Bombista's own output fail Bombista's own gate."""
@@ -542,8 +543,8 @@ def validate_song(
                 Finding(
                     ERROR,
                     field,
-                    "required field is missing — `bombista new` writes a "
-                    "skeleton carrying every one of them",
+                    "required field is missing — page 1 collects every one "
+                    "of them",
                 )
             )
 

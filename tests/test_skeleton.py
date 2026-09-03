@@ -1,10 +1,16 @@
-"""`bombista new` — the front door of the song pipeline (round A, item 1).
+"""The canonical SP JSON skeleton (round A, item 1).
 
-A song's life is: **`bombista new` → an LLM session writes the words into
-the skeleton → `bombista align` times it against the audio → `bombista
-validate` gates the result.** Bombista owns both ends of the one un-tooled
-step. Before this, the first step was folklore — a file appeared, and that
-was the whole process.
+Written for `bombista new`, which wrote the skeleton a song started from.
+**`new` was deleted on 2026-09-03** — `serve`'s page 1 collects the
+metadata the skeleton existed to supply, and align-then-`promote` refuses
+a skeleton's single placeholder lyric line against a real recording's
+lines. A song starts from its words now.
+
+**These assertions outlive the command**, because what they pin is not a
+command's behaviour but the format: the required field set, the key order
+`validation` and `writers` both assume, and the two absences that are
+load-bearing. `song_skeleton` is reached only from here now, which is
+recorded rather than hidden.
 """
 from __future__ import annotations
 
@@ -15,8 +21,8 @@ from bombista.validation import REQUIRED_SONG_FIELDS, errors, validate_song
 
 
 def test_the_skeleton_passes_validate():
-    """The one property that makes `new` worth having: what it writes is
-    already a legal song file."""
+    """The one property that makes the shape worth stating: it is already
+    a legal song file."""
     assert validate_song(song_skeleton("hasta-calmar-el-alma", lang="es")) == []
 
 

@@ -2286,3 +2286,86 @@ component across, so the shape lives in `tramoya-integration/journey-setup.md` a
 its own half — `tests/test_pages.py` here, `src/LeaveWithoutSaving.test.tsx` there. **Neither test
 can see the other**, which is exactly why the shape is written down rather than inferred from
 whichever screen was looked at last.
+
+### A shape that does not state its dimensions is not a shape (second pass, 2026-09-03)
+
+**The paragraph above was underspecified and the round proved it.** It named alignment and button
+style and nothing about size. It was implemented exactly, and the two dialogs still read as two
+apps on the walk. Measured side by side at 1280x900, before:
+
+| | Bombista `.ask` | Pregonero, before | ratio |
+|---|---|---|---|
+| box outer width | **448px** | 770px | 1.72x |
+| box padding | **17.6 / 19.2 / 16** | 36 / 48 | ~2.5x |
+| box sizing | **border-box** | content-box | — |
+| title | **15.2px / 700** | 24px / 400 | 1.58x |
+| body text | **13.44px / 20.16** | 22.5px / 33.75 | 1.67x |
+| button height | **32px** | 56.25px | 1.76x |
+| button min-width | **104px** | 168.75px | 1.62x |
+| button padding | **0 / 17.6** | 11.25 / 22.5 | — |
+| button font | **13.12px / 400** | 22.5px / 600 | 1.72x |
+
+**Two causes, and neither was a taste difference.**
+
+- **`em` against a scaled screen.** Pregonero's `.songs-screen` sets
+  `font-size: calc(16px * var(--control-ui-scale))` — 24px, because the control view is read on an
+  iPad on a stage. Every `em` in that dialog was 1.5x this box's `rem`. The dialog now uses `rem`,
+  which resolves against the root — 16px in both apps — so the same number means the same pixels on
+  both sides of the seam. **The stage scale is right for the control view and wrong for a modal.**
+- **`max-width` did not mean the same thing.** This stylesheet sets `border-box` globally;
+  Pregonero's dialog was `content-box`, so `28em` capped the *content* at 672 and the padding and
+  border added 98 on top. Both apps agreed on `28` and rendered 448 against 770.
+
+**This box is the reference and does not move.** `DIALOG_DIMENSIONS` in `tests/test_pages.py` is the
+table, asserted against this stylesheet; Pregonero asserts the same numbers against its own. Changing
+one of them here turns the other side red on its next run.
+
+**What is deliberately still different**, because it is house style rather than size: this box has a
+6px radius and Pregonero's is square, and its buttons sit on the app's own control ground rather than
+on transparent. Both are outlined, both are the same size, and the destructive one carries the fail
+colour on both sides — `#ef7a70` here and `--state-fail` there, which is the same value.
+
+**How Cowork got this wrong once, recorded because the failure mode outlives the bug.** It read the
+alignment rules in `control.css`, saw them changed, and told Jorge the dialogs were fixed. The
+screenshots disproved it. **A partial check reported as a whole one** — the rules it read were the
+rules that had been asked for, and the ones that mattered had never been named.
+
+## 12.4 The translations note, at the foot of page 3 (2026-09-03)
+
+**The sentence is Pregonero's and the page is Bombista's, and that is the whole of the problem it
+solves.**
+
+    Translations are written outside the suite, in the song file itself, in an LLM session —
+    the lyrics and the title alike. No tool here asks for one or performs one.
+
+It had no home for three rounds, landed in Pregonero's song flow in `v0.34.0`, and was drawn beside
+the iframe. **Beside the iframe is the whole life of the flow**, so it stood on page 1, page 2 and
+page 3 alike — the walk of 2026-09-03 read it as a fixed footer on every screen. Jorge's ruling:
+**once, at the end, below the action buttons.**
+
+**Pregonero cannot honour that, and must not be taught to.** It draws Bombista in a frame with no
+preload and reads nothing out of it, so it cannot tell which page is showing. That boundary is
+load-bearing — it is why Bombista learns nothing about its caller either. So the page that *is* the
+end renders it, at the foot of page 3, after `Save to the catalogue` and after the downloads.
+
+**One line of copy crossed the seam; ownership did not.** Bombista still asks for no translation,
+performs none, and carries no translation field anywhere — the title-translation field came off page
+1 on exactly that principle (§11.16). What it says here is what it does **not** do, on the one screen
+where the file has just been made and is about to be taken somewhere else. That is a fact about the
+file in front of the reader, which is the same footing as the caption above it.
+
+**It is on standalone Bombista too, and that is right rather than tolerated.** The sentence is true
+of Bombista alone. Rendering it only under `--no-header` would mean drawing a different page
+depending on who called — the one thing this repo refuses to do.
+
+**Red, decided rather than derived.** Cowork argued for dropping the red: red is this suite's refusal
+colour — `FAIL`, the `Save` refusal band — and this is a permanently true fact rather than a fault.
+**Jorge overruled it.** Once the note appears only once, in one place, the risk it is written against
+is being *missed*, not being mistaken for an error. Recorded as decided and **not to be reopened by a
+later round reasoning from the colour taxonomy** — the test that pins it says so in its own docstring,
+so re-toning the line means deleting an argument rather than editing a value.
+
+The device is `.warnbox`'s — a 2px left rule and an inset — in `--fail`, so it reads as this page's
+furniture rather than as a fifth kind of message. **The four kinds are unchanged**: this is still
+*something always true*, a quiet line at the foot, and it is still the only thing in that class.
+Quiet was never the same as invisible.

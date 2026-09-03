@@ -40,7 +40,7 @@ __all__ = [
     "render_output",
 ]
 
-VERSION = "v1.9.0"
+VERSION = "v1.10.0"
 """The masthead's version string — the package version with a `v` in front.
 
 It is a second copy of what `pyproject.toml` declares, and a second copy
@@ -146,6 +146,24 @@ code { font-family: var(--mono); font-size: .88em; }
 a { color: var(--paper); text-decoration: none; border-bottom: 1px solid var(--clay-dim); }
 a:hover { border-bottom-color: var(--clay); color: var(--clay); }
 .pageoff { display: none; }
+/* THE TRANSLATION STEP, AT THE FOOT OF PAGE 3 AND NOWHERE ELSE (Jorge,
+   2026-09-03). It was Pregonero's line, drawn beside the frame — which meant
+   every page of the flow, because Pregonero draws Bombista in a frame with no
+   preload and cannot tell which page is showing. It appears once now, at the
+   end, under the actions.
+
+   RED, and that is a decision rather than a derivation. Cowork argued for
+   dropping it — red is this suite's refusal colour, and this is a permanently
+   true fact rather than a fault — and Jorge overruled: once the note appears in
+   one place only, the risk it is written against is being MISSED, not being
+   mistaken for an error. Not to be reopened from the colour taxonomy.
+
+   The left rule and the inset are `.warnbox`'s device in the fail colour, so it
+   reads as this page's furniture rather than as a fifth kind of message. */
+.outside { border-left: 2px solid var(--fail); background: transparent;
+           margin: 2.4rem 0 0; padding: .55rem 0 .55rem .9rem;
+           font: 400 .8rem/1.5 var(--sans); color: var(--fail); max-width: 46rem; }
+.outside b { font-weight: 700; }
 
 /* ---------- masthead (§9.1) ---------- */
 .mast { display: flex; align-items: flex-end; justify-content: space-between; gap: 1.5rem;
@@ -2089,6 +2107,36 @@ def render_processing(
     )
 
 
+_TRANSLATIONS_NOTE = (
+    '<p class="outside" id="translations">'
+    "<b>Translations are written outside the suite</b>, in the song file itself, "
+    "in an LLM session — the lyrics and the title alike. No tool here asks for "
+    "one or performs one."
+    "</p>"
+)
+"""**Page 3 only, and it is the last thing on it** (Jorge, 2026-09-03).
+
+Pregonero owned this sentence and drew it beside the frame, which put it
+on page 1, page 2 and page 3 alike — Pregonero draws Bombista in a frame
+with no preload and reads nothing out of it, so it cannot tell which page
+is showing, and it must not learn: that boundary is load-bearing. The
+sentence has to appear once, at the end, below the actions, so **the page
+that is the end renders it.**
+
+**This is one line of copy, not a transfer of ownership.** Bombista still
+does not ask for a translation, does not perform one, and has no
+translation field anywhere — the title-translation field came off page 1
+on exactly that principle. What it says here is what it does NOT do, on
+the one screen where a person has just finished making the file and is
+about to take it somewhere else. That is a fact about the file in front
+of them, which is the same footing as the caption above it.
+
+**It is on standalone Bombista too, and that is right rather than
+tolerated.** The sentence is true of Bombista alone, and rendering it only
+with `--no-header` would mean Bombista drawing a different page depending
+on who called it. It learns nothing about its caller.
+"""
+
 _CAPTION_PASS = (
     "Your song file, with the timeline you just confirmed in it. Everything you loaded is "
     "passed through untouched, translations included."
@@ -2218,6 +2266,7 @@ def render_output(
 
 <p><span class="pageoff" id="signoff"></span></p>
 {'' if manual else '<p class="go"><a href="/review">← Back to review</a></p>'}
+{_TRANSLATIONS_NOTE}
 """
     return _shell(
         title="Output",

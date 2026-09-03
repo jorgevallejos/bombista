@@ -1604,6 +1604,29 @@ def test_serve_takes_an_audio_option(workspace):
     assert "--audio" in result.output
 
 
+def test_serve_lets_a_caller_answer_the_deal_and_answers_it_itself_otherwise(workspace):
+    """**The one rule, asked of whoever can answer it**: show the deal when
+    this machine has produced no song yet. Standalone that is Bombista's
+    own cache and the option is not passed at all, which is why the default
+    is `None` and not `True` — a caller with a better source of truth (its
+    catalogue) has to be able to say either answer, and `False` must be
+    distinguishable from *nobody said*."""
+    from bombista.cli import main
+
+    result = CliRunner().invoke(main, ["serve", "--help"])
+    assert result.exit_code == 0
+    assert "--deal" in result.output and "--no-deal" in result.output
+
+    for argv, expected in (([], None), (["--deal"], True), (["--no-deal"], False)):
+        with mock.patch("bombista.cli.create_server") as create:
+            create.return_value.server_address = ("127.0.0.1", 51234)
+            create.return_value.serve_forever.side_effect = KeyboardInterrupt
+            result = CliRunner().invoke(main, ["serve", *argv])
+
+        assert result.exit_code == 0, result.output
+        assert create.call_args.kwargs["deal"] is expected, argv
+
+
 def test_serve_passes_the_audio_it_was_given_to_the_session(workspace):
     run_extract(workspace)
     take = workspace["audio"]

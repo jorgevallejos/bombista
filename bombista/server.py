@@ -1137,6 +1137,7 @@ class Holder:
         browse_from: Path | None = None,
         song: Path | None = None,
         header: bool = True,
+        deal: bool | None = None,
     ) -> None:
         self.session = session
         self.run: Run | None = None
@@ -1158,6 +1159,26 @@ class Holder:
         *a Tramoya tool by Chango Pepper*. Off, the version still shows:
         two builds calling themselves the same number is the trap that has
         cost this project a day."""
+        self.deal = deal
+        """Whether the flow opens on the deal — `None` to work it out here.
+
+        **One rule with two sources of truth: show the deal when this
+        machine has produced no song yet** (Jorge, 2026-09-03). Both are
+        derived from state that already exists, neither is a flag, and both
+        self-clear. The alternative — a remembered *do not show again* —
+        was rejected as remembered state in a project whose test discipline
+        is starting from nothing.
+
+        **Standalone, Bombista answers it from its own cache** and this
+        stays `None`; see `produced_a_song`. **A caller that knows better
+        answers it here**, because the other source of truth is a
+        catalogue, and Bombista does not know what a catalogue is and must
+        not learn: under Pregonero the cache is not even the directory the
+        run works in, so consulting it would answer a question about the
+        wrong folder. Like `header`, this is a boolean about what to draw —
+        it says nothing about who is calling, and it changes no byte of
+        what Bombista writes."""
+
         self.staging = staging
         """Where a run started from page 1 stages its working files, when
         the caller named a directory (`serve --staging`).
@@ -1184,6 +1205,49 @@ second run of a song skip transcription — the difference between a
 90-second wait and a sub-second one. It sits beside the faster-whisper
 model cache, which is already under `~/.cache`.
 """
+
+def produced_a_song(root: Path | None = None) -> bool:
+    """**Has this machine produced a song yet** — the standalone half of
+    the one rule that decides whether the deal opens the flow.
+
+    **The standalone half was missed on the first pass** (caught by Jorge,
+    2026-09-03): *the catalogue is empty* is Pregonero's answer and means
+    nothing to somebody running Bombista alone, so as first written
+    Bombista by itself would have shown the deal every single time or
+    never.
+
+    **A finished run, not a staging directory.** What `Save to the
+    catalogue` leaves behind is `default_out_path` — `<stem>/<stem>.json`
+    under the cache — so that exact shape is what is looked for. A
+    directory with a transcription in it, or a candidate timeline, is a run
+    that was started and abandoned, and *this machine has produced a song*
+    would be a lie about it.
+
+    **The cache and nothing else.** A caller that named a staging directory
+    is answering this question itself (see `Holder.deal`), so this never
+    looks anywhere but `~/.cache/bombista` — which is also why the walk is
+    untouched by it.
+    """
+    root = root if root is not None else DEFAULT_STAGING_ROOT
+    try:
+        children = sorted(root.iterdir())
+    except OSError:
+        # No cache directory at all is the most emphatic form of the
+        # answer, and a cache that cannot be read is not evidence of a song.
+        return False
+    return any(
+        (child / f"{child.name}.json").is_file() for child in children if child.is_dir()
+    )
+
+
+def show_the_deal(holder: Holder) -> bool:
+    """Whether `/` opens on the deal. **The caller's answer wins, and there
+    is nothing remembered on either path** — asked twice, this says the
+    same thing twice, and `Begin →` writes nothing."""
+    if holder.deal is not None:
+        return holder.deal
+    return not produced_a_song()
+
 
 LYRICS_SUFFIXES = (".json", ".txt")
 MEDIA_SUFFIXES = (".mp3", ".m4a", ".wav", ".flac", ".mp4", ".mov", ".aac", ".ogg")
@@ -1561,9 +1625,21 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             if route == "/":
                 # Booted with a staging directory, the user is here to
-                # review; booted bare, they are here to start. `/` answers
-                # which rather than guessing at a landing page.
-                self._redirect("/review" if self.holder.session else "/input")
+                # review; booted bare, they are here to start — and the
+                # start is the deal until this machine has produced a song.
+                # `/` answers which rather than guessing at a landing page.
+                if self.holder.session:
+                    self._redirect("/review")
+                elif show_the_deal(self.holder):
+                    self._redirect("/deal")
+                else:
+                    self._redirect("/input")
+            elif route == "/deal":
+                # **Always served, whoever asked and whenever.** Whether the
+                # deal OPENS the flow is one question and it is answered
+                # above; that it stays reachable from the step bar is
+                # another, and it has one answer.
+                self._html(pages.render_deal(header=self.holder.header))
             elif route == "/input":
                 session = self.holder.session
                 self._html(
@@ -1929,6 +2005,7 @@ def create_server(
     browse_from: Path | None = None,
     song: Path | None = None,
     header: bool = True,
+    deal: bool | None = None,
 ) -> ThreadingHTTPServer:
     """A threading HTTP server bound to the loopback interface.
 
@@ -1940,11 +2017,12 @@ def create_server(
     `Holder.staging`: it is for a caller that means to read the emitted
     `<stem>.json` back out, and the default cache is unchanged without it.
 
-    *browse_from*, *song* and *header* are the three answers a caller may
-    give about the page itself — where the pickers open, a song file page 1
-    starts prefilled from, and whether the product header is drawn. See
-    `Holder` for each. **None of them tells this process who is calling**,
-    and none of them changes what Bombista writes.
+    *browse_from*, *song*, *header* and *deal* are the four answers a
+    caller may give about the page itself — where the pickers open, a song
+    file page 1 starts prefilled from, whether the product header is drawn,
+    and whether the flow opens on the deal. See `Holder` for each. **None of
+    them tells this process who is calling**, and none of them changes what
+    Bombista writes.
 
     *host* is explicit and takes exactly one value (invariant 7): the
     argument exists so the bind address is visible at every call site, not
@@ -1961,6 +2039,8 @@ def create_server(
             "and nothing else (the audio never leaves this machine)"
         )
 
-    holder = Holder(session, staging, browse_from=browse_from, song=song, header=header)
+    holder = Holder(
+        session, staging, browse_from=browse_from, song=song, header=header, deal=deal
+    )
     handler = type("_SessionHandler", (_Handler,), {"holder": holder})
     return ThreadingHTTPServer((host, port), handler)

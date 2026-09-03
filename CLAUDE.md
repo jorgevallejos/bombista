@@ -60,6 +60,11 @@ bombista serve <staging-dir> <song.json|lyrics.txt> [--audio <take>]  # boot int
 #     --no-header        do not draw the product header. The version goes
 #                        with it (2026-09-03) and survives where Bombista
 #                        is the whole window: the masthead, and --version
+#     --deal/--no-deal   whether the flow opens on THE DEAL (§12.5).
+#                        UNSET by default, not True: standalone Bombista
+#                        answers it from its own cache, and a caller whose
+#                        catalogue answers it better must be able to say
+#                        either answer
 
 # One-off, for songs timed before timeline v2 (B13) — not part of the loop:
 bombista migrate <song.json> [--dry-run]
@@ -227,8 +232,24 @@ bombista/
                    write. Raises ValueError; `note` is a callback so a warning is
                    delivered before any refusal that follows it. B20 §2: `serve` must
                    promote what `promote` promotes, so there is one flow, not two
-  pages.py       — B20: the HTML `serve` returns — pages 1 (input), 1.5 (processing),
-                   2 (review) and 3 (output), the masthead and the step bar. Page 2's
+  pages.py       — B20: the HTML `serve` returns — THE DEAL (step 0), pages 1
+                   (input), 1.5 (processing), 2 (review) and 3 (output), the
+                   masthead and the step bar.
+                   THE DEAL is the one screen in this flow allowed prose
+                   (§12.5, 2026-09-03), because WORDS EARN THEIR PLACE ONLY
+                   WHERE EFFORT PRECEDES REWARD and this flow asks for a
+                   sitting before anything works. Three blocks — what you
+                   get, what it costs, what it does not do — under caps
+                   labels, the BODY TEXT THE LOUDEST THING ON THE SCREEN
+                   rather than the muted caption register, and one control,
+                   `Begin →`, which is also the skip. The copy is pinned
+                   word for word by tests/test_deal.py: every clause was
+                   argued and a rephrase loses one silently. The step bar
+                   gains it as an UNNUMBERED leftmost cell — it is not a
+                   step of the work — and it stays reachable there.
+                   WHETHER it opens the flow is not decided here: that is
+                   `server.show_the_deal`, and the page is the same page
+                   for both callers. Page 2's
                    ROWS are rendered here too, not in the page's JavaScript: one
                    template, which the page fetches back after a re-anchor rather than
                    keeping a second copy of. Line 0 is an ordinary row — no special
@@ -297,7 +318,18 @@ bombista/
                    string, the masthead's own tagline excepted
   server.py      — B20: `serve`'s process, the pages, and the JSON routes.
                    ThreadingHTTPServer on 127.0.0.1 ONLY (invariant 7 — the host is
-                   an explicit argument that refuses every other value). Holds one
+                   an explicit argument that refuses every other value).
+                   `show_the_deal` is ONE RULE WITH TWO SOURCES OF TRUTH
+                   (§12.5): show the deal when THIS MACHINE HAS PRODUCED NO
+                   SONG YET. A caller answers it (`--deal/--no-deal`,
+                   because Bombista does not know what a catalogue is and
+                   must not learn); unanswered, `produced_a_song` reads
+                   Bombista's OWN cache for `<stem>/<stem>.json`, the shape
+                   `default_out_path` writes — a staging directory holding
+                   only a transcription is an abandoned run, not a song.
+                   NOTHING IS REMEMBERED on either path: no dismissal flag,
+                   nothing cached in the process, and `/deal` is served
+                   whenever it is asked for. Holds one
                    Session (lines, words, QA state of a previous `align`) and answers
                    GET /api/session, POST /api/reanchor, POST /api/emit, POST
                    /api/tempo. The tempo route and the run route both defer

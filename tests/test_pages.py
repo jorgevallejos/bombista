@@ -1049,3 +1049,194 @@ def test_the_consent_dialog_is_left_aligned(page1):
     assert "text-align: center" not in next(
         block for block in _rules(pages.STYLESHEET) if ".ask .head" in block
     )
+
+
+# ---------------------------------------------------------------------------
+# the translations note — page 3 only, at the foot, in the fail colour
+# ---------------------------------------------------------------------------
+
+
+def test_the_translations_note_is_on_page_3(page3):
+    """**Once, at the end of the flow, below the actions** (Jorge,
+    2026-09-03).
+
+    It was Pregonero's line and Pregonero drew it beside the frame, which
+    is the whole life of the flow — so it stood on page 1, page 2 and page
+    3 alike, and the walk read it as a fixed footer on every screen.
+    Pregonero cannot fix it: it draws Bombista in a frame with no preload
+    and reads nothing out of it, so it cannot tell which page is showing,
+    and that boundary is load-bearing. The page that IS the end renders
+    it."""
+    note = re.search(r'<p class="outside" id="translations">(.*?)</p>', page3, re.S)
+
+    assert note, "page 3 does not carry the translations note"
+    text = visible_text(note.group(1))
+    assert "Translations are written outside the suite" in text
+    assert "in the song file itself" in text
+    assert "No tool here asks for one or performs one" in text
+
+
+@pytest.mark.parametrize("name", ["input", "processing", "review"])
+def test_the_translations_note_is_on_no_other_page(name, rendered):
+    """**The whole finding, asserted as a refusal.** This is the test that
+    fails the day the note starts following the flow again — by id, and by
+    its words, so re-adding it under another name is caught too.
+
+    Page 1 is where it would do the most damage: it answers a question
+    nobody has yet, which is why the start of the flow was rejected as its
+    home before the end of it was chosen."""
+    html = rendered[name]
+
+    assert 'id="translations"' not in html, f"the note is back on {name}"
+    assert "Translations are written outside" not in visible_text(html), (
+        f"the note's words are on {name} under another name"
+    )
+
+
+def test_the_translations_note_is_below_the_actions_and_last(page3):
+    """*Below the action buttons* is the half of the ruling that a
+    present-and-correct check would miss. The actions are `Save to the
+    catalogue` and the three downloads; the note comes after both, and
+    after the way back, because it is what the reader leaves with."""
+    assert page3.index('class="save"') < page3.index('id="translations"')
+    assert page3.index('class="dlrow"') < page3.index('id="translations"')
+    # Nothing of the page's own follows it.
+    assert page3.index('id="translations"') > page3.index('id="signoff"')
+
+
+def test_the_translations_note_is_red_and_that_is_a_ruling(page3):
+    """**Red, decided rather than derived** (Jorge, 2026-09-03). Cowork
+    argued for dropping it — red is this suite's refusal colour and this is
+    a permanently true fact rather than a fault — and Jorge overruled:
+    appearing once, in one place, means the risk is being MISSED rather
+    than being mistaken for an error.
+
+    Pinned here so a later round reasoning from the colour taxonomy has to
+    delete a test that says why, rather than quietly re-toning a line."""
+    rule = next(block for block in _rules(pages.STYLESHEET) if ".outside {" in block)
+
+    assert "var(--fail)" in rule, "the note left the fail colour"
+    assert "color: var(--fail)" in rule
+
+
+# ---------------------------------------------------------------------------
+# the consent dialog's DIMENSIONS — this box is the suite's reference
+# ---------------------------------------------------------------------------
+
+#: **`.ask`'s own numbers, in pixels at a 16px root** — which both apps have.
+#: Measured off a real render at 1280x900, not read off a design.
+#:
+#: The first pass of the shape named alignment and button style and nothing
+#: about size. It was implemented exactly and the two dialogs still read as two
+#: apps on the walk: Pregonero's box was 770px against this box's 448, its
+#: title 24px against 15.2, its buttons 56.25px high against 32. **A shape that
+#: does not state its dimensions is not a shape** (Jorge, 2026-09-03).
+#:
+#: **This box is the reference and does not move.** Pregonero's
+#: `src/LeaveWithoutSaving.test.tsx` asserts the same table against its own
+#: stylesheet. Neither test can see the other, which is why the numbers are
+#: written out on both sides rather than derived — and why changing one of them
+#: here turns the other side red on the next run.
+DIALOG_DIMENSIONS = {
+    "box_max_width": 448.0,
+    "box_pad_top": 17.6,
+    "box_pad_side": 19.2,
+    "box_pad_bottom": 16.0,
+    "title_font_size": 15.2,
+    "body_font_size": 13.44,
+    "button_height": 32.0,
+    "button_pad_side": 17.6,
+    "button_min_width": 104.0,
+    "button_font_size": 13.12,
+}
+
+_ROOT_PX = 16.0
+
+
+def _rems(declaration: str, prop: str) -> list[float]:
+    """Every length in one declaration, in pixels at a 16px root.
+
+    `rem` only: this box's dimensions are what the other side copies, and a
+    value that moves with an inherited font size is not a number anyone can
+    copy.
+    """
+    found = re.search(rf"(?<![\w-]){prop}\s*:\s*([^;}}]+)", declaration)
+    assert found, f"no {prop} in: {declaration!r}"
+    out = []
+    for part in found.group(1).split():
+        if part == "0":
+            out.append(0.0)
+            continue
+        assert part.endswith("rem"), f"{prop} is not in rem: {part}"
+        out.append(round(float(part[:-3]) * _ROOT_PX, 2))
+    return out
+
+
+def _font_size_rem(declaration: str) -> float:
+    """The size out of a `font:` shorthand, in pixels at a 16px root.
+
+    `font: 400 .95rem/1.3 var(--sans)` — the size is the token carrying the
+    unit, and it is the only part of the shorthand this table cares about.
+    """
+    found = re.search(r"(?<![\w-])font\s*:\s*([^;}]+)", declaration)
+    assert found, f"no font shorthand in: {declaration!r}"
+    size = re.search(r"([\d.]+)rem(?:\s*/|\s|$)", found.group(1))
+    assert size, f"the font size is not in rem: {found.group(1)!r}"
+    return round(float(size.group(1)) * _ROOT_PX, 2)
+
+
+def _font_weight(declaration: str) -> str:
+    found = re.search(r"(?<![\w-])font\s*:\s*(\d+)", declaration)
+    assert found, f"no weight in the font shorthand: {declaration!r}"
+    return found.group(1)
+
+
+def _dialog_rule(fragment: str) -> str:
+    return next(block for block in _rules(pages.STYLESHEET) if fragment in block)
+
+
+def test_the_dialog_box_is_the_reference_size():
+    """448px wide, border-box. `width: min(28rem, 100%)` rather than a bare
+    max-width, so a narrow window shrinks it instead of clipping it."""
+    inner = _dialog_rule(".ask .inner")
+
+    assert "min(28rem, 100%)" in inner, "the box's width left the reference"
+    assert round(28 * _ROOT_PX, 2) == DIALOG_DIMENSIONS["box_max_width"]
+    assert _rems(inner, "padding") == [
+        DIALOG_DIMENSIONS["box_pad_top"],
+        DIALOG_DIMENSIONS["box_pad_side"],
+        DIALOG_DIMENSIONS["box_pad_bottom"],
+    ]
+
+
+def test_the_dialog_type_is_the_reference_size():
+    """15.2px title at 700, 13.44px body. Both sides carry these."""
+    head = _dialog_rule(".ask .head")
+    body = _dialog_rule(".ask p {")
+
+    assert _font_size_rem(head) == DIALOG_DIMENSIONS["title_font_size"]
+    assert _font_weight(head) == "700"
+    assert _font_size_rem(body) == DIALOG_DIMENSIONS["body_font_size"]
+
+
+def test_the_dialog_buttons_are_the_reference_size():
+    """32px high, 104px min-wide, 0 / 17.6 padding, 13.12px."""
+    foot = _dialog_rule(".ask .foot button {")
+
+    assert _rems(foot, "height") == [DIALOG_DIMENSIONS["button_height"]]
+    assert _rems(foot, "min-width") == [DIALOG_DIMENSIONS["button_min_width"]]
+    assert _rems(foot, "padding") == [0.0, DIALOG_DIMENSIONS["button_pad_side"]]
+    assert _font_size_rem(foot) == DIALOG_DIMENSIONS["button_font_size"]
+
+
+def test_the_reference_box_measures_itself_in_border_box():
+    """`max-width` has to mean the same thing on both sides of the seam. It did
+    not: this stylesheet sets `border-box` globally, Pregonero's dialog was
+    `content-box`, and both apps agreed on `28` while rendering 448 against
+    770 — the padding and border were added on top over there."""
+    globals_ = [block for block in _rules(pages.STYLESHEET) if "box-sizing" in block]
+
+    assert globals_, "the global box-sizing rule is gone"
+    assert any("border-box" in block and "*" in block.split("{")[0] for block in globals_), (
+        "border-box is no longer set on everything"
+    )

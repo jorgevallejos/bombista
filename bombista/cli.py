@@ -554,6 +554,16 @@ def validate(
     ),
 )
 @click.option(
+    "--deal/--no-deal",
+    default=None,
+    help=(
+        "Whether the flow opens on the deal — what you get, what it costs, "
+        "what it does not do. Left alone, Bombista answers it from its own "
+        "cache: shown until this machine has produced a song. A caller "
+        "whose own catalogue answers it better says so here."
+    ),
+)
+@click.option(
     "--port",
     default=0,
     show_default="an ephemeral port, printed on start",
@@ -568,6 +578,7 @@ def serve(
     browse_from: Path | None,
     song: Path | None,
     header: bool,
+    deal: bool | None,
     port: int,
 ) -> None:
     """Open the three-step interface in a browser, on this machine only.
@@ -597,13 +608,24 @@ def serve(
     would have to know this tool's cache layout to find the file. A
     directory in, a file path on the page, and nothing else passes.
 
-    --browse-from, --song and --no-header are three answers about the page
-    itself: where the file pickers open, a song file page 1 starts
-    prefilled from, and whether to draw the product header. They exist
-    because the defaults are right for running Bombista on its own and
-    wrong inside a window that already has a title and already knows where
-    the songs are. **None of them tells Bombista who is calling**, and none
-    of them changes a byte of what it writes.
+    --browse-from, --song, --no-header and --deal/--no-deal are four
+    answers about the page itself: where the file pickers open, a song file
+    page 1 starts prefilled from, whether to draw the product header, and
+    whether the flow opens on the deal. They exist because the defaults are
+    right for running Bombista on its own and wrong inside a window that
+    already has a title and already knows where the songs are. **None of
+    them tells Bombista who is calling**, and none of them changes a byte of
+    what it writes.
+
+    --deal/--no-deal is the one rule *show the deal when this machine has
+    produced no song yet*, asked of whoever can answer it. Unpassed,
+    Bombista answers from its own cache under ~/.cache/bombista: the deal
+    opens the flow until one run has finished there. A caller working in a
+    staging directory of its own has a better source of truth — its
+    catalogue — and says so here, because Bombista does not know what a
+    catalogue is and must not learn. Nothing is remembered either way:
+    there is no *do not show again*, and the screen stays reachable from
+    the step bar.
 
     Binds 127.0.0.1 and nothing else. The audio, the transcription and the
     anchoring all stay in this process on this machine — nothing is
@@ -632,6 +654,7 @@ def serve(
             browse_from=browse_from,
             song=song,
             header=header,
+            deal=deal,
         )
     except ValueError as exc:
         raise click.ClickException(str(exc))

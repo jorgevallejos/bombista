@@ -51,7 +51,15 @@ def wait_for(client, state, timeout=5.0):
 # ---------------------------------------------------------------------------
 
 
-def test_the_entry_point_is_step_1_when_there_is_nothing_to_review(serve_client):
+def test_the_entry_point_is_step_1_when_there_is_nothing_to_review(serve_client, staging_root):
+    """**Once this machine has produced a song.** Before that the door
+    opens on the deal instead — one screen, met once, in front of a flow
+    that asks for a sitting before anything works. The rule and both of its
+    sources of truth are in tests/test_deal.py; what is asserted here is
+    that the deal is the only thing in front of step 1, and that it stops
+    being there on its own."""
+    (staging_root / "libertad").mkdir(parents=True)
+    (staging_root / "libertad" / "libertad.json").write_text("{}", encoding="utf-8")
     client = serve_client(None)
 
     status, _, headers = client.get("/")
@@ -1204,7 +1212,7 @@ def test_the_product_header_can_be_turned_off_on_every_page(serve_client, sessio
 
     client = serve_client(session, header=False)
 
-    for route in ("/input", "/review", "/output"):
+    for route in ("/deal", "/input", "/review", "/output"):
         page = client.get(route)[1]
         assert "Forced-alignment triage" not in page, f"{route} still introduces the product"
         assert pages.VERSION not in page, f"{route} still carries the version"

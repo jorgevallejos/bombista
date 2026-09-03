@@ -33,6 +33,8 @@ from pathlib import Path
 __all__ = [
     "STYLESHEET",
     "STEPS",
+    "DEAL_STEP",
+    "render_deal",
     "render_input",
     "render_processing",
     "render_review",
@@ -40,7 +42,7 @@ __all__ = [
     "render_output",
 ]
 
-VERSION = "v1.10.0"
+VERSION = "v1.11.0"
 """The masthead's version string — the package version with a `v` in front.
 
 It is a second copy of what `pyproject.toml` declares, and a second copy
@@ -55,6 +57,18 @@ STEPS = (("1", "Input", "/input"), ("2", "Review", "/review"), ("3", "Output", "
 """§9.2 — one hard-bordered strip, three segments, every one of them a
 link. Page 1.5 gets no segment of its own: it is a state of step 1, and a
 fourth segment would say the flow has four steps when it has three."""
+
+DEAL_STEP = ("deal", "The deal", "/deal")
+"""The bar's leftmost cell, and **it carries no number** (Jorge,
+2026-09-03): `THE DEAL · 1 INPUT · 2 REVIEW · 3 OUTPUT`. It is not a step
+of the work — nothing is done there and nothing is produced — so numbering
+it would say the flow has four steps when it still has three, which is the
+same reason page 1.5 has no segment.
+
+It is a link like the others, because **the deal stays reachable**. Not
+showing it at the door once this machine has produced a song is not the
+same as taking it away, and *what it costs* is the thing a person goes
+looking for again."""
 
 # The format's five Bombista-owned keys, in the order §10.2 fixes them.
 TIMING_KEYS = ("linesHash", "timelineSignedOff", "timelineVersion", "leadIn", "timeline")
@@ -215,6 +229,31 @@ a:hover { border-bottom-color: var(--clay); color: var(--clay); }
 .steps .skip .n { font-variant-numeric: tabular-nums; }
 .steps .skip .why { text-decoration: none; color: var(--clay-dim); letter-spacing: .1em; }
 .steps a.on .n { color: var(--clay); }
+
+/* ---------- the deal (step 0) — the one screen the flow allows prose ----------
+   WORDS EARN THEIR PLACE ONLY WHERE EFFORT PRECEDES REWARD (Jorge,
+   2026-09-03). Everywhere else in this flow prose is a caption in the muted
+   mono register, sitting beside the control it explains. Here the prose IS
+   the content: the person is about to spend a sitting before anything works,
+   and what they get for it is the whole screen. So the body text is the
+   LOUDEST thing on it — paper, the page's own sans, and a size above `.hint`'s
+   — while the labels stay in `.secthead`, which is the vocabulary the rest of
+   the suite already labels a block with.
+
+   ONE CONTROL, and it is a link because it is a navigation. `.btn1` is styled
+   on `button`, so the accent is restated here rather than borrowed: an anchor
+   would inherit none of it. */
+.deal { margin: 1.6rem 0 0; }
+.deal .secthead { margin: 2.4rem 0 .55rem; }
+.deal .secthead:first-child { margin-top: 1.4rem; }
+.deal p { margin: 0; max-width: 42rem; color: var(--paper);
+          font: 400 1.02rem/1.6 var(--sans); }
+.dealgo { margin: 3rem 0 0; }
+.dealgo a { display: inline-block; border: 1px solid var(--clay); border-bottom: 1px solid var(--clay);
+            background: var(--clay); color: #1a100d; padding: .62rem 1rem;
+            font: 700 .82rem/1 var(--mono); text-transform: uppercase; letter-spacing: .1em; }
+.dealgo a:hover { background: #e79b8a; border-color: #e79b8a; color: #1a100d; }
+.dealgo a:focus-visible { outline: 2px solid var(--clay); outline-offset: 2px; }
 
 /* ---------- buttons ---------- */
 button { font: 400 .76rem/1 var(--mono); text-transform: uppercase; letter-spacing: .1em;
@@ -1156,6 +1195,10 @@ def _step_bar(current: str, *, skipped: str = "") -> str:
     `.stepband`. The bar itself is `width: max-content`, so pinning it
     directly would leave the page scrolling through the gap beside it.
 
+    **The leftmost cell is `THE DEAL` and it is unnumbered** (2026-09-03).
+    See `DEAL_STEP`: it is not a step of the work, and it is in the bar so
+    that it can be returned to.
+
     *skipped* names a step that did not happen — step 2 on a song with no
     recording, where there is no timeline to review. **It is rendered as a
     span rather than a link**, struck through and labelled: a bar that
@@ -1164,7 +1207,9 @@ def _step_bar(current: str, *, skipped: str = "") -> str:
     true, and the difference matters on the one screen that reports what
     the file contains.
     """
-    segments = []
+    slug, deal_label, deal_href = DEAL_STEP
+    on_deal = ' class="on"' if current == slug else ""
+    segments = [f'<a href="{deal_href}"{on_deal}>{deal_label}</a>']
     for number, label, href in STEPS:
         if number == skipped:
             segments.append(
@@ -1907,6 +1952,97 @@ def render_review(payload: dict, *, header: bool = True) -> str:
 <p class="confirm"><button class="btn1" id="confirm">Confirm timeline →</button></p>
 """
     return _shell(title="Review", current="2", body=body, script=_REVIEW_JS, header=header)
+
+
+_DEAL_BLOCKS = (
+    (
+        "What you get",
+        "Your lyrics on the wall, in time with you. Add a recording and they follow the "
+        "music on their own, so you never touch the laptop. Without one, you move them "
+        "yourself.",
+    ),
+    (
+        "What it costs",
+        "One sitting: your lyrics and a take, a tapped tempo, a minute while it works out "
+        "where each line falls, and one listen through to fix the ones that landed wrong.",
+    ),
+    (
+        "What it does not do",
+        "Your recordings and your lyrics files are never changed. It does not ask you for "
+        "translations, but the file it makes has a place for them, so the wall can carry "
+        "the room's language too. You fill those in elsewhere, in an LLM session or "
+        "by hand.",
+    ),
+)
+"""**Three blocks and no more, and every clause was argued** (agreed with
+Jorge, 2026-09-03). `tests/test_deal.py` pins the words, because a
+rephrase loses one of the decisions below without anyone noticing.
+
+**Written from the artist's side.** Earlier drafts said *a song the app
+can perform*, *the machine listens* and *correct what it misheard* — the
+tool's account of the same moments.
+
+**The cost block keeps the waiting in on purpose.** Honesty about what is
+spent is what makes the promise worth anything, and it names the wait by
+what it buys, which is what *the ones that landed wrong* then refers to.
+
+**The third block is an offer, not a refusal.** It was the last one still
+written as a limitation.
+
+**`elsewhere`, never *outside the suite***, because the suite means
+nothing to somebody running Bombista on its own."""
+
+
+def render_deal(*, header: bool = True) -> str:
+    """**The deal** — step 0 of the song flow (Jorge, 2026-09-03).
+
+    **Words earn their place only where effort precedes reward.** This is
+    one of the three moments on the walk where they do: the person is
+    asked for a lyrics file, a take, a tapped tempo and a listen-through
+    before anything has worked, and the payoff — the lines following the
+    music with nobody at the laptop — does not arrive until a projection
+    runs days later. Every other screen in this flow gets captions and no
+    prose; this one is prose, and the prose is the loudest thing on it.
+
+    **Orientation, not persuasion.** The person already chose this tool.
+    The gap is not belief but not knowing what they will get at the moment
+    they decide whether to keep going, so the register is *what this costs
+    and what it gives you*, never *this is powerful*. **And it is a
+    value-driven discussion, never a tutorial** — the failure mode is the
+    explanation people skip, so nothing here describes the machinery, the
+    format or the sequence of operations.
+
+    **A screen, not an overlay.** The flow's own masthead and its own step
+    bar, with `THE DEAL` as the leftmost cell so it can be returned to.
+
+    **One control, `Begin →`, and it is the skip.** That is the whole
+    answer to *I am adding song 65 and I know this by heart*: the screen is
+    met once and dismissed with one press. A skip link beside it would be
+    redundant and would invite back the stored *do not show again* flag
+    that was already rejected.
+
+    **Bombista owns this screen and renders it standalone too.** Cowork
+    argued for Pregonero on the grounds that the copy promises projection,
+    which Bombista does not do — and that was wrong: Bombista's own domain
+    is surtitles and captions, not alignment alone, so somebody running it
+    by itself is also putting words on a screen. Same page for both
+    callers, which is the rule that settled the translations note. *Whether*
+    it opens the flow is the caller's question and is answered in
+    `server.show_the_deal`; *what it says* is one page.
+    """
+    blocks = "".join(
+        f'<h2 class="secthead">{label}</h2>\n<p>{body}</p>\n'
+        for label, body in _DEAL_BLOCKS
+    )
+    body = f"""
+<h1>The deal</h1>
+
+<div class="deal">
+{blocks}</div>
+
+<p class="dealgo"><a class="btn1" href="/input">Begin &rarr;</a></p>
+"""
+    return _shell(title="The deal", current=DEAL_STEP[0], body=body, header=header)
 
 
 def render_input(

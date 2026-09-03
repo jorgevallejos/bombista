@@ -46,7 +46,13 @@ def flow_text(html: str) -> str:
     return visible_text(re.sub(r'<header class="mast".*?</header>', " ", html, flags=re.S))
 
 
-ALL_PAGES = ["input", "processing", "review", "output"]
+ALL_PAGES = ["deal", "input", "processing", "review", "output"]
+"""**Five states, since the deal landed** (2026-09-03). It is a screen of
+this flow like the other four — same masthead, same step bar, same skin,
+same banned vocabulary — so it belongs in every assertion about the chrome.
+What is the deal's OWN (three blocks, one control, the copy word for word,
+and the rule that decides whether it opens the flow) is in
+tests/test_deal.py."""
 
 
 def render(name: str, **kwargs) -> str:
@@ -83,6 +89,7 @@ def rendered(page1, page2, page3):
     is a state of step 1 (§9.2) and is rendered by `render` on demand;
     pages 2 and 3 need a session, so they arrive as fixtures."""
     return {
+        "deal": pages.render_deal(),
         "input": page1,
         "processing": pages.render_processing(),
         "review": page2,
@@ -142,18 +149,28 @@ def test_every_page_carries_the_step_bar_and_reaches_every_step(name, rendered):
     bar = re.search(r'<nav class="steps".*?</nav>', html, re.S)
 
     assert bar, "no step bar"
-    assert re.findall(r'href="([^"]+)"', bar.group(0)) == ["/input", "/review", "/output"]
-    for label in ("Input", "Review", "Output"):
+    assert re.findall(r'href="([^"]+)"', bar.group(0)) == [
+        "/deal",
+        "/input",
+        "/review",
+        "/output",
+    ]
+    for label in ("The deal", "Input", "Review", "Output"):
         assert label in bar.group(0)
 
 
 def test_page_1_5_is_a_state_of_step_1_not_a_fourth_step():
     """§9.2 — inventing a segment for it would say the flow has four steps
-    when it has three. Its heading is Processing."""
+    when it has three. Its heading is Processing.
+
+    **Counted by the numbers, not by the links** (2026-09-03): the deal is
+    a fifth cell in the bar and it is deliberately unnumbered, for exactly
+    the reason this test exists. Three numbered segments is the assertion;
+    it always was."""
     html = pages.render_processing()
     bar = re.search(r'<nav class="steps".*?</nav>', html, re.S).group(0)
 
-    assert len(re.findall(r"<a ", bar)) == 3
+    assert len(re.findall(r'<span class="n">', bar)) == 3
     assert "Processing" in html
     assert re.search(r"<h1[^>]*>\s*Processing\s*</h1>", html)
 
@@ -969,14 +986,20 @@ def test_the_shared_stylesheet_is_shared(name, rendered):
     assert pages.STYLESHEET in rendered[name]
 
 
-def test_the_step_bar_renders_on_all_four_states(rendered):
+def test_the_step_bar_renders_on_every_state(rendered):
     """§9.2, and the last of PR 4's four findings closed: the bar rendered
-    on three states while `/review` 404ed. It renders on four now, and
-    every step is reachable from every other."""
+    on three states while `/review` 404ed. It renders on five now — the
+    deal joined them — and every one of them is reachable from every
+    other."""
     for name in ALL_PAGES:
         bar = re.search(r'<nav class="steps".*?</nav>', rendered[name], re.S)
         assert bar, name
-        assert re.findall(r'href="([^"]+)"', bar.group(0)) == ["/input", "/review", "/output"]
+        assert re.findall(r'href="([^"]+)"', bar.group(0)) == [
+            "/deal",
+            "/input",
+            "/review",
+            "/output",
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -1076,7 +1099,7 @@ def test_the_translations_note_is_on_page_3(page3):
     assert "No tool here asks for one or performs one" in text
 
 
-@pytest.mark.parametrize("name", ["input", "processing", "review"])
+@pytest.mark.parametrize("name", ["deal", "input", "processing", "review"])
 def test_the_translations_note_is_on_no_other_page(name, rendered):
     """**The whole finding, asserted as a refusal.** This is the test that
     fails the day the note starts following the flow again — by id, and by

@@ -2369,3 +2369,97 @@ The device is `.warnbox`'s — a 2px left rule and an inset — in `--fail`, so 
 furniture rather than as a fifth kind of message. **The four kinds are unchanged**: this is still
 *something always true*, a quiet line at the foot, and it is still the only thing in that class.
 Quiet was never the same as invisible.
+
+## 12.5 The deal — step 0 of the song flow (2026-09-03)
+
+**The rule it comes from is not about this screen.** *Words earn their place only where effort
+precedes reward* — where the person is asked to spend something before the tool has given them
+anything back. The full ruling, and the two other moments on the walk that qualify, is in
+`tramoya-integration/project-context.md`, *Orientation moments: when words earn their place*. This
+section is what Bombista built.
+
+**Why this screen qualifies.** Page 1 asks for a lyrics file, a recording, a language, a model and a
+tapped tempo; page 1.5 asks for a minute of waiting; page 2 asks for a listen-through. The payoff —
+lines that follow the music with nobody at the laptop — does not arrive until a projection runs days
+later. **It is orientation, not persuasion:** the person already chose this tool, so the register is
+*what this costs and what it gives you*, never *this is powerful*. A sentence read on the tenth song
+has to survive being read ten times, and persuasion does not. **And it is a value-driven discussion,
+never a tutorial** — the failure mode is the explanation people skip, which is how the header, the
+folder-shape example and step 5's prose all came off. Nothing here names the machinery, the format
+or the sequence of operations.
+
+### The screen
+
+A screen, not an overlay: the flow's own masthead and the flow's own step bar. The bar gains a
+**leftmost cell reading `THE DEAL`, unnumbered**, because it is not a step of the work —
+`THE DEAL · 1 INPUT · 2 REVIEW · 3 OUTPUT`. It is a link like the others, so the deal **stays
+reachable**: not showing it at the door is not the same as taking it away, and *what it costs* is the
+block a person goes back for.
+
+Three blocks under caps labels, in the same `.secthead` vocabulary page 1 labels the song block with.
+**The body text is the loudest thing on the screen** — paper, the page's own sans, larger than
+`.hint` — rather than the muted mono register captions use, because here the prose *is* the content
+and not a note beside it. One control at the foot, `Begin →`, and nothing else.
+
+**`Begin →` is the skip, and that is the whole answer to *I am adding song 65 and I know this by
+heart*.** The screen is met once and dismissed with one press. A skip link beside it would be
+redundant and would invite back the stored flag that was already rejected.
+
+### The copy, agreed 2026-09-03 and pinned by test
+
+    WHAT YOU GET
+    Your lyrics on the wall, in time with you. Add a recording and they follow the music on
+    their own, so you never touch the laptop. Without one, you move them yourself.
+
+    WHAT IT COSTS
+    One sitting: your lyrics and a take, a tapped tempo, a minute while it works out where
+    each line falls, and one listen through to fix the ones that landed wrong.
+
+    WHAT IT DOES NOT DO
+    Your recordings and your lyrics files are never changed. It does not ask you for
+    translations, but the file it makes has a place for them, so the wall can carry the room's
+    language too. You fill those in elsewhere, in an LLM session or by hand.
+
+**Written from the artist's side**, which is the standard the wording is held to: earlier drafts said
+*a song the app can perform*, *the machine listens* and *correct what it misheard* — the tool's
+account of the same moments. **The cost block keeps the waiting in on purpose**, and names the wait by
+what it buys, which is what *the ones that landed wrong* then refers to. **The third block is an
+offer, not a refusal** — it was the last one still written as a limitation. **`elsewhere`, never
+*outside the suite***, because the suite means nothing to somebody running Bombista on its own.
+
+### Bombista owns it, and it renders standalone too
+
+Cowork argued for Pregonero on the grounds that the copy promises projection, which Bombista does not
+do — **and that was wrong.** Bombista's own domain is surtitles and captions, not alignment alone, so
+somebody running it by itself is also putting words on a screen. **Same page for both callers**,
+which is the rule this repo already holds and which settled the translations note the same way
+(§12.4).
+
+### When it is shown — one rule, two sources of truth
+
+**Show the deal when this machine has produced no song yet.** Both sources are derived from state
+that already exists, neither is a flag, and both self-clear.
+
+- **Under Pregonero: the catalogue is empty.** Bombista does not know what a catalogue is and must
+  not learn, so **Pregonero answers it** on the serve invocation — `--deal` / `--no-deal`, a fifth
+  option beside `--staging`, `--browse-from`, `--song` and `--no-header`, and like them a boolean
+  about what to draw that says nothing about who is calling.
+- **Standalone: Bombista's own cache holds no prior finished run.** `server.produced_a_song` looks
+  for `<stem>/<stem>.json` under `~/.cache/bombista` — the shape `default_out_path` writes, so a
+  staging directory holding only a transcription or a candidate is a run that was started and
+  abandoned and does not count. **This half was missed on the first pass** (caught by Jorge): *the
+  catalogue is empty* means nothing to a standalone user, so as first written Bombista alone would
+  have shown the deal every single time or never.
+
+`--deal/--no-deal` therefore defaults to **unset**, not to `True`: `False` has to be distinguishable
+from *nobody said*, or a caller could not turn it off.
+
+**No stored dismissal flag on either path.** A remembered *do not show again* was rejected as
+remembered state in a project whose test discipline is starting from nothing — after one walk nobody
+sees the screen again and it rots unwatched — and it would be a fourth thing for the walk's three
+reset commands to clear. Nothing is written and nothing is cached in the process: asked twice, the
+door gives the same answer twice.
+
+**It does not touch the walk.** Under Pregonero the cache is not even the directory the run works in
+(`Application Support/pregonero/bombista-staging`), and the caller's answer is obeyed without the
+cache being consulted at all — so the standalone signal cannot reach the walk by any path.

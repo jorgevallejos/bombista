@@ -2064,9 +2064,10 @@ def render_input(
     **The song block is what step 6 adds** (journey-setup, 2026-09-02):
     title, artist, notes, title translations and the tempo. This is the
     metadata a lyrics `.txt` cannot carry, and without it the flow can only
-    ever make a song with no artist and no translated title — which is
-    what the skeleton `bombista new` writes existed to supply. It is
-    Bombista's own screen and it appears when Bombista is used on its own.
+    ever make a song with no artist and no translated title — which is what
+    `bombista new`'s skeleton existed to supply, and why that command could
+    be deleted once this page landed (2026-09-03). It is Bombista's own
+    screen and it appears when Bombista is used on its own.
 
     **§3's *no free text* survives as a sharper rule.** What the machine is
     told — which files, which language, which model — is still pickers and

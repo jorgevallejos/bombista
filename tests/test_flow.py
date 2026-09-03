@@ -677,9 +677,8 @@ def test_the_take_is_not_guessed_when_nothing_recorded_one(serve_client, liberta
 
 
 def test_a_txt_prefills_a_title_seeded_from_the_slug(client, tmp_path):
-    """`hasta-calmar-el-alma` -> `Hasta calmar el alma`, which is what
-    `bombista new` seeds. Two doors into the same tool should not disagree
-    about the first thing they write."""
+    """`hasta-calmar-el-alma` -> `Hasta calmar el alma`, the catalogue's
+    own convention — a seed to edit, not a claim."""
     txt = tmp_path / "hasta-calmar-el-alma.txt"
     txt.write_text("uno dos\n", encoding="utf-8")
 

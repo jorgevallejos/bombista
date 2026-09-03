@@ -4,8 +4,8 @@ Until this, a song made from a lyrics `.txt` and a recording could not be
 finished at all. `align --emit songjson` writes a complete song file, but
 into the *staging* directory; `promote` declared its target
 `click.Path(exists=True)` and merged only the envelope keys, so it could
-neither create `songs/<id>.json` nor carry the words into a `bombista new`
-skeleton; and `back_up_and_replace` copied the original before replacing
+neither create `songs/<id>.json` nor carry the words into a skeleton; and
+`back_up_and_replace` copied the original before replacing
 it, so it threw on a target that was not there. Pregonero must not close
 the gap itself — it never writes a song file.
 

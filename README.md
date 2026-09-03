@@ -89,19 +89,19 @@ You have a recording and its lyrics. You want to know when each line lands.
 The song below — *Río de Sal*, twenty lines — is invented, and so are its
 numbers; they are representative of a real run, not a transcript of one.
 
-### 0. Start the file
+### 0. Start from the words
 
-If the song file does not exist yet, Bombista writes the skeleton:
+**A song starts from its words, never from an empty file.** Write the lyrics
+into a plain `.txt`, one line per lyric line — by hand, or by handing the
+recording to an LLM session — and hand that file to `align`. Everything a
+song file needs beyond the words is collected on `serve`'s page 1 (title,
+artist, notes, title translations, tempo), and `promote` creates the song
+file from the two together.
 
-```bash
-bombista new rio-de-sal -o lyrics/rio-de-sal.json --lang es
-```
-
-That is a legal song file with nothing in it — the right key order, lyric
-entries shaped as objects keyed by language, and **no `tempo` and no timing
-keys**, because a missing value is a real state and a placeholder is a bug
-that reaches a stage. Fill in the words (by hand, or by handing the file to
-an LLM), then carry on.
+There is no `bombista new`. It wrote a skeleton because a `.txt` could not
+carry that metadata; page 1 collects all of it, and a skeleton's single
+placeholder lyric line is refused by `promote` when a real recording's
+lines are aligned against it. **Deleted 2026-09-03.**
 
 Skip this step if you already have the lyrics as a song JSON or a text file.
 
@@ -245,8 +245,6 @@ The cost of matching lines by position is positional fragility: insert one line 
 ## Commands
 
 ```
-bombista new SONG_ID [-o SONG.json] [--lang es] [--title TEXT]
-
 bombista align AUDIO SONG_JSON_OR_LYRICS_TXT -o STAGING_DIR
     [--lang es] [--model-size medium] [--anchor LINE=SECONDS]
     [--words STAGING/asr-words.jsonl] [--emit timeline|songjson|report-json|srt|lrc|html]
@@ -258,11 +256,16 @@ bombista validate SONG.json [--for-performance] [--lang es] [--media-dir DIR]...
 bombista migrate SONG.json [--dry-run]
 ```
 
-A song's life, and Bombista owns both ends of the one un-tooled step:
+A song's life, starting from its words rather than from an empty file:
 
 ```
-bombista new  →  the words get written in  →  bombista align  →  bombista promote  →  bombista validate
+the words, in a .txt  →  bombista align  →  bombista promote  →  bombista validate
 ```
+
+`promote` creates the song file when there is none yet, and updates it in
+place when there is. `serve` runs the same three steps as a flow in a
+browser, and its page 1 is where the metadata a `.txt` cannot carry is
+collected.
 
 `extract` is a working alias for `align` — the original verb, kept so old commands still paste. `migrate` is a one-off for timelines produced before the `leadIn` model existed.
 

@@ -171,12 +171,12 @@ chosen. An SP JSON prefills every field from itself, because this flow is **also
 song is edited** — which is why page 3's new control reads `Save to the catalogue` rather than *Add
 to the library*.
 
-**This is what closes the skeleton's reason for existing on the `serve` path.** `bombista new` was
-kept because it supplies `artist`, `notes` and `title_translations`, which a plain text cannot and
-`bombista validate` wants; creating a skeleton up front is also what forecloses `promote`'s create
-path. With page 1 asking for them, the browser flow goes straight from words plus a recording to a
-complete song file, and nothing in it calls `new`. **The `new` command is unchanged and still the
-CLI's front door** — see the finding below.
+**This is what closed the skeleton's reason for existing, and then closed the command.**
+`bombista new` was kept because it supplied `artist`, `notes` and `title_translations`, which a
+plain text cannot and `bombista validate` wants; creating a skeleton up front is also what
+forecloses `promote`'s create path. With page 1 asking for them, the browser flow goes straight
+from words plus a recording to a complete song file, and nothing calls `new`. **`new` was deleted
+on 2026-09-03** (Jorge) — see below.
 
 **`Save to the catalogue` writes through `POST /api/emit`**, which signs off exactly as pressing a
 download does. Emit refuses every path the session read as an input, so it cannot land on `align`'s
@@ -334,12 +334,14 @@ pinning the band put two sticky things in the same place. The player docks under
 offset derived from the band's own declarations; a first pass guessed it and was nine pixels wrong,
 which is invisible except on a scrolled page.
 
-**Open, found while building this and not fixed here.** `skeleton.py` writes
-`lyrics: [{"<lang>": ""}]` — one empty lyric entry, deliberately, so the entry *shape* is visible to
-whoever writes the words in. Pregonero refuses that file: an empty lyric string is not a lyric line.
-Under this design nothing on the `serve` path calls `bombista new`, so it is off the walk, but
-`bombista new` is still the CLI's front door and still hands a file to a tool that rejects it.
-Named here, not resolved.
+**Closed by deletion** (Jorge, 2026-09-03). `skeleton.py` writes `lyrics: [{"<lang>": ""}]` — one
+empty lyric entry, deliberately, so the entry *shape* is visible to whoever writes the words in.
+Pregonero refuses that file, and so does Bombista's own `promote`: align 24 real lines against the
+skeleton's single placeholder and the count guard rejects the result. It was a permanent instance
+of the same shape as the five contract mismatches, and **the answer was to remove the command
+rather than repair its output.** `bombista new` is gone; `skeleton.py` stays for
+`title_from_song_id`, which `serve` uses, and `song_skeleton` is now reached only from the tests as
+the executable statement of the canonical shape.
 
 ## Round A also gave the pipeline a front door and a gate (2026-08-24)
 
@@ -348,11 +350,17 @@ Named here, not resolved.
 first and last steps had no tool. A file appeared, and that was the whole process; nothing checked
 a hand-edited song file until Pregonero rejected it on a stage.
 
-- **`new` writes a skeleton `validate` already passes** — the catalogue's key order, lyric entries
+**The front door did not survive; the gate did** (Jorge, 2026-09-03). `new` is deleted. The step it
+tooled was real, and page 1 tools it better: the metadata a `.txt` cannot carry is asked for, and a
+song starts from its words rather than from an empty file. What follows is the record of what `new`
+was, not of what the CLI offers.
+
+- **`new` wrote a skeleton `validate` already passes** — the catalogue's key order, lyric entries
   as objects keyed by language (flattening them to strings destroyed every translation once), and
-  **`tempo` and the timing keys absent** rather than scaffolded.
+  **`tempo` and the timing keys absent** rather than scaffolded. The shape survives in
+  `skeleton.py`; the command does not.
 - **`validate` asks two questions.** The default asks *is this file sane* and tolerates work in
-  progress, or the front door would write files the gate rejects. `--for-performance` asks *is this
+  progress, or the flow would write files its own gate rejects. `--for-performance` asks *is this
   song finished* and is what a song passes before entering a setlist.
 - **Playability is checked in Bombista and not in Pregonero.** Every rule lives inside a single song
   file and needs no gig. A first draft of the design put these checks in Pregonero; two

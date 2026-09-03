@@ -1497,17 +1497,18 @@ between the two.
 
 Title, artist, notes, title translations and the tempo, in a block below the four rows, revealed
 when a lyrics file is chosen. **This is the metadata a lyrics `.txt` cannot carry** — the thing the
-skeleton `bombista new` writes existed to supply. Without it the flow can only ever produce a song
-with no artist and no translated title, whatever the recording says.
+skeleton `bombista new` wrote existed to supply, which is why that command could be deleted once
+this landed (2026-09-03). Without it the flow can only ever produce a song with no artist and no
+translated title, whatever the recording says.
 
 - **An SP JSON prefills every field from itself.** `GET /api/lyrics` carries `info` and `tempo`
   alongside what it already reported, read off the file by the reader that already normalises it.
   A screen that showed these empty over a file that has them invites a human to retype a value that
   was already right — and this flow is **also how an existing song is edited**, which is the other
   half of §11.15's wording below.
-- **A `.txt` gets a title seeded the way `bombista new` seeds one**: `title_from_song_id`, so
-  `hasta-calmar-el-alma` becomes `Hasta calmar el alma`. Page 1 used to seed the raw slug. Two
-  doors into one tool should not disagree about the first thing they write into a file.
+- **A `.txt` gets a title seeded from its slug**: `title_from_song_id`, so
+  `hasta-calmar-el-alma` becomes `Hasta calmar el alma`, which is the catalogue's own convention
+  and a seed to edit rather than a claim. Page 1 used to seed the raw slug.
 - **`null` and empty are different answers.** A session booted straight into a review
   (`serve <staging> <song>`) was never asked these questions and passes every key through byte for
   byte; page 1 always answers them, and an answer it gives is the answer — including an emptied

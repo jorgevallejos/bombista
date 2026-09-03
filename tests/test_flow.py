@@ -1193,8 +1193,13 @@ def test_no_song_is_handed_over_by_default(serve_client):
 def test_the_product_header_can_be_turned_off_on_every_page(serve_client, session):
     """Inside a window somebody else already titled, the product
     introducing itself is the tool talking about itself to a person who did
-    not choose it. **The version survives** — two builds calling themselves
-    the same number is the trap that has cost this project a day."""
+    not choose it.
+
+    **And the version comes off with it** (Jorge, 2026-09-03), on all three
+    pages rather than page by page. The rule it was protecting is intact
+    and lives next door in `test_pages.py`: the version has to survive
+    somewhere, and it does — in standalone Bombista's masthead and in
+    `bombista --version`."""
     from bombista import pages
 
     client = serve_client(session, header=False)
@@ -1202,7 +1207,7 @@ def test_the_product_header_can_be_turned_off_on_every_page(serve_client, sessio
     for route in ("/input", "/review", "/output"):
         page = client.get(route)[1]
         assert "Forced-alignment triage" not in page, f"{route} still introduces the product"
-        assert pages.VERSION in page, f"{route} lost the version with the branding"
+        assert pages.VERSION not in page, f"{route} still carries the version"
 
 
 def test_the_browse_route_refuses_a_path_that_is_not_a_directory(client, libertad):

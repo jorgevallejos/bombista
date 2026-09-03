@@ -40,7 +40,7 @@ __all__ = [
     "render_output",
 ]
 
-VERSION = "v1.8.0"
+VERSION = "v1.9.0"
 """The masthead's version string — the package version with a `v` in front.
 
 It is a second copy of what `pyproject.toml` declares, and a second copy
@@ -146,10 +146,6 @@ code { font-family: var(--mono); font-size: .88em; }
 a { color: var(--paper); text-decoration: none; border-bottom: 1px solid var(--clay-dim); }
 a:hover { border-bottom-color: var(--clay); color: var(--clay); }
 .pageoff { display: none; }
-/* the version, when the product header is not drawn — the number survives,
-   the branding does not (2026-09-02) */
-.ver { margin: .5rem 0 0; font: 400 .68rem/1 var(--mono); letter-spacing: .11em;
-       text-transform: uppercase; color: var(--dimmer); }
 
 /* ---------- masthead (§9.1) ---------- */
 .mast { display: flex; align-items: flex-end; justify-content: space-between; gap: 1.5rem;
@@ -318,8 +314,18 @@ input[type="text"], input[type="number"] {
                     text-transform: none; letter-spacing: 0; border-radius: 4px;
                     font: 400 .82rem/2rem var(--sans); padding: 0 1.1rem;
                     min-width: 6.5rem; height: 2rem; color: var(--paper); }
-.ask .foot button.askgo { background: #4a4a44; border-color: #565650; }
-.ask .foot button.askgo:hover { background: #565650; border-color: #6a6a62; }
+/* ONE CONSENT-DIALOG SHAPE ACROSS THE SUITE (Jorge, 2026-09-03): left-aligned
+   title and text, TWO OUTLINED BUTTONS, the leaving or destructive action on
+   the right. Pregonero's `Leave without saving?` asks the same kind of
+   question across a seam the person cannot see, and the two were in different
+   visual languages — that one centred, this one carrying a filled `Continue`.
+   This dialog was nearly there; the fill is what moved. It cannot be a shared
+   component across the two repos, so the shape is written down in
+   `tramoya-integration/journey-setup.md` and built twice.
+   `askgo` keeps NO rules at all: the base `button` already draws an outline and
+   hovers it to `--paper`, so both buttons are one control drawn twice and the
+   only difference between them is which side they are on. The class stays as
+   the hook the markup and the script name. */
 
 /* ---------- page 1.5 — the run (§9.4) ---------- */
 .phase { display: flex; align-items: center; gap: .8rem; padding: .8rem 0;
@@ -1096,8 +1102,17 @@ def _masthead() -> str:
     **It can be turned off** (2026-09-02). Inside a window somebody else
     already titled, a product introducing itself by name, tagline and
     *a Tramoya tool by Chango Pepper* is the tool talking about itself to
-    a person who did not choose it. `_version_line` keeps the one part
-    that must survive — see there."""
+    a person who did not choose it.
+
+    **And the version goes with it** (Jorge, 2026-09-03, revising the same
+    day's earlier ruling). It used to survive `--no-header` as a dim line
+    of its own under the step bar; walked inside Pregonero it read as a
+    build number on somebody else's screen. **The rule it was protecting
+    is unchanged — the version has to survive SOMEWHERE**, because two
+    builds calling themselves the same number is the trap that cost this
+    project a day. It survives here: standalone Bombista draws this header
+    on every page, and `bombista --version` answers regardless. What went
+    is the one place it was never for anyone."""
     return (
         '<header class="mast">'
         "<div>"
@@ -1146,18 +1161,6 @@ def _step_bar(current: str, *, skipped: str = "") -> str:
     )
 
 
-def _version_line() -> str:
-    """The version, on a page with no masthead to carry it.
-
-    **The version has to survive** even when the product header does not
-    (Jorge, 2026-09-02): two builds calling themselves the same number is
-    the trap that has already cost this project a day, and a page you
-    cannot ask *which build is this* is a page that can lie about it. So
-    the branding goes and the number stays — one dim line under the step
-    bar, no name, no tagline, no attribution."""
-    return f'<p class="ver">{html_escape(VERSION)}</p>'
-
-
 def _shell(
     *,
     title: str,
@@ -1171,8 +1174,11 @@ def _shell(
     this process (§8.1).
 
     *header* is the product header — name, tagline, version, *a Tramoya
-    tool by Chango Pepper*. Turning it off replaces it with the version
-    alone. **Bombista learns nothing about who is calling**: this is a
+    tool by Chango Pepper*. **Turning it off replaces it with nothing**
+    (2026-09-03): the version went with the branding, and survives in
+    standalone Bombista's own header and in `bombista --version`. See
+    `_masthead` for why that still honours *the version has to survive
+    somewhere*. **Bombista learns nothing about who is calling**: this is a
     boolean about what to draw, and every caller may pass it."""
     scripts = f"<script>\n{script}</script>" if script else ""
     return (
@@ -1188,7 +1194,6 @@ def _shell(
         '<div class="wrap">\n'
         + (_masthead() if header else "")
         + _step_bar(current, skipped=skipped)
-        + ("" if header else _version_line())
         + body
         + "\n</div>\n"
         + scripts
@@ -1271,6 +1276,17 @@ _REVIEW_JS = """\
     show(value);
     mark();
     placePopup();
+    /* Focused on open (Jorge, 2026-09-03). It was deliberately NOT focused
+       — Space belongs to the transport, and judging is the player's job
+       (§8.4) — and walking it cost two presses for one act: one on the
+       number to open the popup, a second on the field to type in it. A
+       control that opens somewhere other than where you have to press
+       next is a control that opens twice.
+       Selected rather than caret-placed, because arriving here means
+       replacing the number, not editing it — the `focus` listener above.
+       **Space is not lost to this**: `fieldKey` sends it to the transport,
+       so the one reason the field was left unfocused still holds. */
+    el.focus();
   }
 
   function field() { return document.getElementById("popval"); }
@@ -1468,6 +1484,17 @@ _REVIEW_JS = """\
   function fieldKey(ev) {
     if (ev.key === "Escape") { closePopup(); return; }
     if (ev.key === "Enter") { ev.preventDefault(); commitTyped(); return; }
+    /* SPACE STAYS THE TRANSPORT'S, even with the caret in here (§8.4).
+       The field is focused on open now, and the general handler below
+       hands every key to a focused INPUT — so without this the one thing
+       the field was left unfocused to protect would have gone silently.
+       Nothing is lost: this is a decimal field, and a space in it is not
+       a value. */
+    if (ev.key === " ") {
+      ev.preventDefault();
+      if (audio.paused) { audio.play(); } else { audio.pause(); }
+      return;
+    }
     if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") { return; }
     if (dirty()) { return; }
     ev.preventDefault();
@@ -2167,8 +2194,6 @@ def render_output(
         caption = _CAPTION_PASS
     body = f"""
 <h1>Output</h1>
-<p class="lede">A new file. Nothing you loaded was modified.</p>
-
 <p class="hint">{caption}</p>
 
 <div class="jsonhead"><span class="fn">{html_escape(filename)}</span></div>

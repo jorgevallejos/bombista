@@ -57,8 +57,9 @@ bombista serve <staging-dir> <song.json|lyrics.txt> [--audio <take>]  # boot int
 #     --browse-from DIR  where the file pickers open (default: home)
 #     --song FILE        page 1 starts prefilled from it — what makes an
 #                        edit an edit rather than a second new song
-#     --no-header        do not draw the product header. The VERSION still
-#                        shows: two builds with one number is the trap
+#     --no-header        do not draw the product header. The version goes
+#                        with it (2026-09-03) and survives where Bombista
+#                        is the whole window: the masthead, and --version
 
 # One-off, for songs timed before timeline v2 (B13) — not part of the loop:
 bombista migrate <song.json> [--dry-run]

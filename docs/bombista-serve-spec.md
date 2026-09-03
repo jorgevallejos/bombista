@@ -662,8 +662,13 @@ place: *Transcription is the slow part and it is cached. Coming back here from s
 
 ### 9.5 Page 3 — output
 
-Heading **Output**, lede *A new file. Nothing you loaded was modified.* Read-only: nothing on this
-page changes anything.
+Heading **Output**. Read-only: nothing on this page changes anything.
+
+**The lede went on 2026-09-03** (Jorge, walking `v1.8.0`). *A new file. Nothing you loaded was
+modified.* said in a heading's voice what the `Save` caption three lines down already says about the
+file it writes, and page 3's standing problem is height — the caption below it was cut to one
+sentence per ending for exactly that reason. What stays above the box: **the heading, the one
+caption, and the file name.**
 
 Rewritten twice on 2026-08-15, both times on Jorge's review. **First pass cut two blocks** — the
 *Ready to write `pimiento-timeline.json` into `staging/pimiento/`* line and the three-item file
@@ -1630,10 +1635,17 @@ selects, and the button that commits is at the bottom right.
 | `--song FILE` | a song file page 1 starts prefilled from. **This is what makes an edit an edit** rather than a second new song. Distinct from the positional argument, which boots into a review of a finished run. |
 | `--header / --no-header` | whether to draw the product header — name, tagline, version, *a Tramoya tool by Chango Pepper*. Inside a window somebody else already titled, that is the tool introducing itself to a person who did not choose it. |
 
-**The version survives `--no-header`**, as one dim line under the step bar. Jorge, 2026-09-02: two
-builds calling themselves the same number is the trap that has already cost this project a day, and
-a page you cannot ask *which build is this* is a page that can lie about it. The branding goes; the
-number does not.
+**The version goes with the header** (Jorge, 2026-09-03, revising the 2026-09-02 ruling below). It
+survived `--no-header` for a day as one dim line under the step bar, and walked inside Pregonero it
+read as a build number on somebody else's screen — the same objection as the branding, one line
+lower.
+
+**The rule it was protecting is unchanged: the version has to survive somewhere.** Two builds calling
+themselves the same number is the trap that has already cost this project a day. It survives in two
+places, neither of them an embedded page: **standalone Bombista's masthead**, drawn on every page it
+owns, and **`bombista --version`**, which prints the same string that lands in a run's
+`toolVersion`. `tests/test_pages.py` asserts both halves — gone with the header off, present with it
+on — so neither can drift alone.
 
 **`the format Tramoya promotes` stays** on the lyrics row with the header off. It names the format
 being asked for, which is a fact about the file, not the product introducing itself. Recorded
@@ -2197,6 +2209,14 @@ number selectable but not focused; clicking into it selects what is there, becau
 somewhere else means **replacing** the number rather than editing it. One extra click, and it buys
 back the key the page uses most.
 
+> **Reversed on 2026-09-03, and the key was kept.** Walked, *one extra click* was two presses for
+> one act — one on the number to open the popup, a second on the field to type in it — and a control
+> that opens somewhere other than where you must press next is a control that opens twice. **The
+> field is focused on open.** Space is not the price: `fieldKey` already intercepts the field's own
+> keys before the page's handler exempts it, so Space is routed to the transport from inside the
+> field. It is a decimal field; a space in it was never a value. Both halves are asserted, so
+> neither can be undone without the other showing.
+
 **The arrows needed their own handler, because the page's keydown already exempted every field.**
 The exemption exists for page 1's title input and is correct there. The popup's field is the first
 input on page 2, so its keys never reached the page's handler at all — Escape would not have closed
@@ -2242,3 +2262,27 @@ through the real `serve` process in a browser before this landed — typing `13`
 pimiento gives `8.93`, `999` gives `29.45`, `zz` keeps the last good value, and `36.32` re-anchors
 line 3 to 19/0/0. **If page 2's JavaScript grows past this, the next thing it needs is a way to run
 it in a test, not more regexes.**
+
+## 12.3 One consent-dialog shape across the suite (2026-09-03)
+
+`No recording` on page 1 and Pregonero's `Leave without saving?` are **the same category of thing** —
+a leaving or destructive action asking for consent — on either side of a seam the person walking the
+flow cannot see anywhere else. On 2026-09-03 they were in two visual languages: Pregonero's centred
+with centred text, Bombista's left-aligned with its buttons pushed right and one of them filled.
+
+**The shape, stated in the contract because it cannot be a shared component** (Jorge, 2026-09-03):
+
+- **left-aligned title and text**, matching every other surface in the suite;
+- **two outlined buttons**;
+- **the leaving or destructive action on the right.**
+
+Bombista's was nearly there and **the fill is what moved**: `.askgo` now carries no rules of its own,
+so the base `button` outline is the whole treatment and the only difference between the two buttons
+is which side they are on. Pregonero's is the one that moved further — it un-centred.
+
+**Two implementations, one written-down shape.** Bombista renders its own HTML from a Python
+process; Pregonero's is a React component in another repository. There is no seam to share a
+component across, so the shape lives in `tramoya-integration/journey-setup.md` and each side asserts
+its own half — `tests/test_pages.py` here, `src/LeaveWithoutSaving.test.tsx` there. **Neither test
+can see the other**, which is exactly why the shape is written down rather than inferred from
+whichever screen was looked at last.

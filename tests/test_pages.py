@@ -394,25 +394,42 @@ def test_page_1_does_not_send_the_reader_to_another_step_for_the_tempo(page1):
     assert "step 2" not in visible_text(page1)
 
 
-def test_the_product_header_can_be_turned_off_and_the_version_survives():
+def test_the_product_header_can_be_turned_off_and_the_version_goes_with_it():
     """Walked 2026-09-02: inside a window somebody else already titled, a
     product introducing itself by name, tagline and *a Tramoya tool by
     Chango Pepper* is the tool talking about itself to a person who did not
-    choose it. **The version is the part that must survive** — two builds
-    calling themselves the same number is the trap that has cost this
-    project a day."""
+    choose it.
+
+    **The version comes off too** (Jorge, 2026-09-03, revising the same
+    day's earlier ruling). It used to survive as a dim line of its own
+    under the step bar; walked inside Pregonero it read as a build number
+    on somebody else's screen. The rule it was protecting is unchanged and
+    is asserted next door: **the version has to survive SOMEWHERE**, and
+    the two places it does are standalone Bombista's masthead and
+    `bombista --version`. Two builds calling themselves the same number is
+    still the trap that cost this project a day."""
     bare = pages.render_input(header=False)
 
     assert "<header" not in bare
     assert "Forced-alignment triage" not in bare
     assert "by <b>Chango Pepper</b>" not in bare
     assert 'class="wordmark"' not in bare
-    assert pages.VERSION in bare, "the version went with the branding"
+    assert pages.VERSION not in bare, "the version is still on an embedded page"
+    assert 'class="ver"' not in bare, "the version line outlived the version"
 
     # *the format Tramoya promotes* stays: it names the FORMAT on the
     # lyrics row, which is a fact about the file being asked for, not the
     # product introducing itself.
     assert "the format Tramoya promotes" in bare
+
+
+def test_the_version_survives_where_bombista_is_the_whole_window():
+    """The other half of the rule above, and the reason the line could go.
+    **The version has to survive somewhere.** With the header drawn — which
+    is every page of standalone Bombista — the masthead carries it, and it
+    is the same string `bombista --version` prints and the same one that
+    lands in a run's `toolVersion`."""
+    assert pages.VERSION in pages.render_input(header=True)
 
 
 def test_the_header_is_drawn_by_default(page1):
@@ -559,13 +576,18 @@ def test_the_page_reads_as_the_file_then_what_to_do_with_it(page3):
 def test_the_text_above_the_json_box_is_short_enough_to_keep_save_in_reach(page3):
     """The reason the order could go back. One sentence per ending, and
     that is what this pins — the caption is what pushed the button off the
-    screen, so a paragraph growing back here is the regression."""
-    lede = re.search(r'<p class="lede">(.*?)</p>', page3, re.S).group(1)
+    screen, so a paragraph growing back here is the regression.
+
+    **The lede above it is gone** (Jorge, 2026-09-03). *A new file. Nothing
+    you loaded was modified.* said in a heading's voice what the `Save`
+    caption three lines down already says about the file it writes, and
+    page 3's whole problem is height. The caption is now the only text
+    between the heading and the box, so it is the only thing measured."""
+    assert '<p class="lede">' not in page3, "the lede came back above the box"
     caption = re.search(r'<p class="hint">(.*?)</p>', page3, re.S).group(1)
 
     assert visible_text(caption).count(".") <= 2, "the caption grew past a sentence"
     assert len(visible_text(caption)) < 220, "the caption is a paragraph again"
-    assert len(visible_text(lede)) < 80
 
 
 def test_page_3_names_the_path_it_will_write_before_it_is_pressed(page3):
@@ -955,3 +977,75 @@ def test_the_step_bar_renders_on_all_four_states(rendered):
         bar = re.search(r'<nav class="steps".*?</nav>', rendered[name], re.S)
         assert bar, name
         assert re.findall(r'href="([^"]+)"', bar.group(0)) == ["/input", "/review", "/output"]
+
+
+# ---------------------------------------------------------------------------
+# the walk of 2026-09-03 — Pregonero v0.38.0 with Bombista v1.8.0
+# ---------------------------------------------------------------------------
+
+
+def test_the_time_field_is_focused_when_the_popup_opens(page2):
+    """Walked 2026-09-03: pressing a timestamp opened the nudge control and
+    left focus behind, so adjusting a time cost two presses — one on the
+    number, a second on the field.
+
+    **This reverses a deliberate decision, and the reason it was made is
+    kept alive by the test below.** §8.4 left the field unfocused so Space
+    would stay the transport's. It stays the transport's; see there."""
+    assert "el.focus();" in pages._REVIEW_JS, "the popup opens away from where you must press"
+
+
+def test_space_still_belongs_to_the_transport_with_the_caret_in_the_field(page2):
+    """The other half of the change above, and the whole reason the field
+    was unfocused in the first place (§8.4): judging a cue is done by ear,
+    and Space is how the player is worked.
+
+    The general handler hands every key to a focused `INPUT`, so focusing
+    the field would have taken Space away silently. `fieldKey` claims it
+    back. Nothing is lost — it is a decimal field, and a space is not a
+    value."""
+    field_key = pages._REVIEW_JS[pages._REVIEW_JS.index("function fieldKey") :]
+    field_key = field_key[: field_key.index("\n  }")]
+
+    assert 'ev.key === " "' in field_key, "Space fell through to the field"
+    assert "audio.play()" in field_key and "audio.pause()" in field_key
+
+
+def test_the_consent_dialog_has_two_outlined_buttons(page1):
+    """**One consent-dialog shape across the suite** (Jorge, 2026-09-03).
+
+    `No recording` here and Pregonero's `Leave without saving?` are the
+    same category of thing on either side of a seam the person cannot see,
+    and they were in two visual languages — that one centred, this one
+    carrying a filled `Continue`. The shape: **left-aligned title and text,
+    two outlined buttons, the leaving or destructive action on the right.**
+
+    It cannot be a shared component — the other one is React in another
+    repository — so the shape is written down in
+    `tramoya-integration/journey-setup.md` and built twice.
+    `src/LeaveWithoutSaving.test.tsx` is the other half of this assertion.
+    """
+    foot = [block for block in _rules(pages.STYLESHEET) if ".ask .foot" in block]
+
+    assert foot, "no rule for the dialog's buttons"
+    # Neither button is filled: the base `button` outline is the whole
+    # treatment, and `askgo` carries no rules of its own any more.
+    for block in foot:
+        assert "background:" not in block, "a button in the consent dialog is filled"
+
+    # The action that goes on is still the one on the right, and it is
+    # still the second of the two in the markup.
+    assert page1.index('id="ask-no"') < page1.index('id="ask-yes"')
+    inner = [block for block in _rules(pages.STYLESHEET) if ".ask .foot {" in block]
+    assert any("text-align: right" in block for block in inner)
+
+
+def test_the_consent_dialog_is_left_aligned(page1):
+    """The half of the shape this dialog already had, pinned so it cannot
+    drift to centre while the other one is being kept off centre."""
+    inner = next(block for block in _rules(pages.STYLESHEET) if ".ask .inner" in block)
+
+    assert "text-align: center" not in inner
+    assert "text-align: center" not in next(
+        block for block in _rules(pages.STYLESHEET) if ".ask .head" in block
+    )

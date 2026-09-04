@@ -7,9 +7,8 @@ stored data: subtract `raw[0].start` from every entry, bank it in
 `leadIn`, stamp `timelineVersion: 2`.
 
 **This module adds no rules of its own.** The subtraction and rounding
-are `pipeline.normalize_to_lead_in`; the `leadIn.apply` default
-(`media.type == "video"`), the envelope shape and its invariants —
-entry 0 at exactly `0.0`, monotonic, exactly three keys — are
+are `pipeline.normalize_to_lead_in`; the envelope shape and its
+invariants — entry 0 at exactly `0.0`, monotonic, exactly three keys — are
 `serializer.to_dict`; the key-order-preserving merge is
 `writers.merge_envelope`, the one merge path. What lives here is the
 refusal set that stops a *wrong* migration: everything below is a
@@ -97,5 +96,5 @@ def migrate_song_to_v2(song: dict) -> dict:
     validate_timeline(entries)  # the stored v1 times must already be sane
 
     lead_in, normalized = normalize_to_lead_in(entries)
-    envelope = to_dict(lead_in, normalized, song)
+    envelope = to_dict(lead_in, normalized)
     return merge_envelope(song, envelope)

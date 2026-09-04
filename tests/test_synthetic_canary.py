@@ -170,7 +170,6 @@ def test_moving_line_0_is_the_global_shift(client, tmp_path):
         "durationSec": MOVED_LEAD_IN,
         "source": "manual",
         "confidence": "low",
-        "apply": False,
     }
     assert machine["leadIn"]["source"] == "measured"
     assert moved["timeline"][0]["start"] == 0.00

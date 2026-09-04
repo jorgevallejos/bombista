@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bombista"
-version = "1.12.0"
+version = "1.13.0"
 description = "Forced-alignment triage for lyric and subtitle timelines"
 requires-python = ">=3.11"
 readme = "README.md"

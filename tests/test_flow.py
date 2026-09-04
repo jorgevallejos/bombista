@@ -539,20 +539,28 @@ def test_the_lyrics_route_reports_what_page_1_should_prefill(client, libertad):
     assert "title_translations" not in info
 
 
-def test_an_edit_prefills_the_take_the_file_was_aligned_against(
-    serve_client, libertad, tmp_path
-):
-    """**Being asked is not the problem; being asked silently is** (Jorge,
-    2026-09-02). The lyrics field prefilled on an edit and this one did
-    not, so nothing said whether the app had forgotten the take or was
-    waiting to be told. The staging directory's record of what a run
-    listened to — **and which song it listened for** — is the answer."""
+def test_an_edit_no_longer_prefills_the_take(serve_client, libertad, tmp_path):
+    """**THE PREFILL GOES WITH THE MEDIA REFERENCE** (Jorge, 2026-09-04).
+
+    It was added on 2026-09-02 — *being asked is not the problem; being asked
+    silently is* — and it is correct to remove now for the reason that made it
+    possible: **the song recorded the take it was aligned against, and it does
+    not any more.** Under *the song holds no media* this tool emits no media
+    reference at all, so both of `previous_take`'s sources describe a fact
+    nothing writes.
+
+    **The cost was named and weighed:** a timeline will no longer say what
+    produced it. Jorge: *the principle of clean boundaries is worth more*, and
+    *I just have to process the audio again, it is a matter of seconds*.
+
+    **Page 1 still ASKS for a recording** — that is the alignment input and it
+    stays. The field simply starts empty.
+    """
     client = serve_client(None, staging=libertad["staging"])
 
     _, payload, _ = client.get("/api/lyrics?path=" + str(libertad["song_path"]))
 
-    assert payload["media"]["path"] == str(libertad["audio"].resolve())
-    assert payload["media"]["name"] == libertad["audio"].name
+    assert payload["media"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -635,7 +643,9 @@ def test_a_song_is_never_handed_the_take_of_a_different_song(
     )
     client = serve_client(None, staging=libertad["staging"])
 
-    assert _describe(client, libertad["song_path"])["media"] is not None
+    # **Neither is handed one now**, because nothing is prefilled at all — which
+    # is the strongest form of this guard rather than a weakening of it.
+    assert _describe(client, libertad["song_path"])["media"] is None
     assert _describe(client, stranger)["media"] is None
 
 
@@ -968,6 +978,50 @@ def test_entry_0_is_zero_and_the_offset_is_in_lead_in(client):
 
     assert emitted["timeline"][0]["start"] == 0.00
     assert emitted["leadIn"]["durationSec"] == 10.00
+
+
+def test_no_emitted_file_carries_a_media_reference(client, libertad):
+    """**THE SONG HOLDS NO MEDIA** (Jorge, 2026-09-03).
+
+    A recording derives a timeline and is then irrelevant — **a use-and-forget
+    relationship** — and a song never carries something that has to be present
+    on the night. What appears on the wall is the visuals, named in
+    `visuals.json` by Muralista.
+
+    **The test is whether the media is an INPUT or part of the OUTPUT**, which
+    is why the two tools differ rather than disagree: **Bombista consumes a
+    recording and produces a timeline, so forgetting it is correct**; Muralista
+    consumes a file and produces a shape BOUND to it, so it keeps the name.
+
+    **It is asserted on a run that WAS given a recording**, because the field is
+    stripped rather than merely not added: page 1 can be opened on a song file
+    that still carries the key, and passing it through would keep re-emitting a
+    reference this tool has stopped standing behind.
+    """
+    _, payload, _ = client.get("/api/download?kind=song", raw=True)
+    emitted = json.loads(payload)
+
+    assert "media" not in emitted
+    # And the timeline it did produce is still there — this removes a reference,
+    # not the work.
+    assert emitted["timelineVersion"] == 2
+    assert emitted["timeline"]
+
+
+def test_the_emitted_lead_in_says_nothing_about_whether_it_applies(client):
+    """**`leadIn` splits the way the media did** (Jorge, 2026-09-04).
+
+    Its measured VALUE stays with the timeline — a real measurement of the
+    words. **The DECISION to apply it is Pregonero's**, from whether a video is
+    assigned to the song for a gig; after the split Pregonero is the only party
+    that could know. Bombista derived it from `media.type == "video"`, and once
+    no song declares media that default would have **silently flipped to False
+    and cost every video song its lead-in correction.**
+    """
+    _, payload, _ = client.get("/api/download?kind=song", raw=True)
+    lead_in = json.loads(payload)["leadIn"]
+
+    assert set(lead_in) == {"durationSec", "source", "confidence"}
 
 
 def test_no_emitted_file_carries_a_qa_block(client):

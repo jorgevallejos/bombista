@@ -5,7 +5,7 @@ interchange envelope consumed by the translator's timeline-import button.
 Format:
     {
       "timelineVersion": 2,
-      "leadIn": {"durationSec": 7.26, "source": "measured", "confidence": "low", "apply": false},
+      "leadIn": {"durationSec": 7.26, "source": "measured", "confidence": "low"},
       "timeline": [{"start": 0.0, "end": 5.84}, ...]
     }
 
@@ -23,7 +23,19 @@ from .models import TimelineEntry
 TIMELINE_VERSION = 2
 
 _ENVELOPE_KEYS = {"timelineVersion", "leadIn", "timeline"}
-_LEAD_IN_KEYS = {"durationSec", "source", "confidence", "apply"}
+_LEAD_IN_KEYS = {"durationSec", "source", "confidence"}
+_LEAD_IN_LEGACY_KEYS = {"apply"}
+"""Keys a file written before 2026-09-04 may still carry, accepted and ignored.
+
+**`apply` was this tool's and stopped being it.** It was derived from
+`media.type == "video"`; under *the song holds no media* nothing declares media,
+and **the decision to apply the lead-in moved to Pregonero**, which is the only
+party that knows a video is assigned for a gig.
+
+**Accepted rather than refused, because nothing is migrated.** Files already on
+disk carry the key; refusing them would make walk state unvalidatable for no
+gain, and Pregonero's own parser drops it the same way. **Nothing writes it.**
+"""
 _LEAD_IN_SOURCES = {"measured", "manual", "none"}
 _LEAD_IN_CONFIDENCES = {"low", "high"}
 
@@ -42,18 +54,9 @@ def validate_timeline(entries: Sequence[TimelineEntry]) -> None:
         previous_end = entry.end
 
 
-def _lead_in_apply_default(song: dict) -> bool:
-    """`leadIn.apply` defaults to True when the song is Video-mode
-    (`media.type == "video"`), else False — including when `media` is
-    absent entirely."""
-    media = song.get("media")
-    return isinstance(media, dict) and media.get("type") == "video"
-
-
 def to_dict(
     lead_in: float,
     entries: Sequence[TimelineEntry],
-    song: dict,
     *,
     source: str = "measured",
 ) -> dict:
@@ -61,8 +64,21 @@ def to_dict(
 
     `entries` must already be relative to the start cue (see
     `pipeline.normalize_to_lead_in`) — entry 0 is expected to start at
-    `0.0`. `song` supplies `media.type` for the `leadIn.apply` default.
-    Raises ValueError if the resulting envelope fails `validate_v2_envelope`.
+    `0.0`. Raises ValueError if the resulting envelope fails
+    `validate_v2_envelope`.
+
+    **THE SONG IS NOT AN ARGUMENT ANY MORE** (Jorge, 2026-09-04). It was here
+    for one reason: `leadIn.apply`, derived from `media.type == "video"`. Under
+    *the song holds no media* nothing declares media, so that default would
+    have silently flipped to False and **every video song would have lost its
+    lead-in correction with nothing reporting it.**
+
+    **`leadIn` splits the way the media did.** Its measured VALUE stays here —
+    it is a real measurement of the words, which is Bombista's output. The
+    DECISION to apply it is Pregonero's, taken from whether a video is assigned
+    to the song for a gig in `visuals.json`; after the split Pregonero is the
+    only party that could know. So this writes the number and says nothing
+    about what to do with it.
 
     *source* is the contract's `leadIn.source`: `measured` when Bombista
     computed the value, `manual` when a human overrode it. It defaults to
@@ -79,7 +95,6 @@ def to_dict(
             "durationSec": round(lead_in, 2),
             "source": source,
             "confidence": "low",
-            "apply": _lead_in_apply_default(song),
         },
         "timeline": [{"start": e.start, "end": e.end} for e in entries],
     }
@@ -87,11 +102,9 @@ def to_dict(
     return envelope
 
 
-def write_timeline(
-    lead_in: float, entries: Sequence[TimelineEntry], song: dict, path: Path
-) -> None:
+def write_timeline(lead_in: float, entries: Sequence[TimelineEntry], path: Path) -> None:
     """Write the timeline v2 interchange JSON to *path*."""
-    data = to_dict(lead_in, entries, song)
+    data = to_dict(lead_in, entries)
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
@@ -101,7 +114,7 @@ def validate_v2_envelope(envelope: dict) -> None:
 
     - exactly the three top-level keys, `timelineVersion` exactly `2`
       (never coerced);
-    - `leadIn` has exactly its four fields, each within its value domain;
+    - `leadIn` has exactly its three fields, each within its value domain;
     - `timeline` entries have numeric `start`/`end`, `timeline[0].start`
       is exactly `0.0`, and the existing monotonic chain holds.
 
@@ -130,7 +143,7 @@ def validate_v2_envelope(envelope: dict) -> None:
     lead_in = envelope["leadIn"]
     if not isinstance(lead_in, dict):
         raise ValueError("leadIn must be an object")
-    extra = sorted(set(lead_in.keys()) - _LEAD_IN_KEYS)
+    extra = sorted(set(lead_in.keys()) - _LEAD_IN_KEYS - _LEAD_IN_LEGACY_KEYS)
     missing = sorted(_LEAD_IN_KEYS - set(lead_in.keys()))
     if extra or missing:
         raise ValueError(
@@ -150,9 +163,6 @@ def validate_v2_envelope(envelope: dict) -> None:
             f"leadIn.confidence must be one of {sorted(_LEAD_IN_CONFIDENCES)}, "
             f"got {lead_in['confidence']!r}"
         )
-    if not isinstance(lead_in["apply"], bool):
-        raise ValueError(f"leadIn.apply must be a bool, got {lead_in['apply']!r}")
-
     timeline = envelope["timeline"]
     if not isinstance(timeline, list):
         raise ValueError('"timeline" must be an array')

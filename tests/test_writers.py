@@ -290,21 +290,19 @@ SUBTITLE_SONG = {
     ],
 }
 
-SUBTITLE_ENVELOPE_APPLY_TRUE = {
+# **One envelope, because the lead-in is always added back now** (Jorge, 2026-09-04).
+# `leadIn.apply` is gone — the playback decision is Pregonero's — and it was the wrong
+# question here anyway: a subtitle file is against the RECORDING, whose clock includes
+# the lead-in whatever mode the song is played in.
+SUBTITLE_ENVELOPE = {
     "timelineVersion": 2,
-    "leadIn": {"durationSec": 7.0, "source": "measured", "confidence": "low", "apply": True},
-    "timeline": [{"start": 0.0, "end": 10.0}, {"start": 10.0, "end": 15.5}],
-}
-
-SUBTITLE_ENVELOPE_APPLY_FALSE = {
-    "timelineVersion": 2,
-    "leadIn": {"durationSec": 7.0, "source": "measured", "confidence": "low", "apply": False},
+    "leadIn": {"durationSec": 7.0, "source": "measured", "confidence": "low"},
     "timeline": [{"start": 0.0, "end": 10.0}, {"start": 10.0, "end": 15.5}],
 }
 
 
 def test_write_srt_one_file_per_language_key(tmp_path):
-    paths = write_srt(SUBTITLE_SONG, SUBTITLE_ENVELOPE_APPLY_FALSE, "cancion", tmp_path)
+    paths = write_srt(SUBTITLE_SONG, SUBTITLE_ENVELOPE, "cancion", tmp_path)
 
     names = sorted(p.name for p in paths)
     assert names == ["cancion-en.srt", "cancion-es.srt"]
@@ -313,37 +311,31 @@ def test_write_srt_one_file_per_language_key(tmp_path):
 
 
 def test_write_srt_cue_format_and_content(tmp_path):
-    paths = write_srt(SUBTITLE_SONG, SUBTITLE_ENVELOPE_APPLY_FALSE, "cancion", tmp_path)
+    paths = write_srt(SUBTITLE_SONG, SUBTITLE_ENVELOPE, "cancion", tmp_path)
     es_path = next(p for p in paths if p.name == "cancion-es.srt")
     content = es_path.read_text(encoding="utf-8")
 
     assert content == (
         "1\n"
-        "00:00:00,000 --> 00:00:10,000\n"
+        "00:00:07,000 --> 00:00:17,000\n"
         "hola mundo bonito\n"
         "\n"
         "2\n"
-        "00:00:10,000 --> 00:00:15,500\n"
+        "00:00:17,000 --> 00:00:22,500\n"
         "vamos a bailar\nahora\n"
         "\n"
     )
 
 
-def test_write_srt_excludes_lead_in_when_apply_false(tmp_path):
-    paths = write_srt(SUBTITLE_SONG, SUBTITLE_ENVELOPE_APPLY_FALSE, "cancion", tmp_path)
-    es_path = next(p for p in paths if p.name == "cancion-es.srt")
-    assert "00:00:00,000 --> 00:00:10,000" in es_path.read_text(encoding="utf-8")
-
-
-def test_write_srt_includes_lead_in_when_apply_true(tmp_path):
-    paths = write_srt(SUBTITLE_SONG, SUBTITLE_ENVELOPE_APPLY_TRUE, "cancion", tmp_path)
+def test_write_srt_always_adds_the_lead_in_back(tmp_path):
+    paths = write_srt(SUBTITLE_SONG, SUBTITLE_ENVELOPE, "cancion", tmp_path)
     es_path = next(p for p in paths if p.name == "cancion-es.srt")
     # 0.0 + 7.0 leadIn -> 00:00:07,000
     assert "00:00:07,000 --> 00:00:17,000" in es_path.read_text(encoding="utf-8")
 
 
 def test_write_lrc_one_file_per_language_with_tags(tmp_path):
-    paths = write_lrc(SUBTITLE_SONG, SUBTITLE_ENVELOPE_APPLY_FALSE, "cancion", tmp_path)
+    paths = write_lrc(SUBTITLE_SONG, SUBTITLE_ENVELOPE, "cancion", tmp_path)
 
     names = sorted(p.name for p in paths)
     assert names == ["cancion-en.lrc", "cancion-es.lrc"]
@@ -352,20 +344,14 @@ def test_write_lrc_one_file_per_language_with_tags(tmp_path):
     content = es_path.read_text(encoding="utf-8")
     assert "[ti:Cancion]" in content
     assert "[ar:Chango Pepper]" in content
-    assert "[00:00.00]hola mundo bonito" in content
-
-
-def test_write_lrc_includes_lead_in_when_apply_true(tmp_path):
-    paths = write_lrc(SUBTITLE_SONG, SUBTITLE_ENVELOPE_APPLY_TRUE, "cancion", tmp_path)
-    es_path = next(p for p in paths if p.name == "cancion-es.lrc")
-    assert "[00:07.00]hola mundo bonito" in es_path.read_text(encoding="utf-8")
+    assert "[00:07.00]hola mundo bonito" in content
 
 
 def test_write_lrc_omits_tags_when_song_has_no_title_or_artist(tmp_path):
     song = {"lyrics": [{"es": "una linea"}]}
     envelope = {
         "timelineVersion": 2,
-        "leadIn": {"durationSec": 0.0, "source": "measured", "confidence": "low", "apply": False},
+        "leadIn": {"durationSec": 0.0, "source": "measured", "confidence": "low"},
         "timeline": [{"start": 0.0, "end": 1.0}],
     }
 

@@ -4,8 +4,15 @@ Timeline v2 contract tests (B12) — docs/timeline-v2-contract.md.
 Verifies the real build_timeline -> normalize_to_lead_in -> serializer.to_dict
 path reproduces the frozen golden fixture exactly (as parsed JSON values,
 not file text), that normalisation is lossless within the contract's
-documented rounding tolerance, that `leadIn.apply` defaults correctly from
-`media.type`, and that the envelope carries exactly its three keys.
+documented rounding tolerance, and that the envelope carries exactly its
+three keys.
+
+**`leadIn.apply` is no longer here, and its absence is the change** (Jorge,
+2026-09-04). It was derived from `media.type == "video"`; under *the song holds
+no media* nothing declares media, so that default would have silently flipped
+and cost every video song its lead-in correction. The measured VALUE stays with
+the timeline; **the decision to apply it is Pregonero's**, from whether a video
+is assigned for a gig.
 """
 import json
 from pathlib import Path
@@ -51,9 +58,8 @@ def test_golden_fixture_reproduced_exactly_through_the_real_pipeline():
     parsed JSON values (0.00 parses to 0.0), not file text."""
     entries = _raw_entries()
     lead_in, normalized = normalize_to_lead_in(entries)
-    song = {"media": {"type": "audio"}}  # -> leadIn.apply == false, per the fixture
 
-    envelope = to_dict(lead_in, normalized, song)
+    envelope = to_dict(lead_in, normalized)
 
     expected = json.loads(
         (FIXTURES / "libertad-timeline-v2.json").read_text(encoding="utf-8")
@@ -74,25 +80,26 @@ def test_normalisation_is_lossless_within_rounding_tolerance():
         assert abs((norm.end + lead_in) - raw.end) < 0.005
 
 
-@pytest.mark.parametrize(
-    "song, expected_apply",
-    [
-        ({"media": {"type": "video"}}, True),
-        ({"media": {"type": "audio"}}, False),
-        ({}, False),  # media absent entirely
-    ],
-)
-def test_lead_in_apply_defaults_from_media_type(song, expected_apply):
+def test_the_envelope_says_nothing_about_whether_the_lead_in_applies():
+    """**The decision is not this tool's to make** (Jorge, 2026-09-04).
+
+    `leadIn.apply` was derived from `media.type == "video"`. Under *the song
+    holds no media* nothing declares media, so the default would have flipped to
+    False for every song — **silently, and only visible as subtitles arriving a
+    lead-in early on a wall.** What Bombista knows is the measurement; whether it
+    applies depends on a video being assigned for a gig, which only Pregonero
+    can see.
+    """
     entries = [TimelineEntry(0.0, 5.0), TimelineEntry(5.0, 10.0)]
 
-    envelope = to_dict(0.0, entries, song)
+    lead_in = to_dict(0.0, entries)["leadIn"]
 
-    assert envelope["leadIn"]["apply"] is expected_apply
+    assert set(lead_in.keys()) == {"durationSec", "source", "confidence"}
 
 
 def test_envelope_has_exactly_three_top_level_keys():
     entries = [TimelineEntry(0.0, 5.0)]
 
-    envelope = to_dict(0.0, entries, {})
+    envelope = to_dict(0.0, entries)
 
     assert set(envelope.keys()) == {"timelineVersion", "leadIn", "timeline"}

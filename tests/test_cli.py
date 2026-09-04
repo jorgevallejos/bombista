@@ -67,7 +67,6 @@ EXPECTED_ENVELOPE = {
         "durationSec": 10.0,
         "source": "measured",
         "confidence": "low",
-        "apply": False,
     },
     "timeline": [
         {"start": 0.0, "end": 10.0},
@@ -338,7 +337,6 @@ EXPECTED_PLAIN_TEXT_ENVELOPE = {
         "durationSec": 10.0,
         "source": "measured",
         "confidence": "low",
-        "apply": False,
     },
     "timeline": [
         {"start": 0.0, "end": 10.0},
@@ -730,30 +728,22 @@ def test_extract_emit_srt_one_file_per_language_key(workspace):
     )
 
 
-def test_extract_emit_srt_excludes_lead_in_when_apply_false(workspace):
-    """SONG has no `media` -> leadIn.apply defaults to False -> subtitle
-    times are cue-relative, unshifted."""
-    result = run_extract(workspace, "--emit", "srt")
+def test_extract_emit_srt_always_adds_the_lead_in_back(workspace):
+    """**A subtitle file is against the RECORDING, whose clock includes the
+    lead-in** — whatever mode the song is played in.
 
-    assert result.exit_code == 0, result.output
-    content = (workspace["staging"] / "cancion-de-prueba-es.srt").read_text(encoding="utf-8")
-    assert "00:00:00,000 --> 00:00:10,000" in content
-
-
-def test_extract_emit_srt_includes_lead_in_when_apply_true(workspace):
-    """`media.type == "video"` -> leadIn.apply True -> the lead-in (10.0 s,
-    line 0's raw onset) is added back into the subtitle times."""
-    song = json.loads(workspace["song"].read_text(encoding="utf-8"))
-    song["media"] = {"type": "video", "src": "x.mp4"}
-    workspace["song"].write_text(
-        json.dumps(song, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
-
+    It was gated on `leadIn.apply`, which is gone: the decision to apply the
+    lead-in at PLAYBACK is Pregonero's now, from whether a video is assigned for
+    a gig. It was also the wrong question here. `normalize_to_lead_in` subtracts
+    `raw[0].start` unconditionally, so `raw == normalised + leadIn` always, and
+    **an SRT that skipped it was off by the lead-in for every Auto-mode song.**
+    """
     result = run_extract(workspace, "--emit", "srt")
 
     assert result.exit_code == 0, result.output
     content = (workspace["staging"] / "cancion-de-prueba-es.srt").read_text(encoding="utf-8")
     assert "00:00:10,000 --> 00:00:20,000" in content
+    assert "00:00:00,000 --> 00:00:10,000" not in content
 
 
 def test_extract_emit_lrc_writes_files_with_tags(workspace):
@@ -1196,7 +1186,9 @@ def test_migrate_rebases_the_song_in_place(migrate_ws):
     migrated = json.loads(migrate_ws["song"].read_text(encoding="utf-8"))
     assert migrated["timelineVersion"] == 2
     assert migrated["leadIn"]["durationSec"] == 7.26
-    assert migrated["leadIn"]["apply"] is False
+    # **`apply` is not written any more** (Jorge, 2026-09-04): the measured value stays
+    # with the timeline, the decision to apply it is Pregonero's.
+    assert "apply" not in migrated["leadIn"]
     assert migrated["timeline"][0] == {"start": 0.00, "end": 5.84}
     assert len(migrated["timeline"]) == 20
 

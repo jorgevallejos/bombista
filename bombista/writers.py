@@ -220,11 +220,20 @@ def _absolute_entries(envelope: dict) -> list[TimelineEntry]:
     player can wait for whichever cue fires (pedal press or video start);
     a subtitle file has no such cue to wait for, so its only correct time
     base is the media's own clock. That is why the lead-in is added back
-    here whenever `leadIn.apply` is true, and never subtracted again —
-    this is a deliberate divergence from the native timeline, not a bug;
-    do not "fix" it to match `timeline.json`'s cue-relative clock.
+    here and never subtracted again — this is a deliberate divergence from
+    the native timeline, not a bug; do not "fix" it to match
+    `timeline.json`'s cue-relative clock.
+
+    **ALWAYS ADDED BACK, and it used to be gated on `leadIn.apply`** (Jorge,
+    2026-09-04). That field is gone — the decision to apply the lead-in at
+    PLAYBACK belongs to Pregonero now, from whether a video is assigned — and it
+    was the wrong question here anyway. **A subtitle file is against the
+    recording the timeline was measured from**, whose clock includes the lead-in
+    whatever mode the song is played in. `normalize_to_lead_in` subtracts
+    `raw[0].start` unconditionally, so `raw == normalised + leadIn` always, and
+    an SRT that skipped it was off by the lead-in for every Auto-mode song.
     """
-    lead_in = envelope["leadIn"]["durationSec"] if envelope["leadIn"]["apply"] else 0.0
+    lead_in = envelope["leadIn"]["durationSec"]
     return [
         TimelineEntry(round(e["start"] + lead_in, 2), round(e["end"] + lead_in, 2))
         for e in envelope["timeline"]

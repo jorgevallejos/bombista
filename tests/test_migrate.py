@@ -57,21 +57,23 @@ def test_libertad_leads_in_at_7_26_and_starts_at_zero():
         "durationSec": 7.26,
         "source": "measured",
         "confidence": "low",
-        "apply": False,  # Auto mode: no media block
     }
     assert migrated["timeline"][0] == {"start": 0.00, "end": 5.84}
 
 
-def test_tragedia_is_video_mode_so_the_lead_in_applies():
-    """`leadIn.apply` follows `media.type == "video"` — the B12 rule,
-    reused rather than reimplemented."""
+def test_a_video_song_migrates_to_the_same_envelope_as_any_other():
+    """**The envelope says nothing about whether the lead-in applies** (Jorge,
+    2026-09-04), so a video song and an audio one migrate identically.
+
+    It used to follow `media.type == "video"`. Under *the song holds no media*
+    that field has no writer, and the decision belongs to Pregonero, which knows
+    whether a video is assigned for a gig."""
     migrated = migrate_song_to_v2(_song("tragedia-v1-song.json"))
 
     assert migrated["leadIn"] == {
         "durationSec": 0.96,
         "source": "measured",
         "confidence": "low",
-        "apply": True,
     }
     assert migrated["timeline"][0] == {"start": 0.00, "end": 2.80}
     assert len(migrated["timeline"]) == 29

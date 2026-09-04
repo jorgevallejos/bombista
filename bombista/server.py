@@ -549,7 +549,6 @@ def session_payload(session: Session, overrides: dict[int, float] | None = None)
     envelope = to_dict(
         result["lead_in"],
         result["normalized"],
-        session.song,
         source=result["lead_in_source"],
     )
     counts = band_counts(anchors)
@@ -648,6 +647,32 @@ def normalise_tempo(tempo: object) -> dict | None:
     return {key: tempo[key] for key in TEMPO_KEYS if key in tempo}
 
 
+def _without_media(song: dict) -> dict:
+    """Return *song* with any `media` reference dropped.
+
+    **THE SONG HOLDS NO MEDIA** (Jorge, 2026-09-03). All media and visuals
+    belong to Muralista and `visuals.json`; a recording is used to derive a
+    timeline and is then irrelevant — **a use-and-forget relationship** — and a
+    song never carries something that has to be present on the night.
+
+    **The test is whether the media is an INPUT or part of the OUTPUT**, and it
+    is why the two tools treat the same file differently rather than
+    inconsistently. **Bombista consumes a recording and produces a timeline: the
+    recording is scaffolding, and forgetting it is correct.** Muralista consumes
+    a file and produces a shape BOUND to that file — the reference is half of
+    what it made — so `visuals.json` keeps the name and this does not.
+
+    **It strips rather than merely not adding.** Page 1 can be opened on an
+    existing song file that still carries the key, and passing it through would
+    keep re-emitting a reference this tool has stopped standing behind. **No
+    migration is implied**: nothing rewrites files on disk, and a song that is
+    never edited keeps whatever it has until the reset takes it.
+    """
+    if "media" not in song:
+        return song
+    return {key: value for key, value in song.items() if key != "media"}
+
+
 def _place_tempo(song: dict, tempo: dict | None) -> dict:
     """Return *song* with the tempo block set, replaced or removed.
 
@@ -707,14 +732,13 @@ def build_sp_json(
         # that includes `linesHash`, which guards a timeline that is not
         # there, and `timelineSignedOff`, which would claim a human read
         # one. The file is the song: the words, and whatever was typed.
-        return _place_tempo(session.song, session.tempo), []
+        return _without_media(_place_tempo(session.song, session.tempo)), []
 
     overrides = session.overrides if overrides is None else overrides
     result = _anchor(session, overrides)
     envelope = to_dict(
         result["lead_in"],
         result["normalized"],
-        session.song,
         source=result["lead_in_source"],
     )
 
@@ -723,6 +747,7 @@ def build_sp_json(
     merged = _place_owned_keys(
         merged, lines_hash=session.lines_hash, signed_off=session.signed_off
     )
+    merged = _without_media(merged)
 
     hand_set = [
         {
@@ -1365,100 +1390,16 @@ def _declared(normalised) -> list[str]:
     return list(seen)
 
 
-def previous_take(
-    lyrics_path: Path, *, staging: Path | None, browse_from: Path | None
-) -> dict | None:
-    """The recording **this song** was last aligned against, if it can be
-    found — `{"path": ..., "name": ...}` or None.
-
-    **Being asked is not the problem; being asked silently is** (Jorge,
-    2026-09-02). On an edit the lyrics field prefilled and this one did
-    not, so nothing said whether the app had forgotten the take or was
-    waiting to be told. It stays changeable: re-aligning against a
-    different take is the normal reason to edit a song.
-
-    **The question is per SONG, and the first version of this answered a
-    per-DIRECTORY one** — it read the take out of `asr-words.meta.json`
-    with no reference to which song was being described, so a staging
-    directory shared between songs handed every one of them the last
-    song's recording. Walked 2026-09-02: a `.txt` that had never been
-    aligned against anything arrived with a 2:40 take attached, the
-    consent popup never appeared because a media source was set, and the
-    review came back with every line `no-anchor`. Two sources now, both of
-    them about this song:
-
-    1. **The song's own `media.src`**, which is the file's own statement
-       about its take. It is a logical filename rather than a path, so it
-       is looked for beside the song file and in the directory the pickers
-       open in — and nowhere else, because guessing more widely is how a
-       player ends up on the wrong take.
-    2. **`asr-words.meta.json`, but only when it names this song.** The
-       meta records which lyrics file the transcription was made for, so
-       it can be asked a question about a song rather than about a folder.
-
-    **A plain text file gets nothing, ever.** A `.txt` carries no record of
-    any recording, so there is no honest source for one — and it is the
-    case the walk broke on.
-
-    **Never another file.** The same rule `audio_path_for` follows: a
-    prefill that quietly named a different recording would make every
-    judgement about it wrong, and the person would not know.
-    """
-    if lyrics_path.suffix.lower() != ".json":
-        return None
-
-    found = _declared_media(lyrics_path, browse_from=browse_from)
-    if found is not None:
-        return found
-
-    if staging is None:
-        return None
-    meta = load_words_meta(staging / WORDS_FILENAME) or {}
-    if not _meta_is_for(meta, lyrics_path):
-        return None
-    filed = meta.get("audio")
-    if isinstance(filed, str) and filed and Path(filed).is_file():
-        return {"path": str(Path(filed).resolve()), "name": Path(filed).name}
-    return None
-
-
-def _meta_is_for(meta: dict, lyrics_path: Path) -> bool:
-    """Whether a staging directory's transcription was made for *this*
-    song's words.
-
-    A staging directory is not necessarily one song's: `serve --staging`
-    takes one directory and a caller may reuse it for every song it opens.
-    So the meta has to say which song it belongs to, and a meta written
-    before it recorded that says nothing rather than yes — **an unknown
-    provenance is not a match.**
-    """
-    named = meta.get("song")
-    if not isinstance(named, str) or not named:
-        return False
-    try:
-        return Path(named).resolve() == lyrics_path.resolve()
-    except OSError:
-        return False
-
-
-def _declared_media(lyrics_path: Path, *, browse_from: Path | None) -> dict | None:
-    """The song file's own `media.src`, resolved beside the file and in the
-    directory the pickers open in."""
-    try:
-        declared = json.loads(lyrics_path.read_text(encoding="utf-8")).get("media")
-    except (OSError, ValueError):
-        return None
-    src = (declared or {}).get("src") if isinstance(declared, dict) else None
-    if not isinstance(src, str) or not src:
-        return None
-
-    for root in (lyrics_path.parent, browse_from):
-        if root is None:
-            continue
-        candidate = Path(root) / src
-        if candidate.is_file():
-            return {"path": str(candidate.resolve()), "name": candidate.name}
-    return None
+# **`previous_take` AND `_declared_media` WENT WITH THE PREFILL** (Jorge, 2026-09-04).
+#
+# They answered *which recording was this song aligned against*, from the song's own
+# `media.src` and from the staging directory's provenance. **Under *the song holds no
+# media* this tool writes no media reference**, so the first source describes a field
+# nothing writes and the second describes a directory rather than a song's file.
+#
+# **Deleted rather than left unused.** A reader of a field nothing writes is the shape
+# this round exists to remove; keeping it would leave the next person to find out by
+# reading it. What it did is recorded in `answers_so_far`, where the prefill was.
 
 
 def describe_lyrics(
@@ -1499,7 +1440,20 @@ def describe_lyrics(
             else {"title": title_from_song_id(lyrics_path.stem), "artist": "", "notes": ""}
         ),
         "tempo": declared_tempo if isinstance(declared_tempo, dict) else None,
-        "media": previous_take(lyrics_path, staging=staging, browse_from=browse_from),
+        # **THE TAKE IS NOT PREFILLED ANY MORE** (Jorge, 2026-09-04). Editing a
+        # song no longer shows the recording it was aligned against, because
+        # **the song does not record one**: `media` is dropped from what this
+        # tool emits, so both of the old sources — the song's own `media.src`
+        # and the staging provenance — described a fact nothing writes.
+        #
+        # **The cost was named and weighed:** a timeline will no longer say what
+        # produced it. Jorge: *the principle of clean boundaries is worth more*,
+        # and *I just have to process the audio again, it is a matter of
+        # seconds*.
+        #
+        # **Page 1 still ASKS for a recording** — that is the alignment input and
+        # it stays. The field simply starts empty.
+        "media": None,
     }
 
 

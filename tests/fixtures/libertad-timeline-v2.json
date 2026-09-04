@@ -1,6 +1,6 @@
 {
   "timelineVersion": 2,
-  "leadIn": { "durationSec": 7.26, "source": "measured", "confidence": "low", "apply": false },
+  "leadIn": { "durationSec": 7.26, "source": "measured", "confidence": "low" },
   "timeline": [
     { "start": 0.00,  "end": 5.84 },
     { "start": 5.84,  "end": 9.64 },

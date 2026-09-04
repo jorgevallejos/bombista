@@ -239,13 +239,13 @@ def align(
     emit_set = set(emit_targets)
     # Built once regardless of which --emit targets are requested: songjson,
     # srt, and lrc all need it, and it's cheap/pure.
-    envelope = to_dict(lead_in, normalized_entries, song)
+    envelope = to_dict(lead_in, normalized_entries)
 
     produced: list[str] = []
 
     if "timeline" in emit_set:
         timeline_out = staging_dir / f"{stem}-timeline.json"
-        write_timeline(lead_in, normalized_entries, song, timeline_out)
+        write_timeline(lead_in, normalized_entries, timeline_out)
         produced.append(f"timeline: {timeline_out}")
 
     if "songjson" in emit_set:
@@ -637,8 +637,7 @@ def migrate(song_json: Path, dry_run: bool) -> None:
     """Rebase a **v1** SONG_JSON onto the timeline v2 start cue, in place.
 
     Subtracts `timeline[0].start` from every entry, banks it in `leadIn`
-    (`apply` defaulting from `media.type`, as B12 does) and stamps
-    `timelineVersion: 2` — the song's other keys are preserved untouched
+    and stamps `timelineVersion: 2` — the song's other keys are preserved untouched
     and in order. Backs the file up next to itself first, then replaces
     it atomically.
 
@@ -659,8 +658,7 @@ def migrate(song_json: Path, dry_run: bool) -> None:
     lead_in = migrated["leadIn"]
     report = [
         f"leadIn: {lead_in['durationSec']}s "
-        f"({lead_in['source']}, confidence {lead_in['confidence']}, "
-        f"apply={str(lead_in['apply']).lower()})",
+        f"({lead_in['source']}, confidence {lead_in['confidence']})",
         *timeline_diff(old_timeline, migrated["timeline"]),
     ]
 

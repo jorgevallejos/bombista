@@ -23,16 +23,12 @@ ENTRIES = [
     TimelineEntry(start=8.6, end=13.0),
 ]
 
-SONG_VIDEO = {"media": {"type": "video"}}
-SONG_AUDIO = {"media": {"type": "audio"}}
-
 EXPECTED_DICT = {
     "timelineVersion": 2,
     "leadIn": {
         "durationSec": 4.1,
         "source": "measured",
         "confidence": "low",
-        "apply": False,
     },
     "timeline": [
         {"start": 0.0, "end": 4.2},
@@ -48,22 +44,26 @@ EXPECTED_DICT = {
 
 
 def test_to_dict_builds_the_v2_envelope():
-    result = to_dict(4.1, ENTRIES, SONG_AUDIO)
+    result = to_dict(4.1, ENTRIES)
     assert result == EXPECTED_DICT
 
 
-def test_to_dict_apply_true_for_video_media_type():
-    result = to_dict(4.1, ENTRIES, SONG_VIDEO)
-    assert result["leadIn"]["apply"] is True
+def test_to_dict_writes_no_apply_and_takes_no_song():
+    """**`leadIn.apply` was this tool's and stopped being it** (Jorge, 2026-09-04).
 
-
-def test_to_dict_apply_false_when_media_absent():
-    result = to_dict(4.1, ENTRIES, {})
-    assert result["leadIn"]["apply"] is False
+    It was derived from `media.type == "video"`; under *the song holds no media*
+    nothing declares media, so that default would have **silently flipped to
+    False and cost every video song its lead-in correction.** The measured VALUE
+    stays here — it is a real measurement of the words. **The decision moved to
+    Pregonero**, which is the only party that knows a video is assigned for a
+    gig. The song is not even an argument any more, which is what makes the
+    change impossible to half-do.
+    """
+    assert "apply" not in to_dict(4.1, ENTRIES)["leadIn"]
 
 
 def test_to_dict_rounds_lead_in_to_two_decimals():
-    result = to_dict(4.123456, ENTRIES, SONG_AUDIO)
+    result = to_dict(4.123456, ENTRIES)
     assert result["leadIn"]["durationSec"] == 4.12
 
 
@@ -73,8 +73,8 @@ def test_to_dict_records_a_human_overridden_lead_in_as_manual():
     (§8.6), so a lead-in can now be either, and a file that cannot say
     which is a file that claims a machine measured a number a person
     typed."""
-    assert to_dict(4.1, ENTRIES, SONG_AUDIO, source="manual")["leadIn"]["source"] == "manual"
-    assert to_dict(4.1, ENTRIES, SONG_AUDIO)["leadIn"]["source"] == "measured"
+    assert to_dict(4.1, ENTRIES, source="manual")["leadIn"]["source"] == "manual"
+    assert to_dict(4.1, ENTRIES)["leadIn"]["source"] == "measured"
 
 
 def test_to_dict_refuses_a_source_the_contract_does_not_carry():
@@ -84,12 +84,12 @@ def test_to_dict_refuses_a_source_the_contract_does_not_carry():
     against exactly those. Refused here rather than written and rejected
     two tools downstream."""
     with pytest.raises(ValueError, match="source"):
-        to_dict(4.1, ENTRIES, SONG_AUDIO, source="hand-set")
+        to_dict(4.1, ENTRIES, source="hand-set")
 
 
 def test_write_timeline_produces_valid_json(tmp_path):
     out = tmp_path / "song-timeline.json"
-    write_timeline(4.1, ENTRIES, SONG_AUDIO, out)
+    write_timeline(4.1, ENTRIES, out)
     parsed = json.loads(out.read_text())
     assert parsed == EXPECTED_DICT
 
@@ -97,7 +97,7 @@ def test_write_timeline_produces_valid_json(tmp_path):
 def test_to_dict_rejects_entry_zero_not_starting_at_zero():
     bad_entries = [TimelineEntry(1.0, 4.2), TimelineEntry(4.2, 8.6)]
     with pytest.raises(ValueError):
-        to_dict(1.0, bad_entries, SONG_AUDIO)
+        to_dict(1.0, bad_entries)
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +144,6 @@ def _envelope(**overrides):
             "durationSec": 7.26,
             "source": "measured",
             "confidence": "low",
-            "apply": False,
         },
         "timeline": [{"start": 0.0, "end": 5.84}, {"start": 5.84, "end": 9.64}],
     }
@@ -181,7 +180,6 @@ def test_validate_v2_envelope_rejects_extra_top_level_key():
         ("durationSec", "7.26"),
         ("source", "guessed"),
         ("confidence", "medium"),
-        ("apply", "true"),
     ],
 )
 def test_validate_v2_envelope_rejects_bad_lead_in_field(field, value):

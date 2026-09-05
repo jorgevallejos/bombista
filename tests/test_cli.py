@@ -1619,6 +1619,32 @@ def test_serve_lets_a_caller_answer_the_deal_and_answers_it_itself_otherwise(wor
         assert create.call_args.kwargs["deal"] is expected, argv
 
 
+def test_serve_passes_the_artist_seed_and_defaults_to_nothing():
+    """**A seed for a control, never a fact about the caller.**
+
+    A caller that already asked its user who the artist is says so here rather
+    than making them type it again for every new song. **Standalone nobody has
+    asked**, so the default is the empty string and page 1 opens the way it
+    always did — which is why this is a plain string and not `None`: there is
+    no third state to distinguish, an unanswered seed and an empty seed are the
+    same thing.
+    """
+    from bombista.cli import main
+
+    result = CliRunner().invoke(main, ["serve", "--help"])
+    assert result.exit_code == 0
+    assert "--artist" in result.output
+
+    for argv, expected in (([], ""), (["--artist", "Chango Pepper"], "Chango Pepper")):
+        with mock.patch("bombista.cli.create_server") as create:
+            create.return_value.server_address = ("127.0.0.1", 51234)
+            create.return_value.serve_forever.side_effect = KeyboardInterrupt
+            result = CliRunner().invoke(main, ["serve", *argv])
+
+        assert result.exit_code == 0, result.output
+        assert create.call_args.kwargs["artist"] == expected, argv
+
+
 def test_serve_passes_the_audio_it_was_given_to_the_session(workspace):
     run_extract(workspace)
     take = workspace["audio"]

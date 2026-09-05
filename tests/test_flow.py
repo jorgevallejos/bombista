@@ -699,6 +699,39 @@ def test_a_txt_prefills_a_title_seeded_from_the_slug(client, tmp_path):
     assert payload["tempo"] is None
 
 
+def test_a_txt_takes_the_callers_artist_seed(serve_client, tmp_path):
+    """**The caller prefills the field; it never writes back to the caller.**
+
+    A `.txt` names no artist, so the field opened empty and was retyped for
+    every new song. A caller that has already asked its user who the artist is
+    says so, and page 1 opens with the answer in the box — **a seed to edit,
+    like the title beside it, not a claim.**
+    """
+    client = serve_client(artist="Chango Pepper")
+    txt = tmp_path / "hasta-calmar-el-alma.txt"
+    txt.write_text("uno dos\n", encoding="utf-8")
+
+    _, payload, _ = client.get("/api/lyrics?path=" + str(txt))
+
+    assert payload["info"]["artist"] == "Chango Pepper"
+    # The title seed is unchanged: the caller answers one field, not the block.
+    assert payload["info"]["title"] == "Hasta calmar el alma"
+
+
+def test_a_song_that_names_an_artist_keeps_it_over_the_seed(
+    serve_client, libertad
+):
+    """**A seed never overwrites a byte somebody wrote.** The prefill exists
+    for the field that would otherwise open empty, and a complete song has
+    already been answered — by the file, which outranks a caller's default."""
+    client = serve_client(artist="Somebody Else")
+
+    _, payload, _ = client.get("/api/lyrics?path=" + str(libertad["song_path"]))
+
+    assert payload["info"]["artist"] == libertad["song"]["artist"]
+    assert payload["info"]["artist"] != "Somebody Else"
+
+
 def test_the_general_information_typed_on_page_1_lands_in_the_file(
     serve_client, libertad, tmp_path
 ):

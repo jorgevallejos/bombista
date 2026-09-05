@@ -1163,6 +1163,7 @@ class Holder:
         song: Path | None = None,
         header: bool = True,
         deal: bool | None = None,
+        artist: str = "",
     ) -> None:
         self.session = session
         self.run: Run | None = None
@@ -1187,6 +1188,29 @@ class Holder:
         Bombista and by `--version`. Somewhere, not everywhere — two builds
         calling themselves the same number is the trap that has cost this
         project a day, and one visible answer defeats it."""
+        self.artist = artist.strip()
+        """**A seed for the artist field of a song that does not name one yet.**
+
+        It is the fifth answer a caller may give about the page, and it is the
+        same shape as the other four: a value for a control, never a fact about
+        who is asking. Bombista does not learn what a preference is, where it
+        was set or that a suite exists — it learns a string to put in a box.
+
+        **PREFILL ONLY, AND ONLY WHERE THE FILE IS SILENT.** A song that names
+        an artist keeps what it says; a caller's seed never overwrites a byte
+        somebody wrote. **And nothing is written back**: this value is not
+        recorded anywhere, so a song saved with the seed untouched carries it
+        the same way it would carry a name typed by hand.
+
+        **Why the caller has it and this process does not** (Jorge,
+        2026-09-05). Cowork proposed capturing the name from this very field
+        the first time a song is made, and Jorge rejected it: *opportunistic
+        and fishy — you capture something for a purpose different from the one
+        I had in mind when I filled it in.* **A value collected for one purpose
+        is not silently promoted to another**, so the name is asked for on its
+        own screen, in the app that has one, and it travels one way only.
+        Bombista prefills FROM it and never writes to it."""
+
         self.deal = deal
         """Whether the flow opens on the deal — `None` to work it out here.
 
@@ -1408,6 +1432,7 @@ def describe_lyrics(
     lang: str = "es",
     staging: Path | None = None,
     browse_from: Path | None = None,
+    artist_seed: str = "",
 ) -> dict:
     """What page 1 needs to know about a lyrics file the moment it is
     chosen: which branch it takes, what it declares, what the normaliser
@@ -1437,7 +1462,15 @@ def describe_lyrics(
         "info": (
             song_information(normalised.song)
             if complete
-            else {"title": title_from_song_id(lyrics_path.stem), "artist": "", "notes": ""}
+            # **The caller's seed lands here and nowhere else**: a `.txt` names no
+            # artist, so the field would open empty and be retyped every time. A
+            # complete song goes down the other branch and keeps what it says —
+            # a seed never overwrites a byte somebody wrote.
+            else {
+                "title": title_from_song_id(lyrics_path.stem),
+                "artist": artist_seed,
+                "notes": "",
+            }
         ),
         "tempo": declared_tempo if isinstance(declared_tempo, dict) else None,
         # **THE TAKE IS NOT PREFILLED ANY MORE** (Jorge, 2026-09-04). Editing a
@@ -1635,6 +1668,7 @@ class _Handler(BaseHTTPRequestHandler):
                         lang=params.get("lang", ["es"])[0],
                         staging=self.holder.staging,
                         browse_from=Path(self.holder.browse_from),
+                        artist_seed=self.holder.artist,
                     ),
                 )
             elif route == "/api/download":
@@ -1963,6 +1997,7 @@ def create_server(
     song: Path | None = None,
     header: bool = True,
     deal: bool | None = None,
+    artist: str = "",
 ) -> ThreadingHTTPServer:
     """A threading HTTP server bound to the loopback interface.
 
@@ -1974,10 +2009,11 @@ def create_server(
     `Holder.staging`: it is for a caller that means to read the emitted
     `<stem>.json` back out, and the default cache is unchanged without it.
 
-    *browse_from*, *song*, *header* and *deal* are the four answers a
-    caller may give about the page itself — where the pickers open, a song
-    file page 1 starts prefilled from, whether the product header is drawn,
-    and whether the flow opens on the deal. See `Holder` for each. **None of
+    *browse_from*, *song*, *header*, *deal* and *artist* are the five
+    answers a caller may give about the page itself — where the pickers
+    open, a song file page 1 starts prefilled from, whether the product
+    header is drawn, whether the flow opens on the deal, and a seed for the
+    artist field of a song that names none. See `Holder` for each. **None of
     them tells this process who is calling**, and none of them changes what
     Bombista writes.
 
@@ -1997,7 +2033,13 @@ def create_server(
         )
 
     holder = Holder(
-        session, staging, browse_from=browse_from, song=song, header=header, deal=deal
+        session,
+        staging,
+        browse_from=browse_from,
+        song=song,
+        header=header,
+        deal=deal,
+        artist=artist
     )
     handler = type("_SessionHandler", (_Handler,), {"holder": holder})
     return ThreadingHTTPServer((host, port), handler)

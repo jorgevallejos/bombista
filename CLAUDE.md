@@ -52,8 +52,9 @@ bombista validate <song.json> [--for-performance] [--lang es] [--media-dir DIR].
 # The three-step interface in a browser, on this machine only (B20):
 bombista serve                                        # start at step 1
 bombista serve <staging-dir> <song.json|lyrics.txt> [--audio <take>]  # boot into the review
-#   Four options shape the run and the page without Bombista learning who
-#   is calling — a directory, a file, a boolean, and nothing about a caller:
+#   Six options shape the run and the page without Bombista learning who
+#   is calling — directories, a file, booleans, a seed, and nothing about
+#   a caller:
 #     --staging DIR      where a page-1 run works, for a caller that will
 #                        read the emitted <stem>.json back out
 #     --browse-from DIR  where the file pickers open (default: home)
@@ -67,6 +68,13 @@ bombista serve <staging-dir> <song.json|lyrics.txt> [--audio <take>]  # boot int
 #                        answers it from its own cache, and a caller whose
 #                        catalogue answers it better must be able to say
 #                        either answer
+#     --artist NAME      a seed for the artist field of a song that names
+#                        none. PREFILL ONLY, ONE WAY: a song that names an
+#                        artist keeps what it says, nothing is written back,
+#                        and Bombista never reports the field to anyone. The
+#                        opposite — harvesting the name typed here — was
+#                        proposed and rejected: a value collected for one
+#                        purpose is not silently promoted to another
 
 # One-off, for songs timed before timeline v2 (B13) — not part of the loop:
 bombista migrate <song.json> [--dry-run]

@@ -433,6 +433,30 @@ keyring, so the next release will prompt for a token again unless that changes.
 
 **Python CLI (`click`).** The natural fit for the alignment pipeline (`faster-whisper`, audio handling) and stays cleanly separate. Node/TypeScript would have eased a later in-app integration and shared language with Pregonero, but the output format is language-agnostic (JSON) so an eventual Node/in-app caller is unaffected either way.
 
+## `--artist`: a seed that travels one way (2026-09-06)
+
+**The sixth answer a caller may give about the page, and the same shape as the other five: a value
+for a control, never a fact about who is asking.** A `.txt` names no artist, so page 1's field
+opened empty and was retyped for every new song — while Pregonero had already asked its user who
+the artist is, on a screen built for that question.
+
+**PREFILL ONLY, AND ONLY WHERE THE FILE IS SILENT.** A song that names an artist keeps what it
+says; a caller's seed never overwrites a byte somebody wrote. **Nothing is written back** — the
+value is not recorded anywhere, and this process never reports the field to anyone.
+
+**Why the direction matters, and it is the whole reason this option exists rather than its
+opposite.** Cowork proposed capturing the name out of this very field the first time a song is
+made, and prefilling from it thereafter. **Jorge rejected it:** *opportunistic and fishy — you
+capture something for a purpose different from the one I had in mind when I filled it in.* The
+principle generalises and is now a rule across the suite: **a value collected for one purpose is not
+silently promoted to another.** The name typed as *who wrote this song* is not consent to make it
+the identity of an installation, so the asking happens where a screen can say what it is for, and
+Bombista only ever reads.
+
+**A plain string, not a tri-state**, unlike `--deal`. There is no third answer to distinguish: an
+unanswered seed and an empty seed are the same thing, and standalone nobody has asked, so the
+default is `""` and page 1 opens exactly as it always did.
+
 ## Relationship to other projects
 
 - **Consumer:** `projects/pregonero/` — imports the timeline via the timeline-v2 contract. Don't duplicate the translator's schema here; reference `songState.ts`.

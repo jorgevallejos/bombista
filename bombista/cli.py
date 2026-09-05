@@ -521,6 +521,16 @@ def validate(
     ),
 )
 @click.option(
+    "--artist",
+    default="",
+    help=(
+        "A name to seed the artist field with, for a song that does not "
+        "name one yet. A caller that already asked its user who the artist "
+        "is says so here rather than making them type it again. Never "
+        "overwrites what a song file says, and never written back."
+    ),
+)
+@click.option(
     "--port",
     default=0,
     show_default="an ephemeral port, printed on start",
@@ -536,6 +546,7 @@ def serve(
     song: Path | None,
     header: bool,
     deal: bool | None,
+    artist: str,
     port: int,
 ) -> None:
     """Open the three-step interface in a browser, on this machine only.
@@ -565,14 +576,25 @@ def serve(
     would have to know this tool's cache layout to find the file. A
     directory in, a file path on the page, and nothing else passes.
 
-    --browse-from, --song, --no-header and --deal/--no-deal are four
-    answers about the page itself: where the file pickers open, a song file
-    page 1 starts prefilled from, whether to draw the product header, and
-    whether the flow opens on the deal. They exist because the defaults are
-    right for running Bombista on its own and wrong inside a window that
-    already has a title and already knows where the songs are. **None of
-    them tells Bombista who is calling**, and none of them changes a byte of
-    what it writes.
+    --browse-from, --song, --no-header, --deal/--no-deal and --artist are
+    five answers about the page itself: where the file pickers open, a song
+    file page 1 starts prefilled from, whether to draw the product header,
+    whether the flow opens on the deal, and a name to seed the artist field
+    with. They exist because the defaults are right for running Bombista on
+    its own and wrong inside a window that already has a title and already
+    knows where the songs are. **None of them tells Bombista who is
+    calling**, and none of them changes a byte of what it writes.
+
+    --artist is a seed for a control, never a fact about the caller. A song
+    that names an artist keeps what it says; a `.txt` names none, so the
+    field opened empty and was retyped for every new song. **It travels one
+    way**: Bombista prefills from it and never writes to it, and nothing
+    here records it. Cowork proposed the opposite — capturing the name out
+    of this very field the first time a song is made — and Jorge rejected
+    it: *you capture something for a purpose different from the one I had
+    in mind when I filled it in.* A value collected for one purpose is not
+    silently promoted to another, so the asking happens in the app that has
+    a screen for it.
 
     --deal/--no-deal is the one rule *show the deal when this machine has
     produced no song yet*, asked of whoever can answer it. Unpassed,
@@ -612,6 +634,7 @@ def serve(
             song=song,
             header=header,
             deal=deal,
+            artist=artist,
         )
     except ValueError as exc:
         raise click.ClickException(str(exc))

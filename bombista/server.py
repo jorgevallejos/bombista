@@ -65,7 +65,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from . import pages
+from . import pages, sessionlog
 from .aligner import load_words, load_words_meta, save_words, transcribe_words
 from .anchoring import SIGNAL_GLOSSES, anchor_lines, parse_anchor_overrides
 from .models import Word
@@ -941,6 +941,22 @@ def emit_sp_json(session: Session, overrides: dict[int, float], out_path: Path) 
         json.dumps(merged, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
 
+    # The end of the flow, and the one event that says a song came out of
+    # it. By slug and by file name — never by path, and never with a word
+    # of what is inside.
+    sessionlog.log(
+        "song",
+        command="serve",
+        screen="/api/emit",
+        action="save",
+        outcome="ok",
+        song=session.lyrics_path.stem,
+        out=out_path.name,
+        manual=session.manual,
+        handSet=len(hand_set) if isinstance(hand_set, (list, dict)) else None,
+        overrides=len(overrides),
+    )
+
     return {
         "path": str(out_path),
         "manual": session.manual,
@@ -1009,6 +1025,15 @@ class Run:
     def cancel(self) -> None:
         self.cancelled = True
         self.state = "cancelled"
+        # An abandonment, recorded at the same weight as a success — it is
+        # the event a session's own memory loses first.
+        sessionlog.log(
+            "run",
+            command="serve",
+            screen="/api/run",
+            action="cancel",
+            outcome="abandoned",
+        )
 
     def payload(self) -> dict:
         phases = []
@@ -1037,6 +1062,16 @@ class Run:
         phase.update(
             state=state,
             elapsed=0.0 if started is None else time.monotonic() - started,
+        )
+        sessionlog.log(
+            "run",
+            command="serve",
+            screen="/processing",
+            action="phase",
+            outcome="ok",
+            phase=name,
+            state=state,
+            elapsedMs=round((phase["elapsed"] or 0.0) * 1000),
         )
 
     def _work(self) -> None:
@@ -1148,6 +1183,19 @@ class Run:
             if not self.cancelled:
                 self.error = str(exc)
                 self.state = "failed"
+        finally:
+            # Every run ends here, on every path — the manual early
+            # return included. A cancel has already filed its own
+            # abandonment, so this does not file a second one.
+            if not self.cancelled:
+                sessionlog.log(
+                    "run",
+                    command="serve",
+                    screen="/processing",
+                    action="end",
+                    outcome="ok" if self.state == "done" else "error",
+                    state=self.state,
+                )
 
 
 class Holder:
@@ -1376,6 +1424,19 @@ def start_run(holder: Holder, body: dict) -> dict:
 
     holder.session = None
     holder.run = Run(holder, request)
+    sessionlog.log(
+        "run",
+        command="serve",
+        screen="/api/run",
+        action="start",
+        outcome="ok",
+        song=lyrics.stem,
+        manual=media is None,
+        model=model,
+        lang=lang,
+        tempoGiven="tempo" in body,
+        tempoWhole=request.get("tempo") is not None,
+    )
     holder.run.start()
     return holder.run.payload()
 
@@ -1600,6 +1661,19 @@ def browse(path: Path) -> dict:
 # ---------------------------------------------------------------------------
 
 
+SELF_ROUTE = "/api/session-log"
+"""The route the page files tap events on — and the one route that files
+nothing about itself."""
+
+
+def _machine_start(session: Session, line: int) -> float | None:
+    """Where the machine put this line before anyone touched it — the
+    *from* of a correction. `machine_starts` is computed once at load and
+    never recomputed, so this is the before, not a re-derived after."""
+    starts = session.machine_starts
+    return starts[line] if 0 <= line < len(starts) else None
+
+
 class _Handler(BaseHTTPRequestHandler):
     """The routes. Every refusal from the extracted modules arrives here as
     a ValueError carrying its message verbatim — only the rendering differs
@@ -1611,6 +1685,58 @@ class _Handler(BaseHTTPRequestHandler):
     # -- pages -------------------------------------------------------------
 
     def do_GET(self) -> None:  # noqa: N802 — BaseHTTPRequestHandler's name
+        self._observe("GET", self._get)
+
+    def do_POST(self) -> None:  # noqa: N802 — BaseHTTPRequestHandler's name
+        self._observe("POST", self._post)
+
+    def do_DELETE(self) -> None:  # noqa: N802 — BaseHTTPRequestHandler's name
+        self._observe("DELETE", self._delete)
+
+    def send_response(self, code: int, message: str | None = None) -> None:
+        """Remember what was answered, so `_observe` can say how a screen
+        ended without any route having to report it."""
+        self._status = code
+        super().send_response(code, message)
+
+    def _observe(self, method: str, route_handler) -> None:
+        """One event per request: which screen, what was done, how it
+        ended, and how long it took.
+
+        **It observes and it does not participate.** Nothing here changes
+        a status, swallows an exception or delays a response — the log is
+        written after the answer has already gone out, and
+        `sessionlog.log` cannot raise. With the log off this is one
+        attribute assignment and one call that returns immediately (§the
+        spike, 2026-09-07).
+        """
+        route, _ = self._split()
+        self._status = None
+        started = time.monotonic()
+        try:
+            route_handler()
+        finally:
+            # AFTER the response has gone out, deliberately: the page must
+            # never wait on the observer. It also means an event lands a
+            # moment after the client has its answer, which is why the
+            # tests wait for it rather than reading straight away.
+            #
+            # The log's own route is not a screen and files nothing about
+            # itself — an observer that records its own footsteps doubles
+            # the file and adds nothing to read.
+            status = self._status
+            if route != SELF_ROUTE:
+                sessionlog.log(
+                    "screen",
+                    command="serve",
+                    screen=route,
+                    action=method,
+                    outcome="ok" if status is not None and status < 400 else "error",
+                    status=status,
+                    elapsedMs=round((time.monotonic() - started) * 1000),
+                )
+
+    def _get(self) -> None:
         route, params = self._split()
         try:
             if route == "/":
@@ -1638,6 +1764,12 @@ class _Handler(BaseHTTPRequestHandler):
                         song=self.holder.song,
                         header=self.holder.header,
                         answers=answers_so_far(session) if session else None,
+                        # The page's half of the event log, and the only
+                        # thing the flag changes: whether the tap control
+                        # files what it knows. False in every default
+                        # install, and nothing on the screen moves either
+                        # way (the spike, 2026-09-07).
+                        session_log=sessionlog.enabled(),
                     )
                 )
             elif route == "/processing":
@@ -1680,8 +1812,11 @@ class _Handler(BaseHTTPRequestHandler):
         except KeyError as exc:
             self._error(400, f"missing parameter {exc}")
 
-    def do_POST(self) -> None:  # noqa: N802 — BaseHTTPRequestHandler's name
+    def _post(self) -> None:
         route, _ = self._split()
+        if route == SELF_ROUTE:
+            self._client_event()
+            return
         routes = {
             "/api/reanchor": self._reanchor,
             "/api/emit": self._emit,
@@ -1699,7 +1834,7 @@ class _Handler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self._error(400, str(exc))
 
-    def do_DELETE(self) -> None:  # noqa: N802 — BaseHTTPRequestHandler's name
+    def _delete(self) -> None:
         route, _ = self._split()
         if route != "/api/run":
             self._error(404, f"no route {route}")
@@ -1718,7 +1853,50 @@ class _Handler(BaseHTTPRequestHandler):
         # Recorded on the session: page 3 serialises the timeline as it
         # stands, and a download is a navigation that cannot carry a body.
         session.overrides = overrides
+        # WHICH lines were hand-set, and where they were moved from and
+        # to. Indices and seconds — the structure of the correction, never
+        # the line. A second pass over the same index is its own event,
+        # because re-doing a correction is the signal.
+        sessionlog.log(
+            "line",
+            command="serve",
+            screen="/api/reanchor",
+            action="reanchor",
+            outcome="ok",
+            song=session.lyrics_path.stem,
+            lineIndexes=sorted(overrides),
+            overrides=len(overrides),
+            fromSec=[_machine_start(session, i) for i in sorted(overrides)],
+            toSec=[overrides[i] for i in sorted(overrides)],
+        )
         return session_payload(session, overrides)
+
+    def _client_event(self) -> None:
+        """The browser's half of the session, and the only thing that ever
+        writes into this log from outside the process.
+
+        **Tapping happens in the page.** The raw gaps between presses, how
+        many attempts were made and whether the answer survived exist
+        nowhere else — they are gone the moment the tab closes — and they
+        are the interaction the spike was designed around.
+
+        Answers `204` and nothing else, whether the log is on, off or
+        pointed somewhere it refuses to write. Nothing the page sends can
+        change what is recorded except within `CLIENT_FIELDS`: this is a
+        fixed shape with a fixed vocabulary, not a write endpoint.
+        """
+        try:
+            body = self._body()
+        except ValueError:
+            body = {}
+        # **The vocabulary lives in `sessionlog`, not here.** What a tap
+        # event may say is the log's business, and server.py is held to
+        # naming no tempo field of its own (tests/test_tempo.py) — a rule
+        # about judgement that this route has no reason to bend.
+        sessionlog.client_event(body)
+        self.send_response(204)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _set_tempo(self, body: dict) -> dict:
         session = self._session()

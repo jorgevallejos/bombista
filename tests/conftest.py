@@ -219,3 +219,23 @@ def serve_client():
         httpd.shutdown()
         httpd.server_close()
         thread.join(timeout=5)
+
+
+@pytest.fixture(autouse=True)
+def session_log_off(monkeypatch):
+    """**The session event log is off in every test that does not switch it
+    on itself** (the spike, 2026-09-07).
+
+    It is off by default in the product too, but an env var set in the
+    shell that runs the suite would otherwise leak into 800 tests and
+    write a file none of them asked for — and one of the two things this
+    logger promises is that a session it was not pointed at is untouched.
+    The reset afterwards closes whatever a test opened, so no file
+    descriptor and no sequence number survives into the next one.
+    """
+    from bombista import sessionlog
+
+    monkeypatch.delenv(sessionlog.ENV_VAR, raising=False)
+    sessionlog.reset()
+    yield
+    sessionlog.reset()

@@ -27,6 +27,7 @@ its words** — a lyrics file, or page 1 — not from an empty file.
 """
 from __future__ import annotations
 
+import functools
 import json
 import shutil
 from copy import copy
@@ -56,6 +57,7 @@ from .readers import read_lyrics_input
 from .report import band_counts, render_qa_report
 from .serializer import to_dict, write_timeline
 from .server import LOOPBACK_HOST, create_server, load_session
+from .sessionlog import log as log_event
 from .songfile import back_up_and_replace, timeline_diff
 from .validation import has_errors, load_and_validate, render_findings
 from .writers import (
@@ -68,6 +70,41 @@ from .writers import (
 )
 
 _EMIT_CHOICES = ("timeline", "songjson", "report-json", "srt", "lrc", "html")
+
+
+def observed(fn):
+    """Bracket a command with a start and an end event (the spike).
+
+    A session is not only what happened in the browser: `validate` run in
+    a terminal between two songs is part of the same afternoon, and the
+    gap before it is the same signal the screens carry.
+
+    **Three endings, not two.** A clean return is `ok`; a non-zero exit —
+    `validate`'s way of saying the file is wrong — is `error`; a Ctrl-C is
+    `abandoned`, which is how a real `serve` session ends and is not a
+    failure. All three are re-raised untouched: this observes the command
+    and does not participate in it.
+    """
+
+    @functools.wraps(fn)
+    def observe(*args, **kwargs):
+        log_event("command", command=fn.__name__, action="start", outcome="ok")
+        outcome = "ok"
+        try:
+            return fn(*args, **kwargs)
+        except KeyboardInterrupt:
+            outcome = "abandoned"
+            raise
+        except SystemExit as exc:
+            outcome = "ok" if not exc.code else "error"
+            raise
+        except BaseException:
+            outcome = "error"
+            raise
+        finally:
+            log_event("command", command=fn.__name__, action="end", outcome=outcome)
+
+    return observe
 
 _ALIGN_EPILOG = """\
 \b
@@ -144,6 +181,7 @@ def main() -> None:
         "written regardless of --emit."
     ),
 )
+@observed
 def align(
     audio: Path,
     song_json: Path,
@@ -337,6 +375,7 @@ main.add_command(_extract_alias)
 @main.command()
 @click.argument("timeline_json", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.argument("song_json", type=click.Path(dir_okay=False, path_type=Path))
+@observed
 def promote(timeline_json: Path, song_json: Path) -> None:
     """Write the timeline v2 envelope from TIMELINE_JSON into SONG_JSON,
     creating SONG_JSON when it does not exist yet.
@@ -410,6 +449,7 @@ def promote(timeline_json: Path, song_json: Path) -> None:
         "the song file's own directory."
     ),
 )
+@observed
 def validate(
     song_json: Path, for_performance: bool, lang: str, media_dirs: tuple[Path, ...]
 ) -> None:
@@ -536,6 +576,7 @@ def validate(
     show_default="an ephemeral port, printed on start",
     help=f"Port to bind on {LOOPBACK_HOST}.",
 )
+@observed
 def serve(
     staging_dir: Path | None,
     lyrics: Path | None,
@@ -656,6 +697,7 @@ def serve(
     is_flag=True,
     help="Report what would change and write nothing.",
 )
+@observed
 def migrate(song_json: Path, dry_run: bool) -> None:
     """Rebase a **v1** SONG_JSON onto the timeline v2 start cue, in place.
 

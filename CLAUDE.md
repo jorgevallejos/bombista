@@ -76,6 +76,10 @@ bombista serve <staging-dir> <song.json|lyrics.txt> [--audio <take>]  # boot int
 #                        proposed and rejected: a value collected for one
 #                        purpose is not silently promoted to another
 
+# The session event log (a spike) — OFF unless this is set, and nothing else
+# switches it on. Never a path inside songs/; that is refused, silently.
+BOMBISTA_SESSION_LOG=~/session-logs/rebuild.jsonl bombista serve --browse-from ~/"Chango Pepper"/songs
+
 # One-off, for songs timed before timeline v2 (B13) — not part of the loop:
 bombista migrate <song.json> [--dry-run]
 ```
@@ -387,6 +391,34 @@ bombista/
                    silently plays the wrong take makes every judgement made against
                    it wrong (§11.11). NO line is refused: line 0 moves like any other
                    and `leadIn.source` says `manual` when a human set it (§8.6)
+  sessionlog.py  — THE SESSION EVENT LOG (a spike, 2026-09-07), and OFF unless
+                   BOMBISTA_SESSION_LOG=<path> is set. One switch and no other:
+                   no flag, no config file, no default destination, so a session
+                   cannot be observed by accident. Append-only JSONL, one
+                   `os.write` per event on an O_APPEND descriptor — immediate,
+                   never buffered across a crash, and deliberately NO fsync
+                   (a sync per event is the one thing here slow enough to be
+                   felt). WRITE-ONLY AND SILENT: nothing is printed, nothing is
+                   asked, and every failure — a full disk, a bad path, a value
+                   that will not serialise — is swallowed where it happens.
+                   **NEVER INSIDE `songs/`**: refused on the RESOLVED path, as
+                   a whole casefolded path component, so `..` and `Songs` do not
+                   get past it and `songs-log/` beside it still works.
+                   Every event carries both clocks and the gap before it —
+                   `sinceSec` off the MONOTONIC clock, because hesitation is the
+                   signal and a laptop's sleep moves a wall clock. ERRORS AND
+                   ABANDONED FLOWS ARE FIRST-CLASS, in the same shape and at the
+                   same weight as a success: they are what a session's own memory
+                   loses first. NO LYRICS, NO SONG TEXT, NO FILE CONTENTS —
+                   slugs and structure only. Line INDICES and seconds are exactly
+                   what this is for; `DENIED_KEYS` drops a human's own words and
+                   keeps only their length, and a string that starts like an
+                   absolute path is reduced to its own name. Also owns
+                   `client_event` and the vocabulary the page may file
+                   (`CLIENT_KINDS`, `CLIENT_FIELDS`) — the browser's half of the
+                   session, because the RAW TAP INTERVALS live in the tab and are
+                   gone when it closes. That vocabulary is here and NOT in
+                   server.py, which is held to naming no tempo field of its own
   cli.py         — click CLI: new / align / promote / validate / migrate / serve, and
                    nothing else. Wiring only:
                    options, help text, and translating ValueError into ClickException /

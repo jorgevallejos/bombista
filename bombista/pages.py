@@ -698,11 +698,70 @@ _INPUT_JS = """\
   var TAP_RESET_MS = 3000;
   var taps = [];
 
+  /* The session event log (the spike, 2026-09-07) — OFF unless the server
+     was started with BOMBISTA_SESSION_LOG pointing somewhere.
+
+     **The gaps between presses exist only here.** They are in this tab and
+     they are gone when it closes, so this is the one thing the page knows
+     that the process does not, and the one reason it speaks to the log at
+     all. Everything below is fire-and-forget on loopback, inside a guard
+     that is `false` in every default install: nothing waits on it, nothing
+     is shown, and a failure is discarded where it happens. This page must
+     behave identically whether the log is on or off.
+
+     What is recorded is the SHAPE of the tapping — how many presses, how
+     far apart, how many goes it took, and whether the answer was kept. No
+     lyric, no title, no note, nothing typed except the tempo the file is
+     about to carry anyway. */
+  var attempt = 0;
+  var tappedValue = null;
+  var committed = false;
+
+  function fileEvent(payload) {
+    if (!SESSION_LOG) { return; }
+    try {
+      fetch("/api/session-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        keepalive: true
+      }).catch(function () {});
+    } catch (err) { /* the observer never breaks the observed */ }
+  }
+
+  function tapIntervals() {
+    var out = [];
+    for (var i = 1; i < taps.length; i++) { out.push(taps[i] - taps[i - 1]); }
+    return out;
+  }
+
+  /* A burst is one go at the tempo. It closes when the taps stop for
+     longer than the reset — which is the person deciding to start again —
+     and that is exactly the *re-tapped* the spike wants to see. */
+  function fileBurst(action, outcome, accepted) {
+    if (!SESSION_LOG || taps.length < 2) { return; }
+    fileEvent({
+      kind: "tap",
+      action: action,
+      outcome: outcome,
+      attempt: attempt,
+      taps: taps.length,
+      intervalsMs: tapIntervals(),
+      beats: tappedValue,
+      accepted: accepted
+    });
+  }
+
   function tapSay(text) { document.getElementById("t-tapstate").textContent = text; }
 
   function tap() {
     var now = Date.now();
-    if (taps.length && now - taps[taps.length - 1] > TAP_RESET_MS) { taps = []; }
+    if (taps.length && now - taps[taps.length - 1] > TAP_RESET_MS) {
+      // The previous go is over and was not kept — it is being tapped again.
+      fileBurst("burst", "abandoned", false);
+      taps = [];
+    }
+    if (!taps.length) { attempt += 1; }
     taps.push(now);
     if (taps.length < 2) { tapSay("keep tapping\u2026"); return; }
     var span = taps[taps.length - 1] - taps[0];
@@ -716,9 +775,30 @@ _INPUT_JS = """\
        drift a long song will show. Only this function rounds. */
     var bpm = Math.round((60000 * (taps.length - 1)) / span * 2) / 2;
     document.getElementById("t-bpm").value = String(bpm);
+    tappedValue = bpm;
     tapSay(taps.length + " taps \u00b7 " + bpm);
     checkTempo();
   }
+
+  /* A tempo that was tapped and then abandoned — the tab closed, or the
+     step bar took the person elsewhere — is a flow that ended without an
+     answer, and those are the events with the most signal. A beacon
+     because a page on its way out does not wait for a fetch. */
+  window.addEventListener("pagehide", function () {
+    if (!SESSION_LOG || committed || taps.length < 2) { return; }
+    try {
+      navigator.sendBeacon("/api/session-log", JSON.stringify({
+        kind: "tap",
+        action: "abandon",
+        outcome: "abandoned",
+        attempt: attempt,
+        taps: taps.length,
+        intervalsMs: tapIntervals(),
+        beats: tappedValue,
+        accepted: false
+      }));
+    } catch (err) { /* nothing to do on the way out */ }
+  });
 
   document.getElementById("t-tap").addEventListener("click", tap);
 
@@ -929,7 +1009,32 @@ _INPUT_JS = """\
     start();
   });
 
+  /* The commitment, and the last thing the log hears from this page. It
+     says whether the value that travels was TAPPED and kept, tapped and
+     typed over, or typed from the start — three different sessions that
+     look identical in the file that comes out. */
+  function fileTempoCommit() {
+    if (!SESSION_LOG) { return; }
+    var field = val("t-bpm");
+    var kept = taps.length >= 2 && tappedValue !== null && field === String(tappedValue);
+    committed = true;
+    fileEvent({
+      kind: "tap",
+      action: "commit",
+      outcome: "ok",
+      attempt: attempt,
+      taps: taps.length,
+      intervalsMs: tapIntervals(),
+      beats: field === "" ? null : Number(field),
+      accepted: kept,
+      typed: field !== "" && !kept,
+      signature: val("t-signature"),
+      bars: Number(val("t-countinbars") || "0")
+    });
+  }
+
   function start() {
+    fileTempoCommit();
     var body = {
       lyrics: state.lyrics,
       media: state.media || "",
@@ -2061,6 +2166,7 @@ def render_input(
     song: str = "",
     header: bool = True,
     answers: dict | None = None,
+    session_log: bool = False,
 ) -> str:
     """Page 1 (§9.3), augmented at step 6 with the song itself.
 
@@ -2078,6 +2184,15 @@ def render_input(
     `bombista new`'s skeleton existed to supply, and why that command could
     be deleted once this page landed (2026-09-03). It is Bombista's own
     screen and it appears when Bombista is used on its own.
+
+    **`session_log` changes nothing anyone can see.** It is the one
+    argument here that is not about the page: it tells the tap control
+    whether to file the shape of the tapping — how many presses, how far
+    apart, how many goes, whether the answer was kept — to a log the
+    server was explicitly pointed at. False in every default install. The
+    copy, the controls, the layout and the values are identical either
+    way; a screen that behaved differently while being watched would be
+    measuring itself.
 
     **§3's *no free text* survives as a sharper rule.** What the machine is
     told — which files, which language, which model — is still pickers and
@@ -2214,6 +2329,7 @@ def render_input(
         f"var BROWSE_FROM = {json.dumps(browse_from)};\n"
         f"var SONG = {json.dumps(song)};\n"
         f"var ANSWERS = {json.dumps(answers)};\n"
+        f"var SESSION_LOG = {json.dumps(bool(session_log))};\n"
         + _PICKER_JS
         + _INPUT_JS
     )

@@ -457,6 +457,59 @@ Bombista only ever reads.
 unanswered seed and an empty seed are the same thing, and standalone nobody has asked, so the
 default is `""` and page 1 opens exactly as it always did.
 
+## The session event log: a spike, and a switch nobody turns on by accident (2026-09-07)
+
+**A spike, not a feature.** `projects/tramoya-integration/agent-design.md` decided that the risky
+assumption behind per-app agents is not technical: it is whether **an agent's read of a session
+beats Jorge's own memory of it**. The catalogue rebuild — fourteen songs from nothing, every tempo
+tapped — is the venue, and Bombista is the app, because a rebuild is song creation rather than
+performance. Bombista writes an event log while Jorge works; afterwards he writes what he noticed
+and an agent writes its list, and the two are compared. **If the agent's list contains nothing he
+missed, the idea dies at a cost of about two hours.** Nothing here analyses, proposes, executes or
+talks to another app.
+
+**The constraint is the whole design: the logger must not disturb the session it observes.** The
+session in question is the first careful rebuild of the catalogue, and a spike that damaged it
+would have cost more than the idea could ever return. So the module (`sessionlog.py`) is
+write-only and silent — no prompt, no screen output, no interruption, every failure swallowed
+where it happens — and `serve` behaves identically whether it is on or off. The page is
+byte-identical but for one boolean; a test asserts exactly that, because **a screen that behaved
+differently while being watched would be measuring itself**.
+
+**One switch, and it is an env var.** `BOMBISTA_SESSION_LOG=<path>`. No flag, no config file, no
+default destination, so a session cannot be observed by accident. **It is never written inside
+`songs/`** — checked on the resolved path, as a whole path component, so `..` and a capital `S`
+do not get past it and `songs-log/` beside it still works. A refusal is silent like everything
+else: `sessionlog.refused()` says why, and nothing in the product reads it.
+
+**Errors and abandoned flows carry the same weight as successes**, because they are the events a
+session's own memory loses first. A cancelled run, a 400 at the tempo, a tapped tempo the tab
+closed on — each is one line, in the same shape as a save.
+
+**The tap is the reason the page speaks at all.** The raw gaps between presses, how many goes it
+took, and whether the value was kept or tapped again exist only in the tab and are gone when it
+closes. They arrive on one route, `POST /api/session-log`, which answers `204` always, accepts one
+kind and a fixed list of fields, and stamps the screen itself. **The vocabulary lives in
+`sessionlog.py` and not in `server.py`**, which is held to naming no tempo field of its own.
+
+**No lyrics, no song text, no file contents — slugs and structure only.** Line *indices* and
+seconds are exactly what the log is for; a line's words never are. The call sites pass what they
+mean to pass and a scrub sits behind them, so a field added later cannot quietly start writing the
+words down: a denied value survives as its length and nothing else, and a string that starts like
+an absolute path is reduced to its own name. A test drives a whole flow over the real Spanish
+fixture and asserts that not one word of it reaches the file.
+
+**Immediate, and not buffered across a crash.** One `os.write` per event on an `O_APPEND`
+descriptor — no userspace buffer, so a killed process leaves everything it had written; verified
+against a `SIGKILL`. Deliberately **no `fsync`**: a disk sync per event is the one thing here slow
+enough to be felt, and it guards against a machine crash rather than a program crash.
+
+**One thing left as Jorge's.** Page 1 says *Bombista never measures any of this — your taps are
+yours*. It stays true in the sense it was written in — nothing is derived from the audio, and
+nothing leaves the machine — but with the log on, the taps are recorded. The sentence was **not
+changed**: audience-visible copy is Jorge's call, and a page that announced it was watching would
+be the observer effect the spike is built to avoid. Flagged rather than edited.
+
 ## Relationship to other projects
 
 - **Consumer:** `projects/pregonero/` — imports the timeline via the timeline-v2 contract. Don't duplicate the translator's schema here; reference `songState.ts`.

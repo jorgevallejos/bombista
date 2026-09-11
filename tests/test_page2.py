@@ -639,10 +639,13 @@ def test_page_2_talks_to_its_own_process_and_loads_nothing(page2):
     """B16's zero-external-reference assertion is scoped to
     `write_html_review`'s output file and must not be extended here:
     `fetch` to the loopback routes is correct on a served page. What must
-    not happen is a LOADED resource from off the machine."""
+    not happen is a LOADED resource from off the machine. A `data:` URI is
+    not one: it is the bytes themselves, inline, which is how the favicon
+    reaches a report opened from disk."""
     assert "fetch(" in page2
 
     resources = re.findall(r'<(?:link|script|img|iframe)\b[^>]*(?:src|href)="([^"]+)"', page2)
+    resources = [r for r in resources if not r.startswith("data:")]
     assert not resources
     assert not re.search(r"<script[^>]+src=", page2)
 

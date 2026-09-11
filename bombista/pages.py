@@ -42,7 +42,7 @@ __all__ = [
     "render_output",
 ]
 
-VERSION = "v1.13.0"
+VERSION = "v1.14.0"
 """The masthead's version string — the package version with a `v` in front.
 
 It is a second copy of what `pyproject.toml` declares, and a second copy
@@ -1224,6 +1224,15 @@ def _step_bar(current: str, *, skipped: str = "") -> str:
     )
 
 
+# The Bombista mark: a "b" in the Chango Pepper typeface, cream on the ink ground, the same
+# letter the app icon carries. Inlined as a data URI rather than served, because these pages
+# fetch nothing from anywhere but this process (§8.1) -- a report is mailed, dropped in a
+# folder and opened from disk, with no server behind it. Single quotes inside the svg on
+# purpose: the whole string sits in a double-quoted href. The source of truth is `icon.svg`
+# at the repo root; regenerate this string from it if the mark ever changes.
+_FAVICON = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1024 1024'><rect width='1024' height='1024' fill='%23131312'/><g transform='translate(231.942 171.883) scale(13.0563)'><path fill='%23e1dbcc' d='M16.1 11.075 L38.9 11.075 L42.775 14.95 L42.775 49.07 L38.9 52.945 L3.97 52.945 L0.095 49.07 L0.095 -0.85 L7.845 -0.85 L7.845 45.195 L35.025 45.195 L35.025 18.825 L16.1 18.825 Z'/></g></svg>"
+
+
 def _shell(
     *,
     title: str,
@@ -1250,6 +1259,7 @@ def _shell(
         "<head>\n"
         '<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        f'<link rel="icon" href="{_FAVICON}">\n'
         f"<title>{html_escape(title)} — Bombista</title>\n"
         f"<style>\n{STYLESHEET}</style>\n"
         "</head>\n"

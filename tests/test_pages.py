@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from urllib.parse import unquote
 
 import pytest
 
@@ -744,16 +745,48 @@ def test_no_page_references_anything_external(name, rendered):
     must not do is LOAD anything off the machine — no font CDN, no CSS
     host, no remote image. A hyperlink the reader may click is not a
     resource the page fetches, which is what lets §9.3's *See an example*
-    point at the format's canonical home on changopepper.com (§9.6)."""
+    point at the format's canonical home on changopepper.com (§9.6).
+
+    A `data:` URI is not a load either — it is the bytes themselves, sitting
+    in the document. That is exactly why the favicon is one: a report is
+    mailed, dropped in a folder and opened from disk, with no server behind
+    it, and a `<link href="icon.svg">` would render broken everywhere it is
+    actually read."""
     html = rendered[name]
 
     resources = re.findall(r'<(?:link|script|img|iframe)\b[^>]*(?:src|href)="([^"]+)"', html)
     resources += re.findall(r"url\(\s*['\"]?([^)'\"]+)", pages.STYLESHEET)
     resources += re.findall(r"@import\s+['\"]?([^;'\"]+)", pages.STYLESHEET)
+    resources = [r for r in resources if not r.startswith("data:")]
 
     assert not resources, f"{name} loads {resources}"
     assert "fonts.googleapis" not in html
     assert "Montserrat" not in html
+
+
+def test_the_favicon_is_the_same_mark_as_icon_svg():
+    """`_FAVICON` is a copy of `icon.svg`, inlined because these pages fetch
+    nothing (§8.1). Two copies of one drawing drift; this pins them together
+    so the mark cannot be changed in one place only."""
+    disk = (Path(__file__).resolve().parent.parent / "icon.svg").read_text()
+
+    inline = unquote(pages._FAVICON.split(",", 1)[1])
+
+    for part in (r"translate\(([^)]+)\)", r"scale\(([^)]+)\)", r"d=.([^\"']+)"):
+        got = re.search(part, inline).group(1)
+        want = re.search(part, disk).group(1)
+        assert _numbers(got) == _numbers(want), f"{part}: {got!r} != {want!r}"
+
+    assert "131312" in inline and "e1dbcc" in inline
+    assert '"' not in inline, "a double quote would close the href it sits in"
+
+
+def _numbers(s: str) -> list[float]:
+    """Compares drawings, not spelling: `16.100` and `16.1` are one point, and
+    a point repeated is still one point."""
+    nums = [float(n) for n in re.findall(r"-?\d+\.?\d*", s)]
+    pairs = list(zip(nums[::2], nums[1::2]))
+    return [p for i, p in enumerate(pairs) if i == 0 or p != pairs[i - 1]]
 
 
 @pytest.mark.parametrize("name", ALL_PAGES)

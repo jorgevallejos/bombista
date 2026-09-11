@@ -793,8 +793,18 @@ def test_extract_emit_html_page_is_offline_and_points_at_the_audio_relatively(wo
     assert result.exit_code == 0, result.output
     html = (workspace["staging"] / "cancion-de-prueba-review.html").read_text(encoding="utf-8")
     assert "../cancion.wav" in html
-    for forbidden in ("http://", "https://", "@import", "fetch(", "<link"):
-        assert forbidden not in html
+    # The inlined favicon carries the SVG namespace, which is an identifier and
+    # never fetched; blank the inlined bytes out before scanning.
+    scannable = re.sub(r'href="data:[^"]*"', 'href="data:"', html)
+    for forbidden in ("http://", "https://", "@import", "fetch("):
+        assert forbidden not in scannable
+
+    # The favicon is an inlined data URI, which fetches nothing. Any other
+    # `<link>` would be a load off the machine.
+    # Read the href straight off each <link>: the inlined svg contains raw `>`,
+    # so matching a whole tag first would truncate it mid-attribute.
+    for href in re.findall(r'<link\b[^>]*?href="([^"]*)"', html):
+        assert href.startswith("data:"), f"the page loads: {href!r}"
 
 
 def test_extract_emit_html_replaces_the_default_set(workspace):

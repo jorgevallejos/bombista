@@ -422,8 +422,18 @@ def test_write_html_review_makes_no_network_requests(tmp_path):
     """Bombista running fully offline is a stated product property
     (backlog §1). A single external reference silently breaks it, and it
     breaks *quietly* — the page still renders, just unstyled or inert. No
-    CDN, no webfont, no XHR: this assertion is the guard."""
+    CDN, no webfont, no XHR: this assertion is the guard.
+
+    A `<link>` is allowed only when it carries its own bytes. The favicon is
+    an inlined data URI precisely because this page is mailed and opened from
+    disk; a reference to a file beside it would render broken everywhere the
+    report actually gets read."""
     html = render_html(tmp_path)
+
+    # The inlined favicon carries an `xmlns='http://www.w3.org/2000/svg'`, which
+    # is an identifier and is never dereferenced. Blank the inlined bytes out
+    # before scanning, so the scan reads the page and not the picture in it.
+    scannable = re.sub(r'href="data:[^"]*"', 'href="data:"', html)
 
     for forbidden in (
         "http://",
@@ -432,10 +442,14 @@ def test_write_html_review_makes_no_network_requests(tmp_path):
         "@import",
         "fetch(",
         "XMLHttpRequest",
-        "<link",
         "cdn.",
     ):
-        assert forbidden not in html, f"external reference in the page: {forbidden!r}"
+        assert forbidden not in scannable, f"external reference in the page: {forbidden!r}"
+
+    # Read the href straight off each <link>: the inlined svg contains raw `>`,
+    # so matching a whole tag first would truncate it mid-attribute.
+    for href in re.findall(r'<link\b[^>]*?href="([^"]*)"', html):
+        assert href.startswith("data:"), f"the page loads: {href!r}"
 
 
 def test_write_html_review_references_audio_by_relative_url_encoded_path(tmp_path):

@@ -33,6 +33,7 @@ from urllib.parse import quote
 
 from .anchoring import SIGNAL_GLOSSES, LineAnchor
 from .models import TimelineEntry
+from .pages import _FAVICON
 from .report import AUDIO_CLOCK_RULE, band_counts, extracted_at, format_duration
 
 __all__ = [
@@ -552,6 +553,9 @@ def write_html_review(
         "<head>",
         '<meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
+        # The mark travels with the report. A QA review is mailed and opened from disk, so
+        # this is the same inlined data URI the serve pages use, not a file reference.
+        f'<link rel="icon" href="{_FAVICON}">',
         f"<title>QA review — {esc(song_title)}</title>",
         f"<style>\n{_HTML_CSS}</style>",
         "</head>",
